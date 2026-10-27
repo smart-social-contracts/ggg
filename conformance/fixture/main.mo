@@ -1,6 +1,7 @@
-/// A minimal GGG-1 and GGG-2 implementation, used to test the conformance suite.
+/// A minimal GGG GOS, used to test the conformance suite. It implements the methods ggg.did binds.
 /// Members are fixed at install time. Anyone listed may propose and vote. The only department is
-/// the root, so every proposal is realm-wide.
+/// the root, so every proposal is realm-wide. Nobody has granted a delegation, so nobody acts on
+/// another's behalf.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
@@ -16,57 +17,64 @@ persistent actor class GggFixture(initMembers : [Principal]) {
 
   type Timestamp = Nat64;
 
-  type Value = {
-    #Nat : Nat;
-    #Int : Int;
-    #Text : Text;
-    #Blob : Blob;
-    #Array : [Value];
-    #Map : [(Text, Value)];
-  };
-
   type GggError = {
     #NotFound;
     #Unauthenticated;
     #Forbidden : { permission : ?Text; message : Text };
     #InvalidArgument : Text;
     #Conflict : Text;
-    #Unsupported : Text;
     #Unavailable : Text;
     #GenericError : { error_code : Nat; message : Text };
   };
 
   type Result<T> = { #Ok : T; #Err : GggError };
 
-  type SupportedStandard = { name : Text; url : Text };
-
   type ListArgs = { cursor : ?Text; limit : ?Nat32 };
 
   type Page<T> = { items : [T]; next : ?Text };
 
   type Realm = {
+    id : Text;
     name : Text;
     manifesto : Text;
     welcome_message : Text;
     status : { #Setup; #Alpha; #Beta; #Production; #Deprecation; #Terminated };
-    accounting_currency : ?{ symbol : Text; decimals : Nat8 };
+    calendar : ?Text;
+    treasury : ?Text;
+    accounting_currency : ?Text;
+    accounting_currency_decimals : ?Nat8;
+    is_quarter : Bool;
+    is_capital : Bool;
+    federation_realm_id : ?Text;
+    federation_codex : ?Text;
+    quarter_join_mode : ?Text;
+    trusted_principals : [Principal];
+    require_marketplace_approval : Bool;
+    trusted_approvers : [Text];
+    open_registration : Bool;
     logo_url : ?Text;
     background_image_url : ?Text;
-    open_registration : Bool;
-    is_capital : Bool;
-    implementation : { name : Text; version : Text; url : ?Text };
-    member_count : ?Nat;
+    installed_version : Text;
+    network : Text;
   };
 
-  type Member = {
+  type User = {
     id : Principal;
-    status : { #Active; #Inactive; #Suspended; #Banned };
-    joined_at : ?Timestamp;
     nickname : ?Text;
     avatar : ?Text;
     home_quarter : ?Text;
     profiles : [Text];
+    private_data : ?Blob;
   };
+
+  type Member = {
+    id : Text;
+    user : Principal;
+    status : { #Active; #Inactive; #Suspended; #Banned };
+    joined_at : ?Timestamp;
+  };
+
+  type UserEntry = { user : User; member : ?Member };
 
   type ProposalStatus = {
     #Draft;
@@ -81,7 +89,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
 
   type ProposalAction = {
     #Motion;
-    #Operation : { op : Text; args : Value };
+    #Call : { method : Text; arg : Blob };
     #Code : { url : Text; checksum : Text };
   };
 
@@ -92,26 +100,31 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     title : Text;
     description : Text;
     proposer : Principal;
+    on_behalf_of : ?Principal;
     department : ?Text;
     action : ProposalAction;
     status : ProposalStatus;
     opens_at : ?Timestamp;
     deadline : ?Timestamp;
-    threshold_bps : Nat;
-    quorum_bps : Nat;
+    threshold : Nat;
+    quorum : Nat;
     tally : Tally;
-    result : ?Value;
+    result : ?{ #Reply : Blob; #Error : Text };
   };
 
-  type ProposalSummary = {
+  type VoteChoice = { #Yes; #No; #Abstain };
+
+  type Vote = {
     id : Text;
-    title : Text;
-    proposer : Principal;
-    department : ?Text;
-    status : ProposalStatus;
-    deadline : ?Timestamp;
+    proposal : Text;
+    voter : Principal;
+    cast_by : ?Principal;
+    choice : VoteChoice;
+    cast_at : Timestamp;
   };
 
+  type ProposalGetArgs = { id : Text; cursor : ?Text; limit : ?Nat32 };
+  type ProposalDetail = { proposal : Proposal; votes : [Vote]; next : ?Text };
   type ProposalListArgs = { cursor : ?Text; limit : ?Nat32; status : ?ProposalStatus };
 
   type ProposalCreateArgs = {
@@ -122,93 +135,25 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     on_behalf_of : ?Principal;
   };
 
-  type VoteChoice = { #Yes; #No; #Abstain };
-
-  type Vote = {
-    id : Text;
-    proposal_id : Text;
-    voter : Principal;
-    cast_by : ?Principal;
-    choice : VoteChoice;
-    cast_at : Timestamp;
-  };
-
-  type ProposalVoteArgs = { proposal_id : Text; choice : VoteChoice; on_behalf_of : ?Principal };
-
-  type ProposalVotesArgs = { proposal_id : Text; voter : ?Principal; cursor : ?Text; limit : ?Nat32 };
-
-  type Operation = {
-    name : Text;
-    description : Text;
-    permission : ?Text;
-    read : Bool;
-    delegable : Bool;
-    governed : Bool;
-    signing : Bool;
-    provided_by : Text;
-    args_schema : ?Text;
-    result_schema : ?Text;
-  };
-
-  type OperationArgs = { op : Text; args : Value; on_behalf_of : ?Principal };
+  type ProposalVoteArgs = { proposal : Text; choice : VoteChoice; on_behalf_of : ?Principal };
 
   let DEFAULT_LIMIT = 20;
   let MAX_LIMIT = 100;
   let VOTING_WINDOW_NS : Nat64 = 7 * 24 * 3600 * 1_000_000_000;
   let ROOT = "root";
-  let SPEC = "https://github.com/smart-social-contracts/ggg/blob/main/standards/";
-
-  let OPERATIONS : [Operation] = [
-    {
-      name = "fixture.echo";
-      description = "Returns its arguments.";
-      permission = null;
-      read = true;
-      delegable = false;
-      governed = false;
-      signing = false;
-      provided_by = "ggg-fixture";
-      args_schema = null;
-      result_schema = null;
-    },
-    {
-      name = "fixture.counter_increment";
-      description = "Adds one to a counter and returns it.";
-      permission = ?"member";
-      read = false;
-      delegable = false;
-      governed = false;
-      signing = false;
-      provided_by = "ggg-fixture";
-      args_schema = ?"{\"type\":\"object\",\"additionalProperties\":false}";
-      result_schema = ?"{\"type\":\"integer\"}";
-    },
-  ];
 
   func now() : Timestamp = Nat64.fromNat(Int.abs(Time.now()));
 
   let createdAt = now();
-  let members = Map.empty<Principal, Member>();
+  let members = Map.empty<Principal, UserEntry>();
   for (p in initMembers.vals()) {
-    Map.add(
-      members,
-      Principal.compare,
-      p,
-      {
-        id = p;
-        status = #Active;
-        joined_at = ?createdAt;
-        nickname = null;
-        avatar = null;
-        home_quarter = null;
-        profiles = ["member"];
-      },
-    );
+    let user = { id = p; nickname = null; avatar = null; home_quarter = null; profiles = ["member"]; private_data = null };
+    let member = { id = Principal.toText(p); user = p; status = #Active; joined_at = ?createdAt };
+    Map.add(members, Principal.compare, p, { user; member = ?member });
   };
   let proposals = Map.empty<Nat, Proposal>();
   let votes = Map.empty<Nat, Map.Map<Principal, Vote>>();
   var nextProposal = 1;
-  var counter = 0;
 
   func pageSize(limit : ?Nat32) : Nat {
     switch (limit) {
@@ -237,14 +182,26 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
   };
 
-  func member(p : Principal) : ?Member = Map.get(members, Principal.compare, p);
-
-  func requireMember(caller : Principal) : ?GggError {
+  func requireMember(caller : Principal, permission : Text) : ?GggError {
     if (Principal.isAnonymous(caller)) return ?#Unauthenticated;
-    switch (member(caller)) {
-      case (?{ status = #Active }) null;
-      case _ ?#Forbidden({ permission = ?"member"; message = "Only active members may do this." });
+    switch (Map.get(members, Principal.compare, caller)) {
+      case (?{ member = ?{ status = #Active } }) null;
+      case _ ?#Forbidden({ permission = ?permission; message = "Only active members may do this." });
     };
+  };
+
+  func noDelegation(permission : Text) : GggError {
+    #Forbidden({ permission = ?permission; message = "No active delegation from that principal covers this." });
+  };
+
+  /// A call a proposal may make: one of this canister's update methods, with arguments that decode.
+  func checkCall(method : Text, arg : Blob) : ?GggError {
+    let decodes = switch (method) {
+      case "ggg_proposal_create" { let a : ?ProposalCreateArgs = from_candid (arg); a != null };
+      case "ggg_proposal_vote" { let a : ?ProposalVoteArgs = from_candid (arg); a != null };
+      case _ return ?#InvalidArgument(method # " is not an update method of this canister");
+    };
+    if (decodes) null else ?#InvalidArgument("arg does not decode as the arguments of " # method);
   };
 
   func findProposal(id : Text) : ?(Nat, Proposal) {
@@ -257,15 +214,6 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         };
       };
     };
-  };
-
-  func summary(p : Proposal) : ProposalSummary = {
-    id = p.id;
-    title = p.title;
-    proposer = p.proposer;
-    department = p.department;
-    status = p.status;
-    deadline = p.deadline;
   };
 
   func ballots(n : Nat) : Map.Map<Principal, Vote> {
@@ -288,79 +236,67 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
   };
 
-  func operation(name : Text) : ?Operation = Array.find<Operation>(OPERATIONS, func(o) { o.name == name });
-
-  public query func icrc10_supported_standards() : async [SupportedStandard] {
+  public query func icrc10_supported_standards() : async [{ name : Text; url : Text }] {
     [
       { name = "ICRC-10"; url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md" },
-      { name = "GGG-1"; url = SPEC # "GGG-1.md" },
-      { name = "GGG-2"; url = SPEC # "GGG-2.md" },
+      { name = "GGG"; url = "https://github.com/smart-social-contracts/ggg/blob/main/ggg.did" },
     ];
   };
 
-  public query func ggg1_realm_info() : async Realm {
-    var active = 0;
-    for (m in Map.values(members)) { if (m.status == #Active) active += 1 };
+  public query func ggg_realm_info() : async Realm {
     {
+      id = "1";
       name = "GGG fixture";
       manifesto = "A minimal realm used to test the GGG conformance suite.";
       welcome_message = "";
       status = #Production;
+      calendar = null;
+      treasury = null;
       accounting_currency = null;
+      accounting_currency_decimals = null;
+      is_quarter = false;
+      is_capital = false;
+      federation_realm_id = null;
+      federation_codex = null;
+      quarter_join_mode = null;
+      trusted_principals = [];
+      require_marketplace_approval = false;
+      trusted_approvers = [];
+      open_registration = false;
       logo_url = null;
       background_image_url = null;
-      open_registration = false;
-      is_capital = false;
-      implementation = {
-        name = "ggg-fixture";
-        version = "0.2.0";
-        url = ?"https://github.com/smart-social-contracts/ggg/tree/main/conformance/fixture";
-      };
-      member_count = ?active;
+      installed_version = "ggg-fixture 0.4.0";
+      network = "local";
     };
   };
 
-  public query func ggg1_user_get(p : Principal) : async Result<?Member> {
-    #Ok(member(p));
+  public query func ggg_user_get(p : Principal) : async Result<?UserEntry> {
+    #Ok(Map.get(members, Principal.compare, p));
   };
 
-  public query func ggg1_user_list(args : ListArgs) : async Result<Page<Member>> {
+  public query func ggg_user_list(args : ListArgs) : async Result<Page<UserEntry>> {
     page(Map.values(members), args.cursor, args.limit);
   };
 
-  public query func ggg1_proposal_get(id : Text) : async Result<?Proposal> {
-    switch (findProposal(id)) {
-      case null #Ok(null);
-      case (?(_, p)) #Ok(?p);
+  public query func ggg_proposal_get(args : ProposalGetArgs) : async Result<?ProposalDetail> {
+    let (n, p) = switch (findProposal(args.id)) { case null return #Ok(null); case (?found) found };
+    switch (page(Map.values(ballots(n)), args.cursor, args.limit)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok({ items; next })) #Ok(?{ proposal = p; votes = items; next });
     };
   };
 
-  public query func ggg1_proposal_list(args : ProposalListArgs) : async Result<Page<ProposalSummary>> {
+  public query func ggg_proposal_list(args : ProposalListArgs) : async Result<Page<Proposal>> {
     let all = switch (args.status) {
       case null Map.values(proposals);
       case (?s) Iter.filter<Proposal>(Map.values(proposals), func(p) { p.status == s });
     };
-    page(Iter.map<Proposal, ProposalSummary>(all, summary), args.cursor, args.limit);
-  };
-
-  public query func ggg1_proposal_votes(args : ProposalVotesArgs) : async Result<Page<Vote>> {
-    let (n, _) = switch (findProposal(args.proposal_id)) { case null return #Err(#NotFound); case (?found) found };
-    let b = ballots(n);
-    let all = switch (args.voter) {
-      case null Map.values(b);
-      case (?v) {
-        switch (Map.get(b, Principal.compare, v)) {
-          case null Iter.empty<Vote>();
-          case (?vote) Iter.singleton(vote);
-        };
-      };
-    };
     page(all, args.cursor, args.limit);
   };
 
-  public shared ({ caller }) func ggg1_proposal_create(args : ProposalCreateArgs) : async Result<Text> {
-    switch (requireMember(caller)) { case (?e) return #Err(e); case null {} };
-    if (args.on_behalf_of != null) return #Err(#Unsupported("delegation"));
+  public shared ({ caller }) func ggg_proposal_create(args : ProposalCreateArgs) : async Result<Text> {
+    switch (requireMember(caller, "proposal.create")) { case (?e) return #Err(e); case null {} };
+    if (args.on_behalf_of != null) return #Err(noDelegation("proposal.create"));
     switch (args.department) {
       case (?d) { if (d != ROOT) return #Err(#NotFound) };
       case null {};
@@ -373,8 +309,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
           return #Err(#InvalidArgument("checksum must start with sha256:"));
         };
       };
-      case (#Operation { op }) {
-        if (operation(op) == null) return #Err(#InvalidArgument("unknown operation " # op));
+      case (#Call { method; arg }) {
+        switch (checkCall(method, arg)) { case (?e) return #Err(e); case null {} };
       };
     };
     let t = now();
@@ -385,13 +321,14 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       title = args.title;
       description = args.description;
       proposer = caller;
+      on_behalf_of = null;
       department = null;
       action = args.action;
       status = #Voting;
       opens_at = ?t;
       deadline = ?(t + VOTING_WINDOW_NS);
-      threshold_bps = 5_000;
-      quorum_bps = 0;
+      threshold = 5_000;
+      quorum = 0;
       tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members) };
       result = null;
     };
@@ -399,10 +336,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     #Ok(p.id);
   };
 
-  public shared ({ caller }) func ggg1_proposal_vote(args : ProposalVoteArgs) : async Result<Vote> {
-    switch (requireMember(caller)) { case (?e) return #Err(e); case null {} };
-    if (args.on_behalf_of != null) return #Err(#Unsupported("delegation"));
-    let (n, p) = switch (findProposal(args.proposal_id)) { case null return #Err(#NotFound); case (?found) found };
+  public shared ({ caller }) func ggg_proposal_vote(args : ProposalVoteArgs) : async Result<Vote> {
+    switch (requireMember(caller, "proposal.vote")) { case (?e) return #Err(e); case null {} };
+    if (args.on_behalf_of != null) return #Err(noDelegation("proposal.vote"));
+    let (n, p) = switch (findProposal(args.proposal)) { case null return #Err(#NotFound); case (?found) found };
     let t = now();
     let open = p.status == #Voting and (switch (p.deadline) { case (?d) t <= d; case null true });
     if (not open) return #Err(#Conflict("voting is not open"));
@@ -415,7 +352,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     tally := add(tally, args.choice, 1);
     let v : Vote = {
       id = p.id # ":" # Principal.toText(caller);
-      proposal_id = p.id;
+      proposal = p.id;
       voter = caller;
       cast_by = null;
       choice = args.choice;
@@ -424,44 +361,5 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     Map.add(b, Principal.compare, caller, v);
     Map.add(proposals, Nat.compare, n, { p with tally });
     #Ok(v);
-  };
-
-  public query func ggg2_operation(name : Text) : async Result<?Operation> {
-    #Ok(operation(name));
-  };
-
-  public query func ggg2_operations(args : ListArgs) : async Result<Page<Operation>> {
-    page(OPERATIONS.vals(), args.cursor, args.limit);
-  };
-
-  func checkRun(args : OperationArgs, query_ : Bool) : Result<Operation> {
-    let o = switch (operation(args.op)) {
-      case null return #Err(#Unsupported("unknown operation " # args.op));
-      case (?o) o;
-    };
-    if (query_ and not o.read) return #Err(#InvalidArgument(args.op # " changes the realm: use ggg2_call"));
-    if (args.on_behalf_of != null and not o.delegable) {
-      return #Err(#InvalidArgument(args.op # " is not delegable"));
-    };
-    #Ok(o);
-  };
-
-  public query func ggg2_query(args : OperationArgs) : async Result<Value> {
-    switch (checkRun(args, true)) {
-      case (#Err(e)) #Err(e);
-      case (#Ok(_)) #Ok(args.args);
-    };
-  };
-
-  public shared ({ caller }) func ggg2_call(args : OperationArgs) : async Result<Value> {
-    switch (checkRun(args, false)) {
-      case (#Err(e)) #Err(e);
-      case (#Ok({ read = true })) #Ok(args.args);
-      case (#Ok(_)) {
-        switch (requireMember(caller)) { case (?e) return #Err(e); case null {} };
-        counter += 1;
-        #Ok(#Nat(counter));
-      };
-    };
   };
 };

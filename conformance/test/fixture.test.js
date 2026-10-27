@@ -41,7 +41,7 @@ test('the fixture passes the read-only checks', async () => {
   const o = outcomes(results);
   assert.equal(o.D1, 'pass');
   assert.equal(o.D2, 'warn');
-  assert.equal(o.O1, 'pass');
+  assert.equal(o.R1, 'pass');
   assert.equal(o.W1, 'skip');
 });
 
@@ -49,7 +49,7 @@ test('the fixture passes every check with a member identity', async () => {
   const results = await run({ writes: true, member });
   assert.deepEqual(failures(results), []);
   const o = outcomes(results);
-  for (const id of ['M1', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'O4', 'O5', 'O7']) assert.equal(o[id], 'pass', id);
+  for (const id of ['M1', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9']) assert.equal(o[id], 'pass', id);
 });
 
 test('once a proposal exists, it is listed, found and its votes paginate', async () => {
@@ -57,13 +57,12 @@ test('once a proposal exists, it is listed, found and its votes paginate', async
   for (const id of ['P1', 'P2', 'P4', 'V1']) assert.equal(o[id], 'pass', id);
 });
 
-test('a canister that breaks GGG-1 fails', async () => {
+test('a canister that breaks GGG fails', async () => {
   const results = await run({ canisterId: brokenId });
   const o = outcomes(results);
-  for (const id of ['D1', 'R1', 'M1', 'M2', 'P1', 'P3', 'P5', 'V2']) assert.equal(o[id], 'fail', id);
-  assert.match(results.find((r) => r.id === 'D1').detail, /GGG-1 is missing/);
+  for (const id of ['D1', 'R1', 'M1', 'M2', 'P1', 'P3', 'P5']) assert.equal(o[id], 'fail', id);
+  assert.match(results.find((r) => r.id === 'D1').detail, /GGG missing/);
   assert.match(results.find((r) => r.id === 'R1').detail, /name is empty/);
-  assert.equal(o.O1, 'skip');
 });
 
 test('a non-member is refused, which the suite reports as a skip', async () => {
@@ -71,5 +70,6 @@ test('a non-member is refused, which the suite reports as a skip', async () => {
   assert.deepEqual(failures(results), []);
   const o = outcomes(results);
   assert.equal(o.W1, 'pass');
-  for (const id of ['W2', 'W5', 'W6', 'W7']) assert.equal(o[id], 'skip', id);
+  assert.equal(o.W9, 'pass');
+  for (const id of ['W2', 'W5', 'W6', 'W7', 'W8']) assert.equal(o[id], 'skip', id);
 });

@@ -1,7 +1,7 @@
 {
   "name": "@ggg/conformance",
   "version": "0.1.0",
-  "description": "Checks that a canister implements the GGG standards it declares.",
+  "description": "Checks that a canister implements GGG.",
   "license": "MIT",
   "type": "module",
   "bin": {

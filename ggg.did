@@ -1,0 +1,879 @@
+// GGG: the GGG model in Candid. Status: draft.
+// Model: https://github.com/smart-social-contracts/ggg/blob/main/model/README.md
+//
+// One record per model entity, with the model's fields, and one method per model operation.
+// Every entity is here; the methods cover the operations bound so far.
+
+// ---- Conventions (model §1)
+
+// Nanoseconds since 1970-01-01 UTC, as returned by ic0.time.
+type Timestamp = nat64;
+// Nanoseconds.
+type Duration = nat64;
+
+// The ICRC-3 generic value, for structured data whose shape the model leaves open.
+type Value = variant {
+  Nat : nat;
+  Int : int;
+  Text : text;
+  Blob : blob;
+  Array : vec Value;
+  Map : vec record { text; Value };
+};
+
+// A reference to any entity: `kind` is the entity's name in the model.
+type Ref = record { kind : text; id : text };
+
+type GggError = variant {
+  NotFound;
+  Unauthenticated;
+  Forbidden : record { permission : opt text; message : text };
+  InvalidArgument : text;
+  Conflict : text;
+  Unavailable : text;
+  GenericError : record { error_code : nat; message : text };
+};
+
+// ---- §2 Identity and membership
+
+type User = record {
+  id : principal;
+  nickname : opt text;
+  avatar : opt text;
+  home_quarter : opt text;
+  profiles : vec text;
+  private_data : opt blob;
+};
+
+type MemberStatus = variant { Active; Inactive; Suspended; Banned };
+
+type Member = record {
+  id : text;
+  user : principal;
+  status : MemberStatus;
+  joined_at : opt Timestamp;
+};
+
+type GuestUser = record {
+  id : principal;
+  home_quarter : text;
+  permissions : vec text;
+};
+
+type Human = record {
+  id : text;
+  user : principal;
+  date_of_birth : opt Timestamp;
+  h3_index : opt text;
+};
+
+type IdentityStatus = variant { Pending; Verified; Rejected };
+
+type Identity = record {
+  id : text;
+  human : text;
+  kind : text;
+  issuer : text;
+  ref : text;
+  status : IdentityStatus;
+  verified_at : opt Timestamp;
+};
+
+type UserProfile = record {
+  id : text;
+  description : text;
+  allowed_to : vec text;
+  permissions : vec text;
+};
+
+type Permission = record {
+  id : text;
+  description : text;
+  category : text;
+  scope : opt text;
+  users : vec principal;
+  profiles : vec text;
+  departments : vec text;
+};
+
+type Invite = record {
+  id : text;
+  profile : opt text;
+  department : opt text;
+  position : opt text;
+  max_uses : nat;
+  uses : nat;
+  redeemed_by : vec principal;
+  expires_at : opt Timestamp;
+  revoked : bool;
+  created_by : principal;
+};
+
+type DelegationStatus = variant { Pending; Active; Revoked; Expired; Declined };
+
+type Delegation = record {
+  id : text;
+  grantor : principal;
+  delegate : principal;
+  scope : vec text;
+  status : DelegationStatus;
+  label : text;
+  description : text;
+  requires_acceptance : bool;
+  granted_by : principal;
+  accepted_at : opt Timestamp;
+  starts_at : opt Timestamp;
+  expires_at : Timestamp;
+  revoked_at : opt Timestamp;
+  revoked_by : opt principal;
+};
+
+type DelegationRequest = record {
+  id : text;
+  grantor : principal;
+  delegate : principal;
+  scope : vec text;
+  label : text;
+  description : text;
+  starts_at : opt Timestamp;
+  expires_at : Timestamp;
+  request_expires_at : Timestamp;
+};
+
+// ---- §3 Departments and organizations
+
+// m of n approvals; quorum in basis points.
+type Policy = record { m : nat; n : nat; quorum : nat; veto : vec principal };
+
+type Department = record {
+  id : text;
+  description : text;
+  parent : opt text;
+  is_root : bool;
+  head : opt principal;
+  policy : Policy;
+  target_policy : opt Policy;
+  fund : opt text;
+};
+
+type OrganizationStatus = variant { Active; Suspended; Dissolved };
+
+type Organization = record {
+  id : text;
+  description : text;
+  status : OrganizationStatus;
+  admins : vec principal;
+};
+
+type PositionStatus = variant { Open; Frozen; Closed };
+
+type Position = record {
+  id : text;
+  department : opt text;
+  organization : opt text;
+  title : text;
+  profile : opt text;
+  headcount : nat;
+  salary : nat;
+  salary_period : opt Duration;
+  status : PositionStatus;
+  inherit_from_capital : bool;
+};
+
+type AppointmentKind = variant { Substantive; Acting };
+type AppointmentStatus = variant { Active; Ended };
+
+type Appointment = record {
+  id : text;
+  position : text;
+  user : principal;
+  kind : AppointmentKind;
+  agent : bool;
+  supervisor : opt principal;
+  started_at : Timestamp;
+  ended_at : opt Timestamp;
+  status : AppointmentStatus;
+  source_quarter : opt text;
+};
+
+type Authority = record {
+  id : text;
+  grantor : text;
+  target : Ref;
+  operations : vec text;
+};
+
+// ---- §4 Governance
+
+type ProposalStatus = variant { Draft; Voting; Accepted; Rejected; Expired; Executed; Failed; Withdrawn };
+
+type ProposalAction = variant {
+  // The decision itself is the outcome.
+  Motion;
+  // One update call the realm makes to itself once accepted; `arg` is Candid-encoded.
+  Call : record { method : text; arg : blob };
+  // Codex code to adopt; checksum is "sha256:<hex>".
+  Code : record { url : text; checksum : text };
+};
+
+type ProposalResult = variant {
+  // The Candid-encoded reply of a Call.
+  Reply : blob;
+  // Why execution failed.
+  Error : text;
+};
+
+type Tally = record { yes : nat; no : nat; abstain : nat; eligible : opt nat };
+
+type Proposal = record {
+  id : text;
+  title : text;
+  description : text;
+  proposer : principal;
+  on_behalf_of : opt principal;
+  department : opt text;
+  action : ProposalAction;
+  status : ProposalStatus;
+  opens_at : opt Timestamp;
+  deadline : opt Timestamp;
+  threshold : nat;
+  quorum : nat;
+  tally : Tally;
+  result : opt ProposalResult;
+};
+
+type VoteChoice = variant { Yes; No; Abstain };
+
+type Vote = record {
+  id : text;
+  proposal : text;
+  voter : principal;
+  cast_by : opt principal;
+  choice : VoteChoice;
+  cast_at : Timestamp;
+};
+
+type MandateStatus = variant { Active; Completed; Revoked; Expired };
+
+type Mandate = record {
+  id : text;
+  title : text;
+  scope : Value;
+  executor : opt text;
+  proposal : opt text;
+  status : MandateStatus;
+  expires_at : opt Timestamp;
+};
+
+type ContractStatus = variant { Draft; Active; Fulfilled; Terminated; Disputed };
+
+type Contract = record {
+  id : text;
+  title : text;
+  parties : vec Ref;
+  mandate : opt text;
+  terms_ref : text;
+  terms_hash : text;
+  status : ContractStatus;
+  starts_at : opt Timestamp;
+  ends_at : opt Timestamp;
+};
+
+// ---- §5 Finance
+
+type TreasuryConfig = record {
+  epoch : Duration;
+  anchor_month : nat8;
+  source_fund : text;
+  auto_allocate : bool;
+};
+
+type Treasury = record { id : text; config : TreasuryConfig };
+
+type Token = record {
+  id : text;
+  ledger : principal;
+  indexer : opt principal;
+  decimals : nat8;
+  fee : nat;
+};
+
+type NFTToken = record {
+  id : text;
+  canister : principal;
+  name : text;
+  description : text;
+  transferable : bool;
+  required_license : opt text;
+  supply_cap : opt nat;
+  total_supply : nat;
+};
+
+type Balance = record { symbol : text; amount : nat };
+
+type Fund = record {
+  id : text;
+  name : text;
+  kind : text;
+  department : opt text;
+  balances : vec Balance;
+  allocation_rule : opt text;
+};
+
+type FiscalPeriodStatus = variant { Open; Closed; Archived };
+
+type FiscalPeriod = record {
+  id : text;
+  name : text;
+  starts_at : Timestamp;
+  ends_at : Timestamp;
+  status : FiscalPeriodStatus;
+  statements : Value;
+  source_hash : text;
+};
+
+type BudgetStatus = variant { Draft; Proposed; Adopted; Amended; Closed };
+
+type Budget = record {
+  id : text;
+  fund : text;
+  period : text;
+  category : text;
+  kind : text;
+  planned : nat;
+  actual : nat;
+  status : BudgetStatus;
+  proposal : opt text;
+};
+
+// AllocationRule and TaxPolicy.
+type AdoptionStatus = variant { Draft; Proposed; Adopted; Superseded };
+
+// share in basis points.
+type Allocation = record { fund : text; share : nat };
+
+type AllocationRule = record {
+  id : text;
+  source_fund : text;
+  rules : vec Allocation;
+  status : AdoptionStatus;
+  proposal : opt text;
+};
+
+type LedgerKind = variant { Asset; Liability; Equity; Revenue; Expense };
+
+// At most one of the source references (transfer … appeal) is set.
+type LedgerEntry = record {
+  id : text;
+  transaction : text;
+  kind : LedgerKind;
+  category : text;
+  debit : nat;
+  credit : nat;
+  symbol : text;
+  fund : opt text;
+  period : opt text;
+  transfer : opt text;
+  invoice : opt text;
+  user : opt principal;
+  organization : opt text;
+  contract : opt text;
+  case : opt text;
+  penalty : opt text;
+  appeal : opt text;
+  at : Timestamp;
+  description : text;
+};
+
+type InvoiceStatus = variant { Pending; Paid; Overdue; Cancelled };
+
+type Invoice = record {
+  id : text;
+  payer : Ref;
+  amount : nat;
+  symbol : text;
+  due_at : opt Timestamp;
+  status : InvoiceStatus;
+  reason : opt Ref;
+  paid_at : opt Timestamp;
+  payment : opt Value;
+};
+
+type TransferStatus = variant { Sending; Pending; Completed; Failed };
+
+type Transfer = record {
+  id : text;
+  sender : Ref;
+  to : Ref;
+  symbol : text;
+  amount : nat;
+  ledger_tx : opt nat;
+  invoice : opt text;
+  status : TransferStatus;
+  at : Timestamp;
+  payroll : opt text;
+};
+
+type TradeStatus = variant { Pending; Completed; Failed };
+
+type Trade = record {
+  id : text;
+  contract : opt text;
+  leg_a : text;
+  leg_b : text;
+  status : TradeStatus;
+};
+
+type PaymentAccount = record {
+  id : text;
+  owner : Ref;
+  network : text;
+  address : text;
+  symbol : text;
+  label : text;
+  verified : bool;
+};
+
+type FinancialReport = record {
+  id : text;
+  kind : text;
+  period : text;
+  as_of : Timestamp;
+  statements : Value;
+  source_hash : text;
+  issued_by : principal;
+  supersedes : opt text;
+};
+
+type TaxPolicy = record {
+  id : text;
+  status : AdoptionStatus;
+  document : Value;
+  description : text;
+  proposal : opt text;
+  adopted_at : opt Timestamp;
+};
+
+type TaxDeclarationStatus = variant { Filed; Assessed; Settled; Disputed };
+
+type TaxDeclaration = record {
+  id : text;
+  declarant : Ref;
+  period : text;
+  base : text;
+  amount : nat;
+  status : TaxDeclarationStatus;
+  invoice : opt text;
+};
+
+// ---- §6 Assets
+
+type LandStatus = variant { Active; Disputed; Revoked };
+
+type Land = record {
+  id : text;
+  x : nat;
+  y : nat;
+  width : nat;
+  height : nat;
+  kind : text;
+  owner : Ref;
+  status : LandStatus;
+  token_id : opt nat;
+  registered_by : principal;
+  metadata : Value;
+};
+
+type Zone = record {
+  id : text;
+  name : text;
+  kind : text;
+  land : opt text;
+  user : opt principal;
+  metadata : Value;
+};
+
+// ---- §7 Licensing
+
+type LicenseStatus = variant { Applied; Active; Rejected; Suspended; Revoked; Expired };
+
+type License = record {
+  id : text;
+  kind : text;
+  holder : Ref;
+  issued_by : text;
+  status : LicenseStatus;
+  applied_at : Timestamp;
+  issued_at : opt Timestamp;
+  expires_at : opt Timestamp;
+  evidence_ref : opt text;
+  conditions : Value;
+};
+
+// ---- §8 Justice
+
+type CourtLevel = variant { FirstInstance; Appellate; Supreme; Specialized };
+type CourtStatus = variant { Active; Closed };
+
+type Court = record {
+  id : text;
+  name : text;
+  operator : Ref;
+  level : CourtLevel;
+  jurisdiction : text;
+  parent : opt text;
+  status : CourtStatus;
+  license : opt text;
+};
+
+type JudgeStatus = variant { Active; Revoked };
+
+type Judge = record {
+  id : text;
+  user : principal;
+  court : text;
+  specialization : text;
+  status : JudgeStatus;
+  appointed_at : Timestamp;
+};
+
+type DisputeStatus = variant { Filed; Accepted; Rejected; Withdrawn };
+
+type Dispute = record {
+  id : text;
+  claimant : principal;
+  respondent : Ref;
+  subject : opt Ref;
+  title : text;
+  description_ref : opt text;
+  status : DisputeStatus;
+  case : opt text;
+};
+
+type CaseStatus = variant { Filed; Assigned; InProgress; VerdictIssued; Appealed; Closed; Dismissed; Transferred };
+
+// Encrypted content: where it lives and its hash.
+type Sealed = record { ref : text; hash : text };
+
+type Case = record {
+  id : text;
+  court : text;
+  plaintiff : Ref;
+  defendant : Ref;
+  judges : vec text;
+  title : text;
+  dispute : opt text;
+  evidence : vec Sealed;
+  status : CaseStatus;
+  filed_at : Timestamp;
+  closed_at : opt Timestamp;
+};
+
+type VerdictStatus = variant { Draft; Issued; Final; Overturned };
+
+type Verdict = record {
+  id : text;
+  case : text;
+  issued_by : text;
+  decision : text;
+  reasoning_ref : opt text;
+  status : VerdictStatus;
+  contract : opt text;
+  issued_at : opt Timestamp;
+};
+
+type AppealStatus = variant { Filed; UnderReview; Granted; Denied; Withdrawn };
+
+type Appeal = record {
+  id : text;
+  case : text;
+  verdict : text;
+  court : text;
+  appellant : principal;
+  grounds_ref : opt text;
+  status : AppealStatus;
+  decision : opt text;
+  new_verdict : opt text;
+};
+
+type PenaltyKind = variant {
+  Fine;
+  Restitution;
+  CommunityService;
+  Suspension;
+  Revocation;
+  Injunction;
+  Freeze;
+  Termination;
+};
+
+type PenaltyStatus = variant { Pending; Executed; Waived };
+
+type Penalty = record {
+  id : text;
+  verdict : text;
+  target : Ref;
+  kind : PenaltyKind;
+  amount : opt nat;
+  symbol : opt text;
+  status : PenaltyStatus;
+  due_at : opt Timestamp;
+  executed_at : opt Timestamp;
+  invoice : opt text;
+};
+
+// ---- §9 Procurement
+
+type TenderStatus = variant { Draft; Open; Closed; Evaluation; Awarded; Contracted; Cancelled };
+
+// weight in basis points.
+type Criterion = record { criterion : text; weight : nat };
+
+type Tender = record {
+  id : text;
+  title : text;
+  description : text;
+  requester : text;
+  status : TenderStatus;
+  opens_at : opt Timestamp;
+  closes_at : opt Timestamp;
+  rubric : vec Criterion;
+  winner : opt text;
+  contract : opt text;
+};
+
+type Bid = record {
+  id : text;
+  tender : text;
+  vendor : text;
+  submitted_at : Timestamp;
+  sealed : bool;
+  payload_ref : text;
+  payload_hash : text;
+  price : opt nat;
+  score : opt nat;
+};
+
+type BidScore = record {
+  id : text;
+  bid : text;
+  evaluator : principal;
+  criterion : text;
+  score : nat;
+  scored_at : Timestamp;
+};
+
+// ---- §10 Quarters and federation
+
+type RealmStatus = variant { Setup; Alpha; Beta; Production; Deprecation; Terminated };
+
+type Realm = record {
+  id : text;
+  name : text;
+  manifesto : text;
+  welcome_message : text;
+  status : RealmStatus;
+  calendar : opt text;
+  treasury : opt text;
+  accounting_currency : opt text;
+  accounting_currency_decimals : opt nat8;
+  is_quarter : bool;
+  is_capital : bool;
+  federation_realm_id : opt text;
+  federation_codex : opt text;
+  quarter_join_mode : opt text;
+  trusted_principals : vec principal;
+  require_marketplace_approval : bool;
+  trusted_approvers : vec text;
+  open_registration : bool;
+  logo_url : opt text;
+  background_image_url : opt text;
+  installed_version : text;
+  network : text;
+};
+
+type Cycle = record { name : text; every : Duration };
+
+type Calendar = record {
+  id : text;
+  realm : text;
+  epoch : Duration;
+  fiscal_period : Duration;
+  voting_window : Duration;
+  codex_release_cycle : opt Duration;
+  benefit_cycle : opt Duration;
+  service_payment_cycle : opt Duration;
+  license_review_cycle : opt Duration;
+  custom_cycles : vec Cycle;
+};
+
+type Registry = record { id : text; description : text; principal_id : principal };
+
+type QuarterStatus = variant { Setup; Active; Suspended; Splitting; Merging };
+
+type Quarter = record {
+  id : text;
+  name : text;
+  index : nat;
+  status : QuarterStatus;
+  population : nat;
+  codex_id : opt text;
+  codex_version : opt text;
+  last_sync : opt Timestamp;
+  last_activity_at : opt Timestamp;
+};
+
+type Forward = record {
+  id : text;
+  subject : Ref;
+  origin : text;
+  destination : text;
+  moved_at : Timestamp;
+  signature : blob;
+};
+
+type FederalVoteStatus = variant { Open; Passed; Failed; Cancelled };
+
+type FederalVote = record {
+  id : text;
+  origin_quarter : text;
+  action : Value;
+  rule : Value;
+  hash : text;
+  deadline : Timestamp;
+  status : FederalVoteStatus;
+  tally : Value;
+};
+
+type FederalVoteLegStatus = variant { Open; Reported };
+type Outcome = variant { Passed; Failed };
+
+type FederalVoteLeg = record {
+  id : text;
+  vote : text;
+  quarter : text;
+  proposal_id : opt text;
+  outcome : opt Outcome;
+  yes : nat;
+  no : nat;
+  abstain : nat;
+  eligible : nat;
+  status : FederalVoteLegStatus;
+  hash : opt text;
+};
+
+type FederationMessage = record {
+  id : text;
+  topic : text;
+  source : text;
+  body : Value;
+  response : opt Value;
+};
+
+// ---- §11 Codex, notifications and audit
+
+type CodexStatus = variant { Active; Inactive; Reverted };
+
+type Codex = record {
+  id : text;
+  version : text;
+  checksum : text;
+  status : CodexStatus;
+  manifest : Value;
+  capabilities : vec text;
+  source : text;
+  installed_at : Timestamp;
+  previous : opt text;
+};
+
+type Notification = record {
+  id : text;
+  recipient : Ref;
+  topic : text;
+  title : text;
+  body : text;
+  href : opt text;
+  sender : opt text;
+  visibility : text;
+  read_by : vec principal;
+  at : Timestamp;
+};
+
+type Event = record {
+  id : text;
+  op : text;
+  user : opt principal;
+  by : opt principal;
+  agent : bool;
+  supervisor : opt principal;
+  origin : text;
+  args : Value;
+  result : Value;
+  at : Timestamp;
+};
+
+// ---- §13 Private content
+
+type KeyEnvelope = record {
+  id : text;
+  scope : text;
+  "principal" : principal;
+  wrapped_dek : blob;
+  granted_by : principal;
+  at : Timestamp;
+};
+
+type Document = record {
+  id : text;
+  department : text;
+  title : text;
+  ref : text;
+  hash : text;
+  author : principal;
+  at : Timestamp;
+};
+
+// ---- Operation arguments and results
+
+type ListArgs = record { cursor : opt text; limit : opt nat32 };
+
+type UserEntry = record { user : User; member : opt Member };
+type UserPage = record { items : vec UserEntry; next : opt text };
+
+type ProposalGetArgs = record { id : text; cursor : opt text; limit : opt nat32 };
+// The proposal, and its votes a page at a time.
+type ProposalDetail = record { proposal : Proposal; votes : vec Vote; next : opt text };
+
+type ProposalListArgs = record { cursor : opt text; limit : opt nat32; status : opt ProposalStatus };
+type ProposalPage = record { items : vec Proposal; next : opt text };
+
+type ProposalCreateArgs = record {
+  title : text;
+  description : text;
+  department : opt text;
+  action : ProposalAction;
+  on_behalf_of : opt principal;
+};
+
+type ProposalVoteArgs = record {
+  proposal : text;
+  choice : VoteChoice;
+  on_behalf_of : opt principal;
+};
+
+service : {
+  icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
+
+  // §2
+  ggg_user_get : (principal) -> (variant { Ok : opt UserEntry; Err : GggError }) query;
+  ggg_user_list : (ListArgs) -> (variant { Ok : UserPage; Err : GggError }) query;
+
+  // §4
+  ggg_proposal_get : (ProposalGetArgs) -> (variant { Ok : opt ProposalDetail; Err : GggError }) query;
+  ggg_proposal_list : (ProposalListArgs) -> (variant { Ok : ProposalPage; Err : GggError }) query;
+  ggg_proposal_create : (ProposalCreateArgs) -> (variant { Ok : text; Err : GggError });
+  ggg_proposal_vote : (ProposalVoteArgs) -> (variant { Ok : Vote; Err : GggError });
+
+  // §12
+  ggg_realm_info : () -> (Realm) query;
+};

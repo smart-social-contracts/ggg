@@ -13,18 +13,26 @@ for. This model says what a GGG realm is made of:
 
 It describes behaviour, not code, and does not depend on any implementation.
 
-The [standards](../standards/README.md) bind this model to Candid, domain by domain. They say how a
-canister exposes these entities and operations to callers. A GOS implements the standards for the
-domains it covers. It may store its data however it likes, as long as what it shows through a
-standard matches this model.
+[`ggg.did`](../ggg.did) is this model in Candid: a record for every entity and a method for every
+operation ([Candid interface](#candid-interface)). A GGG GOS implements all of it. It may store its
+data however it likes, as long as what it shows matches this model.
+
+The model names the entities that governments and other bodies commonly have: departments,
+courts, funds, licences, tenders. A realm does not need all of them. A realm can have a single
+department, or one court whose only judge is the realm itself, and still be compliant. What a
+GOS may not do is leave an operation out. When a realm has nothing in a domain, its operations
+still answer as the model says: an empty list, `NotFound`, or `Forbidden` when nobody holds the
+permission. That empty state is valid.
 
 [Realms GOS](https://github.com/smart-social-contracts/realms-gos) is the reference implementation of
 every domain. Its tests check that its operations match the operation tables below, so neither can
-drift from the other. Changes to the model come first; the implementations follow.
+drift from the other. Changes to the model come first; the implementations follow. What an
+implementation adds beyond the model (Realms GOS has extensions and a task scheduler, for example)
+is documented by that implementation, not here.
 
 ## 1. Conventions
 
-These rules apply to the model's data as the standards expose it.
+These rules apply to the model's data as `ggg.did` exposes it.
 
 | Topic | Rule |
 |---|---|
@@ -37,7 +45,7 @@ These rules apply to the model's data as the standards expose it.
 | Structured data | Typed records where the model fixes the shape. Where it doesn't, the ICRC-3 `Value` type, never JSON encoded into text. |
 | Behaviour | Entities hold data only: no hooks, no methods beyond trivial reads. Behaviour lives in operations. |
 | Audit | Every update operation writes one `Event`. |
-| Privacy | Personal or sensitive content is stored encrypted; entities hold only a reference and a hash. |
+| Privacy | Personal or sensitive content is stored encrypted; entities hold only a reference and a hash. Keys are shared through key envelopes ([§13](#13-private-content)). |
 | Collections | No call reads a whole collection. Lists take a `cursor` and a `limit` and return `next`; work over many rows runs in batches the same way; lookups go through indexed fields; totals are kept as running totals. |
 
 In the entity tables, `→ X` is a reference to an `X`, `→ X*` to several, `(Json)` marks structured
@@ -53,19 +61,49 @@ result. Several operations may share a permission. Flags:
 | `read` | Query; changes nothing; not audited. |
 | `delegable` | May be called with `on_behalf_of`: the caller acts for a grantor whose active `Delegation` covers the permission. Both principals are audited. |
 | `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. |
-| `signing` | Produces an act that only an accountable human may make. Agents can never perform it, directly or by delegation. |
+| `signing` | Produces an act its signer is personally accountable for: a decision, a certification, a sanction. The active codex's [signing policy](#signing-policy) says whether agents may hold the permission and whether it may be delegated. By default only non-agents sign, and nobody signs on another's behalf. |
 
-An operation either succeeds with its result or is refused with one of the
-[GGG errors](../standards/README.md#results-and-errors), and a refused operation changes nothing.
-How a canister exposes the operations, one typed method per operation or a generic entry point,
-is up to the standards.
+An operation either succeeds with its result or is refused with a `GggError`, and a refused
+operation changes nothing.
 
 ### Callers
 
 A call comes from a **user** (possibly acting `on_behalf_of` a grantor), an **agent** (a user holding
-an agent appointment), an **extension** (limited to the operations its manifest declares), a **codex**
-(limited to its declared capabilities), or a **replayed proposal** (realm authority). One
-authorization decision covers every call; there is no second path around it.
+an agent appointment), a **codex** (limited to its declared capabilities), or a **replayed proposal**
+(realm authority). An implementation may add callers of its own, each limited to what it declares.
+One authorization decision covers every call; there is no second path around it.
+
+### Candid interface
+
+[`ggg.did`](../ggg.did) has one record per entity, with the fields of the tables below, and one
+method per operation:
+
+- **Names.** Operation `x` is method `ggg_x` (`ggg_proposal_vote`). `read` operations are queries.
+  A GOS may expose other methods, but not with a `ggg` prefix.
+- **References.** A reference to one entity type is that entity's id: `text`, or `principal` for a
+  `User`. A reference to any entity is `record { kind; id }`.
+- **Results.** A method that can refuse returns `variant { Ok : T; Err : GggError }` and doesn't trap:
+  `NotFound` (a record the call needs doesn't exist; a lookup by id returns `Ok(null)` instead),
+  `Unauthenticated` (anonymous caller), `Forbidden` (names the missing permission),
+  `InvalidArgument`, `Conflict` (contradicts the current state), `Unavailable` (during setup or
+  while frozen), `GenericError`. Messages are for people, not for parsing.
+- **Lists.** Arguments `cursor : opt text` and `limit : opt nat32`; replies `items` and
+  `next : opt text`. Pages fit the Internet Computer's limits, are never empty when `next` is set, and
+  walk every record exactly once in a stable order. A malformed cursor is `InvalidArgument`.
+- **Extra fields.** A GOS may add fields to the records it returns, and `opt` fields to the arguments
+  it accepts, named after itself (`realms_gos_tally_required`).
+- **Discovery.** `icrc10_supported_standards`
+  ([ICRC-10](https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md)) lists `GGG` with the
+  URL of the version implemented, and should list
+  [ICRC-21](https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md),
+  so wallets can show what a member signs.
+- **Versions.** While GGG is a draft, the versions implementations build against are tagged
+  `ggg-draft.N`. Once final, it only changes in ways Candid subtyping accepts (new methods, new
+  `opt` arguments, new reply fields); anything else is a new major version, listed as `GGG2`.
+
+Every entity is in `ggg.did`. Of the operations, it binds `realm_info`, `user_get`, `user_list`,
+`proposal_get`, `proposal_list`, `proposal_create` and `proposal_vote` so far; the rest follow. The
+[conformance suite](../conformance/README.md) checks a canister against it.
 
 ## Running example
 
@@ -86,11 +124,11 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `Member` | `id`, `user` → `User`, `status`, `joined_at` | Membership of a user in this quarter. | Alice: `active` since 2026-03-02 |
 | `GuestUser` | `id` (principal), `home_quarter`, `permissions` (Json) | A user from another quarter acting here. | Bob from South, allowed to view and transact |
 | `Human` | `id`, `user` → `User`, `date_of_birth`, `h3_index` | A verified person behind a user. At most one user per human. | Alice's verified person record: born 1990-04-12, home cell `871f1d489ffffff` |
-| `Identity` | `id`, `human` → `Human`, `kind` (`passport`, `email`, `registry`, …), `issuer`, `ref`, `verified_at` | An attestation. Proof material is stored encrypted or off-chain; `ref` points to it. | Alice's passport proof: kind `passport`, issuer `zkpassport`, verified 2026-03-02 |
-| `UserProfile` | `id` (name), `description`, `allowed_to` (Json list of permissions), `permissions` → `Permission`*, `extensions` → `Extension`* | A named role. Defaults: `admin` (`all`), `member`. | `member` → `[self.join, proposal.vote, proposal.create, dispute.create, …]` |
+| `Identity` | `id`, `human` → `Human`, `kind` (`passport`, `email`, `registry`, …), `issuer`, `ref`, `status`, `verified_at` | An attestation. Proof material is stored encrypted or off-chain; `ref` points to it. | Alice's passport proof: kind `passport`, issuer `zkpassport`, verified 2026-03-02 |
+| `UserProfile` | `id` (name), `description`, `allowed_to` (Json list of permissions), `permissions` → `Permission`* | A named role. Defaults: `admin` (`all`), `member`. | `member` → `[self.join, proposal.vote, proposal.create, dispute.create, …]` |
 | `Permission` | `id` (name), `description`, `category`, `scope`, `users` → `User`*, `profiles` → `UserProfile`*, `departments` → `Department`* | A fine-grained grant of one permission to users, profiles or departments. | `transfer.create` on scope `fund:ROADS`, granted to Infrastructure |
 | `Invite` | `id` (code hash), `profile`, `department`, `position`, `max_uses`, `uses`, `redeemed_by` (Json), `expires_at`, `revoked`, `created_by` | The code itself is never stored. | 50-use code for new clerks: profile `member`, Civil Registry, position `clerk`, expires in 30 days |
-| `Delegation` | `id`, `grantor`, `delegate`, `scope` (Json), `status`, `label`, `description`, `requires_acceptance`, `granted_by`, `accepted_at`, `starts_at`, `expires_at`, `revoked_at`, `revoked_by`, `link` (grantor and delegate while pending or active, indexed) | Power of attorney. | Alice → `claude-conn`: `[proposal.vote, proposal.create]` for 24 h, `active` |
+| `Delegation` | `id`, `grantor`, `delegate`, `scope` (Json), `status`, `label`, `description`, `requires_acceptance`, `granted_by`, `accepted_at`, `starts_at`, `expires_at`, `revoked_at`, `revoked_by` | Power of attorney. | Alice → `claude-conn`: `[proposal.vote, proposal.create]` for 24 h, `active` |
 | `DelegationRequest` | `id`, `grantor`, `delegate`, `scope`, `label`, `description`, `starts_at`, `expires_at`, `request_expires_at` | A delegate asking a member for a grant. Deleted once decided. | Claude asks Alice for `[proposal.vote]` for 7 days; the link is valid 1 h |
 
 ### Lifecycles
@@ -136,7 +174,8 @@ argument (it must hold that permission through its positions or grants); otherwi
 - I-ID-4: A `banned` member can call nothing except read operations on public data.
 - I-ID-5: Private data is readable only by its owner and by principals the owner shared it with.
 - I-ID-6: A delegation never covers a permission the grantor lacks at the time of use, never a
-  `signing` permission, never `all`, and never lasts more than one year.
+  `signing` permission the signing policy keeps personal, never `all`, and never lasts more than
+  one year.
 - I-ID-7: A delegate acts only within `starts_at`…`expires_at` and while the grant is `active`.
 - I-ID-8: Every delegated act records both the grantor and the delegate.
 
@@ -154,7 +193,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Department` | `id` (name), `description`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund`, `extensions` → `Extension`* | `policy` = `{m, n, quorum_percent, veto: [principals]}`. Exactly one root department per realm. | Civil Registry: under Administration, 2-of-3 policy, head `dana` |
+| `Department` | `id` (name), `description`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals]}`, quorum in basis points. Exactly one root department per realm. | Civil Registry: under Administration, 2-of-3 policy, head `dana` |
 | `Organization` | `id` (name), `description`, `status`, `admins` → `User`* | An external party. Its admins manage its representatives. | Clinic B: `active`, admin `dr-ana` |
 | `Position` | `id` (key), `department` → `Department` or `organization` → `Organization`, `title`, `profile` → `UserProfile`, `headcount`, `salary` (int), `salary_period`, `status`, `inherit_from_capital` | A seat in a department, or a representative seat in an organization. | `civil-registry.clerk`: 4 seats, 2,000 REALM/month, profile `clerk`; `clinic-b.physician`: 3 seats |
 | `Appointment` | `id`, `position` → `Position`, `user` → `User`, `kind` (`substantive`, `acting`), `agent` (bool), `supervisor` → `User`, `started_at`, `ended_at`, `status`, `source_quarter` | One user holding one seat. Agents are users with `agent = true`. | Bob holds a clerk seat since 2026-05-01; `records-bot` holds `records_agent` at Clinic B, agent, supervisor `dr-ana` |
@@ -189,9 +228,10 @@ Two kinds of body:
 - I-ORG-1: A user holds a department's permissions only through an active appointment in it (or
   through an `Authority` granted to a department they hold an appointment in).
 - I-ORG-2: Active appointments of a position never exceed its `headcount`.
-- I-ORG-3: An agent appointment always has a supervisor who holds an active, non-agent appointment in
-  the same department or organization.
-- I-ORG-4: An agent never holds a `signing` permission. (Guardrail.)
+- I-ORG-3: An agent appointment has a supervisor who holds an active, non-agent appointment in the
+  same department or organization, unless the signing policy makes supervision optional.
+- I-ORG-4: An agent holds a `signing` permission only if the active codex's signing policy allows
+  agents to hold it.
 - I-ORG-5: A policy satisfies `1 ≤ m ≤ n`; veto principals hold an appointment in the department.
 - I-ORG-6: The root department always exists and cannot be deleted.
 - I-ORG-7: A department's positions and policy change only under the realm's rules; an organization's
@@ -204,8 +244,8 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `action` (Json: `{op, args}` or codex code ref + checksum), `status`, `opens_at`, `deadline`, `threshold`, `quorum_percent`, `tally` (Json), `result` (Json) | | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov |
-| `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at`, `proposal_id` (indexed) | One per voter per proposal; may be replaced until the deadline. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
+| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `threshold`, `quorum` (both in basis points), `tally` (Json), `result` (Json) | | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov |
+| `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the deadline. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
 | `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. | `C-9`: Agora × BuildCo, bike lane works, Dec–Mar, terms `sha256:4be1…` |
 
@@ -250,7 +290,7 @@ Two kinds of body:
 | `NFTToken` | `id` (symbol), `canister`, `name`, `description`, `transferable`, `required_license` (licence type or empty), `supply_cap`, `total_supply` | An NFT ledger (ICRC-7) the realm mints into. | `LAND` (transferable); `CRED` (non-transferable, minting needs a licence) |
 | `Fund` | `id` (code), `name`, `kind` (general, special revenue, …), `department` → `Department`, `balances` (Json: running balance per token), `allocation_rule` → `AllocationRule` | | `ROADS`: special revenue, owned by Infrastructure |
 | `FiscalPeriod` | `id`, `name`, `starts_at`, `ends_at`, `status`, `statements` (Json: running totals), `source_hash` (chained over its entries) | | `FY2026`: 2026-01-01 to 2026-12-31, `open` |
-| `Budget` | `id`, `fund` → `Fund`, `period` → `FiscalPeriod`, `category`, `kind`, `planned`, `actual`, `status`, `proposal` → `Proposal`, `slot` (`fund:period:category`, indexed) | | Roads FY2026, capital: planned 300,000, actual 120,500, `adopted` |
+| `Budget` | `id`, `fund` → `Fund`, `period` → `FiscalPeriod`, `category`, `kind`, `planned`, `actual`, `status`, `proposal` → `Proposal` | | Roads FY2026, capital: planned 300,000, actual 120,500, `adopted` |
 | `AllocationRule` | `id`, `source_fund`, `rules` (Json), `status`, `proposal` → `Proposal` | How revenue is split between funds. | From `ROOT`: 30% `WELFARE`, 20% `ROADS`, 50% `GENERAL` |
 | `LedgerEntry` | `id`, `transaction`, `kind` (asset, liability, equity, revenue, expense), `category`, `debit`, `credit`, `symbol`, `fund` → `Fund`, `period` → `FiscalPeriod`, `transfer` → `Transfer`, `invoice` → `Invoice`, `user` → `User`, `organization` → `Organization`, `contract` → `Contract`, `case` → `Case`, `penalty` → `Penalty`, `appeal` → `Appeal`, `at`, `description` | Double entry. At most one of the source references is set. | Tx `T-88`: debit `ROADS` capital expense 50,000, credit cash 50,000, contract `C-9` |
 | `Invoice` | `id`, `payer` (`Entity:id`), `amount`, `symbol`, `due_at`, `status`, `reason` (`Entity:id`), `paid_at`, `payment` (Json) | Paid into the subaccount derived from its `id`. | `INV-301`: Alice owes 120 REALM property tax, due 2026-12-31, `pending` |
@@ -259,13 +299,14 @@ Two kinds of body:
 | `PaymentAccount` | `id`, `owner` (`Entity:id`), `network`, `address`, `symbol`, `label`, `verified` | External accounts for payouts. | Bob's ckBTC payout address, verified |
 | `FinancialReport` | `id`, `kind`, `period` → `FiscalPeriod`, `as_of`, `statements` (Json), `source_hash`, `issued_by`, `supersedes` → `FinancialReport` | Frozen statements. | FY2025 closing statements issued by Finance, `sha256:77d0…` |
 | `TaxPolicy` | `id`, `status`, `document` (Json), `description`, `proposal` → `Proposal`, `adopted_at` | Parameters; the codex calculates. | `TAX-POLICY-3`: property tax 0.4% up to 50,000, 0.8% above, annual, `adopted` |
-| `TaxDeclaration` | `id`, `declarant` (`Entity:id`), `period`, `base`, `amount`, `status`, `invoice` → `Invoice`, `key` (declarant, base and period, indexed) | Self-declared bases (revenue, payroll). | Clinic B declares 182,000 revenue for 2026-Q3 → `INV-412` |
+| `TaxDeclaration` | `id`, `declarant` (`Entity:id`), `period`, `base`, `amount`, `status`, `invoice` → `Invoice` | Self-declared bases (revenue, payroll). | Clinic B declares 182,000 revenue for 2026-Q3 → `INV-412` |
 
 There is no balance entity: the ledgers are the source of truth.
 
 ### Lifecycles
 
 - `Invoice.status`: `pending` → `paid` | `overdue` | `cancelled`; `overdue` → `paid` | `cancelled`.
+- `Trade.status`: `pending` → `completed` | `failed`.
 - `Transfer.status`: `sending` (ledger call in flight) → `completed` | `failed`; `sending` → `pending` (ledger refused) → `failed` (reverted).
 - `Budget.status`: `draft` → `proposed` → `adopted` → `amended`* → `closed`.
 - `FiscalPeriod.status`: `open` → `closed` → `archived`.
@@ -310,7 +351,7 @@ There is no balance entity: the ledgers are the source of truth.
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Land` | `id`, `x`, `y`, `width`, `height`, `kind`, `owner` (`Entity:id`), `status`, `token_id`, `registered_by`, `metadata` (Json), `cell` (`x//16:y//16`, indexed) | A parcel, at most 16×16 cells. | `L-17`: 3×2 cells at (12, 40), residential, owner `alice`, `LAND` #4412 |
+| `Land` | `id`, `x`, `y`, `width`, `height`, `kind`, `owner` (`Entity:id`), `status`, `token_id`, `registered_by`, `metadata` (Json) | A parcel, at most 16×16 cells. | `L-17`: 3×2 cells at (12, 40), residential, owner `alice`, `LAND` #4412 |
 | `Zone` | `id` (h3 index), `name`, `kind`, `land` → `Land`, `user` → `User`, `metadata` (Json) | | Cell `871f1d489ffffff` "Riverside", residential, Alice's home |
 
 Certificates (prescriptions, diplomas, permits, titles) are NFTs, not realm entities: the ledger is
@@ -324,6 +365,7 @@ realm mints carries that header:
 | `ggg:schema` | codex-defined schema, e.g. `health.prescription/1` | `health.prescription/1` |
 | `ggg:subject` | `Entity:id` inside that realm | `Contract:C-88` |
 | `ggg:issuer`, `ggg:license`, `ggg:signer`, `ggg:prepared_by` | who issued it and under which licence | `Organization:clinic-b`, `LIC-12`, `dr-ana`, `records-bot` |
+| `ggg:signer_agent`, `ggg:supervisor` | present only when the signer acted as an agent: `1`, and its supervisor if it has one | `1`, `dr-ana` |
 | `ggg:issued_at`, `ggg:expires_at` | validity, in seconds since the epoch | `1792915200`, `1795507200` |
 | `ggg:payload_hash`, `ggg:payload_ref` | private content: hash and encrypted pointer only | `sha256:9f2c…`, `user:alice:rx-88` |
 
@@ -358,8 +400,8 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 ### Invariants
 
 - I-AST-1: A credential NFT is minted only if the issuing organization holds an active licence of the
-  schema's type, the caller holds an active non-agent appointment in a position the schema accepts, and
-  the codex allows it.
+  schema's type, the caller holds an active appointment in a position the schema accepts (an agent
+  appointment only where the signing policy allows it), and the codex allows it.
 - I-AST-2: Tokens of a non-transferable `NFTToken` never change owner except by a court order.
 - I-AST-3: Revoking a licence stops new mints under it; existing credential NFTs follow the codex rule.
 - I-AST-4: NFT metadata never contains personal data in clear text.
@@ -392,8 +434,8 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 - I-LIC-1: Nobody decides a licence for an organization they hold an appointment in, or for themselves.
 - I-LIC-2: Only `active`, unexpired licences authorize anything.
 
-Regulatory reports from licensed providers are department documents (`document_*`) or codex-defined
-credential NFTs; GGG has no report entity.
+Regulatory reports from licensed providers are department documents ([§13](#13-private-content)) or
+codex-defined credential NFTs; GGG has no report entity.
 
 ## 8. Justice
 
@@ -418,6 +460,8 @@ credential NFTs; GGG has no report entity.
 - `Verdict.status`: `draft` → `issued` → `final`; `issued` → `overturned` (appeal granted).
 - `Appeal.status`: `filed` → `under_review` → `granted` | `denied`; `filed` → `withdrawn`.
 - `Penalty.status`: `pending` → `executed` | `waived`.
+- `Court.status`: `active` → `closed`.
+- `Judge.status`: `active` → `revoked`.
 
 ### Operations
 
@@ -513,6 +557,7 @@ whole federation.
 - `Realm.status`: `setup` → `alpha` → `beta` → `production` → `deprecation` → `terminated`.
 - `Quarter.status`: `setup` → `active` ⇄ `suspended`; `active` → `splitting` | `merging` → `active`.
 - `FederalVote.status`: `open` → `passed` | `failed` | `cancelled`.
+- `FederalVoteLeg.status`: `open` → `reported`, with `outcome` `passed` or `failed`.
 
 ### Operations
 
@@ -537,18 +582,15 @@ whole federation.
 - I-FED-3: Every quarter runs the same federation codex version as the capital, or is flagged as drifting.
 - I-FED-4: Calls between quarters are accepted only from registered quarter canisters.
 
-## 11. Codex, extensions and automation
+## 11. Codex, notifications and audit
 
 ### Entities
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Codex` | `id` (`name@version`), `version`, `checksum`, `status` (`active`, `inactive`, `reverted`), `manifest` (Json), `capabilities` (Json: operation names), `source` (its code), `installed_at`, `previous` → `Codex` | The realm's policy package. At most one is `active`. | `agora@1.4.2`, `active`, capabilities `[invoice_create, notification_send, …]` |
-| `Extension` | `id` (name), `version`, `status`, `operations` (Json: the only operations its frontend and backend may call), `manifest` (Json), `source` (its backend, when the manifest sets `backend`), `access` (Json: profiles and departments), `sidebar` (Json) | | `voting` 2.1.0, for `[member]`, in the Governance menu |
+| `Codex` | `id` (`name@version`), `version`, `checksum`, `status` (`active`, `inactive`, `reverted`), `manifest` (Json, including the signing policy), `capabilities` (Json: operation names), `source` (its code), `installed_at`, `previous` → `Codex` | The realm's policy package. At most one is `active`. | `agora@1.4.2`, `active`, capabilities `[invoice_create, notification_send, …]` |
 | `Notification` | `id`, `recipient` (`Entity:id`: user, department or organization), `topic`, `title`, `body`, `href`, `sender`, `visibility`, `read_by` (Json), `at` | | To Alice: "P-7 passed", link `/proposals/P-7` |
-| `Event` | `id`, `op`, `user`, `by` (the signer, when delegated), `origin`, `args` (Json, secrets stripped), `result` (Json), `at` | The audit log. Append-only. | `proposal_vote` by `claude-conn` for `alice` at 09:31 → ok |
-| `KeyEnvelope` | `id` (`scope\|principal`), `scope`, `principal`, `wrapped_dek`, `granted_by`, `at` | A scope's data key, wrapped for one principal (for example with vetKeys). Scopes: `user:<principal>:…` (the owner manages), `dept:<department>:…` (its staff), `realm:…` (the root department's staff). | `dept:Health:doc:DOC-1` for `dr-ana` |
-| `Document` | `id`, `department`, `title`, `ref` (where the ciphertext lives), `hash`, `author`, `at` | A department document; its key scope is `dept:<department>:doc:<id>`. | Health's inspection report `DOC-1`, shared with Dr. Ana |
+| `Event` | `id`, `op`, `user`, `by` (the delegate, when delegated), `agent` (the caller acted as an agent), `supervisor` (that agent's supervisor), `origin`, `args` (Json, secrets stripped), `result` (Json), `at` | The audit log. Append-only. | `proposal_vote` by `claude-conn` for `alice` at 09:31 → ok |
 
 Services are not entities: they are provided by licensed organizations. Courts stand on their own,
 without a justice-system entity above them.
@@ -556,16 +598,33 @@ without a justice-system entity above them.
 Scheduled and multi-step automation is part of an implementation, not of the model. What it does
 goes through operations like any other call.
 
+### Signing policy
+
+The active codex's manifest has a `signing` section. It says who may perform `signing`
+operations:
+
+| Key | Meaning | Default |
+|---|---|---|
+| `agents` | The signing permissions an agent may hold, or `all`. | none |
+| `delegable` | The signing permissions a `Delegation` may cover, or `all`. | none |
+| `supervision` | `required`: every agent appointment has a non-agent supervisor (I-ORG-3). `optional`: it may have none. | `required` |
+
+Without an active codex, or when the section is missing, the defaults apply: only non-agents sign,
+nobody signs on another's behalf, and every agent has a supervisor. The policy changes only with the
+codex, through `codex_install`, which is governed. `codex_status` returns it.
+
+For example, Agora's codex sets `agents: [bid.evaluate]`: an evaluation agent appointed in
+Infrastructure may score bids, while `credential.sign` stays with Clinic B's physicians.
+
+Whatever the policy, a signing act records who signed, whether they acted as an agent, their
+supervisor, and the grantor when delegated (I-ALL-7).
+
 ### Operations
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
 | `codex_install`, `codex_uninstall`, `codex_revert` | `codex.install`, `codex.uninstall`, `codex.revert` | governed | Install agora 1.5.0 → realm-wide vote; revert to 1.4.2 if it misbehaves |
-| `codex_status` | `realm.data_view` | read | agora 1.4.2, healthy |
-| `extension_install`, `extension_uninstall` | `extension.install`, `extension.uninstall` | governed | Install `procurement` 1.0.3 (marketplace-approved) → vote |
-| `extension_call` | `extension.call` + the extension's declared operation | | The voting extension casts Alice's vote through `proposal_vote` |
-| `extension_set_access`, `sidebar_configure` | `realm.configure` | governed | Show `vault` only to Finance |
-| `extension_list` | `realm.data_view` | read | Alice's sidebar shows `voting`, not `vault` |
+| `codex_status` (including the signing policy) | `realm.data_view` | read | agora 1.4.2, healthy; agents may hold `bid.evaluate` |
 | `notification_list` (one recipient a page at a time) | `self.data_view` | read, delegable | Alice's notifications, then Civil Registry's |
 | `notification_read` (mark as read) | `self.data_manage` | delegable | Alice marks "P-7 passed" as read |
 | `notification_send` | `notification.send` | | Justice notifies Mallory of her fine |
@@ -573,11 +632,9 @@ goes through operations like any other call.
 
 ### Invariants
 
-- I-EXT-1: An extension can call only the operations its manifest declares, always as the calling
-  user, never with more permissions than that user.
 - I-EXT-2: A codex can apply only the effects its manifest declares, and cannot weaken a guardrail.
-- I-EXT-3: Installing or upgrading codex or extension code requires the realm's trust policy
-  (marketplace approval or trusted approvers).
+- I-EXT-3: Installing or upgrading codex code requires the realm's trust policy (marketplace
+  approval or trusted approvers).
 - I-EXT-4: The `Event` log is append-only.
 
 A codex reacts to what happens in the realm (it was installed, a user registered, the realm changed
@@ -607,8 +664,6 @@ trusted approver.
 | `realm_upgrade` | `realm.upgrade` | governed | Upgrade to release 0.9.1 |
 | `realm_monitor` | `realm.monitor` | read | Cycles 4.2T, memory 310 MB |
 | `realm_export` | `db.export` | read | Export a snapshot for backup |
-| `document_*` (department documents: store, share, revoke, delete, list) | `document.manage` | | Health stores an encrypted inspection report and shares it with Clinic B |
-| `document_get` (the department's staff and key holders) | `self.data_view` | read | Dr. Ana fetches the report's reference and her wrapped key |
 
 ### Invariants
 
@@ -616,7 +671,53 @@ trusted approver.
 - I-ADM-3: A realm upgrade installs only a release the trust policy accepts: its `sha256:<module_hash>` is pinned, or
   the registry's release wasm has exactly that hash and its namespace is approved by a trusted approver.
 
-## 13. Permissions
+## 13. Private content
+
+Private user data, evidence, sealed bids, credential payloads and department documents are
+encrypted on the client before they reach the realm. The realm stores where the ciphertext lives,
+its hash, and the keys that let each reader decrypt it, wrapped for that reader.
+
+Keys come from vetKeys, the Internet Computer's threshold key derivation. Content is encrypted
+with a data key per **scope**. The scope's managers wrap that data key for each principal who may
+read it, using the realm's public key and the principal as the identity (identity-based
+encryption). A principal's client then derives its own vetKey, which opens only what was wrapped
+for that principal. No canister ever sees a data key or the content.
+
+| Scope | Managed by | Example |
+|---|---|---|
+| `user:<principal>:…` | that user | `user:alice:address` |
+| `dept:<department>:…` | the department's staff | `dept:Health:doc:DOC-1` |
+| `realm:…` | the root department's staff | `realm:census-2026` |
+
+### Entities
+
+| Entity | Fields | Notes | Example |
+|---|---|---|---|
+| `KeyEnvelope` | `id` (`scope\|principal`), `scope` (indexed), `principal` (indexed), `wrapped_dek`, `granted_by`, `at` | One scope's data key, wrapped for one principal. | `dept:Health:doc:DOC-1` for `dr-ana`, granted by Health's head |
+| `Document` | `id`, `department` → `Department`, `title`, `ref` (where the ciphertext lives), `hash`, `author`, `at` | A department document. Its key scope is `dept:<department>:doc:<id>`. | Health's inspection report `DOC-1`, shared with Dr. Ana |
+
+### Operations
+
+| Operation | Permission | Flags | Example |
+|---|---|---|---|
+| `crypto_public_key` (the realm's vetKeys public key) | `self.data_manage` | | Alice's client fetches it to wrap her address key for Dr. Ana |
+| `crypto_derive_key` (the caller's vetKey, encrypted to a transport key) | `self.data_manage` | | Dr. Ana's client derives the key that opens what was wrapped for her |
+| `crypto_grant`, `crypto_revoke` (a scope's managers only) | `self.data_manage` | | Alice shares `user:alice:address` with Dr. Ana; revokes it after the visit |
+| `crypto_envelope` (the caller's own envelope) | `self.data_manage` | read | Dr. Ana fetches her envelope for `user:alice:address` |
+| `crypto_scopes` (the scopes the caller holds keys for) | `self.data_manage` | read | Dr. Ana's shared records |
+| `crypto_access` (who holds keys for a scope; its managers only) | `self.data_manage` | read | Alice checks who can read her address |
+| `document_store`, `document_share`, `document_revoke`, `document_delete` | `document.manage` | | Health stores the encrypted inspection report and shares it with Clinic B |
+| `document_list` (a department's documents, for its staff) | `document.manage` | read | Health's documents this year |
+| `document_get` (the department's staff and key holders) | `self.data_view` | read | Dr. Ana fetches the report's reference and her wrapped key |
+
+### Invariants
+
+- I-PRV-1: The realm never holds private content or an unwrapped data key, only ciphertext
+  references, hashes and wrapped keys.
+- I-PRV-2: Only a scope's managers grant or revoke its keys, or see who holds them.
+- I-PRV-3: A key envelope is returned only to the principal it was wrapped for.
+
+## 14. Permissions
 
 The permission keys, grouped by domain. An implementation may add keys of its own for operations
 outside the model.
@@ -645,34 +746,37 @@ outside the model.
 - Procurement: `tender.manage`, `bid.submit`, `bid.evaluate`.
 - Federation: `quarter.sync` (held by registered quarter canisters), `quarter.register`, `quarter.deregister`, `quarter.configure`, `quarter.secede`,
   `quarter.join_federation`, `federal_vote.propose`, `federal_vote.manage`, `realm.register`.
-- Platform: `codex.install`, `codex.uninstall`, `codex.revert`, `extension.install`,
-  `extension.uninstall`, `extension.call`, `document.manage`.
+- Codex: `codex.install`, `codex.uninstall`, `codex.revert`.
+- Private content: `document.manage`.
 - Administration: `all`, `realm.upgrade`, `realm.configure`, `realm.configure.branding`,
   `realm.configure.infrastructure`, `realm.configure.tokens`,
   `realm.configure.trust_policy`, `realm.data_view`, `realm.monitor`, `db.export`.
 
 There is no permission for raw database writes: everything is an operation.
 
-**Signing permissions** (never held by agents, never delegable): `identity.review`,
+**Signing permissions** (held by agents and delegated only as the codex's
+[signing policy](#signing-policy) allows): `identity.review`,
 `credential.sign`, `license.issue`, `license.revoke`, `dispute.accept`, `dispute.reject`,
 `evidence.evaluate`, `resolution.issue`, `resolution.finalize`, `resolution.link_contract`,
 `resolution.modify_terms`, `appeal.allow`, `fine.apply`, `access.revoke`, `contract.terminate`,
 `resource.reassign`, `instrument.lock`, `trade.execute`, `nft.force_transfer`, `nft.freeze`,
 `token.force_transfer`, `token.freeze`, `bid.evaluate`.
 
-## 14. Cross-cutting invariants
+## 15. Cross-cutting invariants
 
 - I-ALL-1: Every call goes through one authorization decision; there is no other authorization path.
 - I-ALL-2: Guardrails, the rules behind the invariants marked "Guardrail", cannot be weakened by
-  governance, codices or extensions.
+  governance, codices or anything an implementation adds.
 - I-ALL-3: Nobody decides a matter they filed, that was filed on their behalf, or in which a
   department or organization they hold an appointment in is a party.
 - I-ALL-4: Every update operation is audited with the caller, the grantor (if delegated) and the
   outcome.
 - I-ALL-5: Personal data never appears in clear text in public state, NFT metadata or the event log.
 - I-ALL-6: An operation that fails changes nothing.
+- I-ALL-7: A `signing` act records who signed, whether they acted as an agent, their supervisor and
+  the grantor when delegated, in its `Event` and, for an NFT, in the token's header.
 
-## 15. Decisions
+## 16. Decisions
 
 | # | Decision | Outcome |
 |---|---|---|
@@ -681,3 +785,8 @@ There is no permission for raw database writes: everything is an operation.
 | D3 | Collapse `Realm`'s columns into Json groups | Rejected: the columns stay, and so do `Calendar` and `Registry` |
 | D4 | Replace `LedgerEntry`'s source foreign keys with one `subject` reference | Rejected: the foreign keys stay |
 | D6 | Use Internet Computer conventions where the model meets Candid: nanosecond times, `principal`, typed errors, variant statuses, cursor pagination | Accepted |
+| D7 | Expose every operation through one generic entry point that takes a name and untyped arguments | Rejected: each operation is a typed Candid method in `ggg.did` |
+| D8 | Make extensions part of the model | Rejected: extensions are a Realms GOS feature. Any implementation may add callers of its own, under I-ALL-1 and I-ALL-2 |
+| D9 | Forbid agents from signing, as a guardrail | Rejected: the active codex's signing policy decides, defaulting to non-agents only; every signing act records who signed and how (I-ALL-7) |
+| D10 | Split GGG into separately adopted standards (GGG-1, GGG-2, …) | Rejected: one GGG, one interface, one version. A realm may hold nothing in a domain; its operations then answer with empty lists and ordinary errors |
+| D11 | Leave encrypted content to implementations | Rejected: key envelopes and documents are model entities (§13), with keys from vetKeys |

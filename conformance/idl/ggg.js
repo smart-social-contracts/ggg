@@ -1,18 +1,7 @@
 export const idlFactory = ({ IDL }) => {
-  const Value = IDL.Rec();
-  Value.fill(
-    IDL.Variant({
-      'Int' : IDL.Int,
-      'Map' : IDL.Vec(IDL.Tuple(IDL.Text, Value)),
-      'Nat' : IDL.Nat,
-      'Blob' : IDL.Vec(IDL.Nat8),
-      'Text' : IDL.Text,
-      'Array' : IDL.Vec(Value),
-    })
-  );
   const ProposalAction = IDL.Variant({
+    'Call' : IDL.Record({ 'arg' : IDL.Vec(IDL.Nat8), 'method' : IDL.Text }),
     'Code' : IDL.Record({ 'url' : IDL.Text, 'checksum' : IDL.Text }),
-    'Operation' : IDL.Record({ 'op' : IDL.Text, 'args' : Value }),
     'Motion' : IDL.Null,
   });
   const ProposalCreateArgs = IDL.Record({
@@ -28,7 +17,6 @@ export const idlFactory = ({ IDL }) => {
       'error_code' : IDL.Nat,
     }),
     'NotFound' : IDL.Null,
-    'Unsupported' : IDL.Text,
     'InvalidArgument' : IDL.Text,
     'Unavailable' : IDL.Text,
     'Forbidden' : IDL.Record({
@@ -38,11 +26,25 @@ export const idlFactory = ({ IDL }) => {
     'Unauthenticated' : IDL.Null,
     'Conflict' : IDL.Text,
   });
-  const ProposalCreateResult = IDL.Variant({
-    'Ok' : IDL.Text,
-    'Err' : GggError,
+  const ProposalGetArgs = IDL.Record({
+    'id' : IDL.Text,
+    'cursor' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
   });
   const Timestamp = IDL.Nat64;
+  const VoteChoice = IDL.Variant({
+    'No' : IDL.Null,
+    'Yes' : IDL.Null,
+    'Abstain' : IDL.Null,
+  });
+  const Vote = IDL.Record({
+    'id' : IDL.Text,
+    'voter' : IDL.Principal,
+    'cast_at' : Timestamp,
+    'cast_by' : IDL.Opt(IDL.Principal),
+    'proposal' : IDL.Text,
+    'choice' : VoteChoice,
+  });
   const ProposalStatus = IDL.Variant({
     'Failed' : IDL.Null,
     'Withdrawn' : IDL.Null,
@@ -52,6 +54,10 @@ export const idlFactory = ({ IDL }) => {
     'Voting' : IDL.Null,
     'Accepted' : IDL.Null,
     'Expired' : IDL.Null,
+  });
+  const ProposalResult = IDL.Variant({
+    'Error' : IDL.Text,
+    'Reply' : IDL.Vec(IDL.Nat8),
   });
   const Tally = IDL.Record({
     'no' : IDL.Nat,
@@ -63,74 +69,36 @@ export const idlFactory = ({ IDL }) => {
     'id' : IDL.Text,
     'opens_at' : IDL.Opt(Timestamp),
     'status' : ProposalStatus,
-    'result' : IDL.Opt(Value),
+    'result' : IDL.Opt(ProposalResult),
     'tally' : Tally,
     'title' : IDL.Text,
     'action' : ProposalAction,
+    'threshold' : IDL.Nat,
     'description' : IDL.Text,
     'deadline' : IDL.Opt(Timestamp),
-    'quorum_bps' : IDL.Nat,
-    'threshold_bps' : IDL.Nat,
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
     'proposer' : IDL.Principal,
     'department' : IDL.Opt(IDL.Text),
+    'quorum' : IDL.Nat,
   });
-  const ProposalGetResult = IDL.Variant({
-    'Ok' : IDL.Opt(Proposal),
-    'Err' : GggError,
+  const ProposalDetail = IDL.Record({
+    'votes' : IDL.Vec(Vote),
+    'next' : IDL.Opt(IDL.Text),
+    'proposal' : Proposal,
   });
   const ProposalListArgs = IDL.Record({
     'status' : IDL.Opt(ProposalStatus),
     'cursor' : IDL.Opt(IDL.Text),
     'limit' : IDL.Opt(IDL.Nat32),
   });
-  const ProposalSummary = IDL.Record({
-    'id' : IDL.Text,
-    'status' : ProposalStatus,
-    'title' : IDL.Text,
-    'deadline' : IDL.Opt(Timestamp),
-    'proposer' : IDL.Principal,
-    'department' : IDL.Opt(IDL.Text),
-  });
   const ProposalPage = IDL.Record({
     'next' : IDL.Opt(IDL.Text),
-    'items' : IDL.Vec(ProposalSummary),
-  });
-  const ProposalListResult = IDL.Variant({
-    'Ok' : ProposalPage,
-    'Err' : GggError,
-  });
-  const VoteChoice = IDL.Variant({
-    'No' : IDL.Null,
-    'Yes' : IDL.Null,
-    'Abstain' : IDL.Null,
+    'items' : IDL.Vec(Proposal),
   });
   const ProposalVoteArgs = IDL.Record({
-    'proposal_id' : IDL.Text,
     'on_behalf_of' : IDL.Opt(IDL.Principal),
+    'proposal' : IDL.Text,
     'choice' : VoteChoice,
-  });
-  const Vote = IDL.Record({
-    'id' : IDL.Text,
-    'voter' : IDL.Principal,
-    'cast_at' : Timestamp,
-    'cast_by' : IDL.Opt(IDL.Principal),
-    'proposal_id' : IDL.Text,
-    'choice' : VoteChoice,
-  });
-  const ProposalVoteResult = IDL.Variant({ 'Ok' : Vote, 'Err' : GggError });
-  const ProposalVotesArgs = IDL.Record({
-    'voter' : IDL.Opt(IDL.Principal),
-    'cursor' : IDL.Opt(IDL.Text),
-    'limit' : IDL.Opt(IDL.Nat32),
-    'proposal_id' : IDL.Text,
-  });
-  const VotePage = IDL.Record({
-    'next' : IDL.Opt(IDL.Text),
-    'items' : IDL.Vec(Vote),
-  });
-  const ProposalVotesResult = IDL.Variant({
-    'Ok' : VotePage,
-    'Err' : GggError,
   });
   const RealmStatus = IDL.Variant({
     'Setup' : IDL.Null,
@@ -140,24 +108,29 @@ export const idlFactory = ({ IDL }) => {
     'Alpha' : IDL.Null,
     'Deprecation' : IDL.Null,
   });
-  const Implementation = IDL.Record({
-    'url' : IDL.Opt(IDL.Text),
-    'name' : IDL.Text,
-    'version' : IDL.Text,
-  });
-  const Currency = IDL.Record({ 'decimals' : IDL.Nat8, 'symbol' : IDL.Text });
   const Realm = IDL.Record({
+    'id' : IDL.Text,
     'status' : RealmStatus,
+    'require_marketplace_approval' : IDL.Bool,
+    'is_quarter' : IDL.Bool,
     'name' : IDL.Text,
-    'implementation' : Implementation,
     'manifesto' : IDL.Text,
+    'network' : IDL.Text,
+    'federation_codex' : IDL.Opt(IDL.Text),
+    'quarter_join_mode' : IDL.Opt(IDL.Text),
     'is_capital' : IDL.Bool,
+    'calendar' : IDL.Opt(IDL.Text),
     'logo_url' : IDL.Opt(IDL.Text),
     'open_registration' : IDL.Bool,
+    'trusted_principals' : IDL.Vec(IDL.Principal),
+    'federation_realm_id' : IDL.Opt(IDL.Text),
+    'accounting_currency_decimals' : IDL.Opt(IDL.Nat8),
     'welcome_message' : IDL.Text,
-    'member_count' : IDL.Opt(IDL.Nat),
+    'trusted_approvers' : IDL.Vec(IDL.Text),
     'background_image_url' : IDL.Opt(IDL.Text),
-    'accounting_currency' : IDL.Opt(Currency),
+    'installed_version' : IDL.Text,
+    'treasury' : IDL.Opt(IDL.Text),
+    'accounting_currency' : IDL.Opt(IDL.Text),
   });
   const MemberStatus = IDL.Variant({
     'Inactive' : IDL.Null,
@@ -166,56 +139,63 @@ export const idlFactory = ({ IDL }) => {
     'Banned' : IDL.Null,
   });
   const Member = IDL.Record({
-    'id' : IDL.Principal,
+    'id' : IDL.Text,
     'status' : MemberStatus,
+    'user' : IDL.Principal,
+    'joined_at' : IDL.Opt(Timestamp),
+  });
+  const User = IDL.Record({
+    'id' : IDL.Principal,
+    'private_data' : IDL.Opt(IDL.Vec(IDL.Nat8)),
     'nickname' : IDL.Opt(IDL.Text),
     'home_quarter' : IDL.Opt(IDL.Text),
-    'joined_at' : IDL.Opt(Timestamp),
     'profiles' : IDL.Vec(IDL.Text),
     'avatar' : IDL.Opt(IDL.Text),
   });
-  const UserGetResult = IDL.Variant({
-    'Ok' : IDL.Opt(Member),
-    'Err' : GggError,
-  });
+  const UserEntry = IDL.Record({ 'member' : IDL.Opt(Member), 'user' : User });
   const ListArgs = IDL.Record({
     'cursor' : IDL.Opt(IDL.Text),
     'limit' : IDL.Opt(IDL.Nat32),
   });
-  const MemberPage = IDL.Record({
+  const UserPage = IDL.Record({
     'next' : IDL.Opt(IDL.Text),
-    'items' : IDL.Vec(Member),
+    'items' : IDL.Vec(UserEntry),
   });
-  const UserListResult = IDL.Variant({ 'Ok' : MemberPage, 'Err' : GggError });
-  const SupportedStandard = IDL.Record({ 'url' : IDL.Text, 'name' : IDL.Text });
   return IDL.Service({
-    'ggg1_proposal_create' : IDL.Func(
+    'ggg_proposal_create' : IDL.Func(
         [ProposalCreateArgs],
-        [ProposalCreateResult],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : GggError })],
         [],
       ),
-    'ggg1_proposal_get' : IDL.Func([IDL.Text], [ProposalGetResult], ['query']),
-    'ggg1_proposal_list' : IDL.Func(
+    'ggg_proposal_get' : IDL.Func(
+        [ProposalGetArgs],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ProposalDetail), 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_proposal_list' : IDL.Func(
         [ProposalListArgs],
-        [ProposalListResult],
+        [IDL.Variant({ 'Ok' : ProposalPage, 'Err' : GggError })],
         ['query'],
       ),
-    'ggg1_proposal_vote' : IDL.Func(
+    'ggg_proposal_vote' : IDL.Func(
         [ProposalVoteArgs],
-        [ProposalVoteResult],
+        [IDL.Variant({ 'Ok' : Vote, 'Err' : GggError })],
         [],
       ),
-    'ggg1_proposal_votes' : IDL.Func(
-        [ProposalVotesArgs],
-        [ProposalVotesResult],
+    'ggg_realm_info' : IDL.Func([], [Realm], ['query']),
+    'ggg_user_get' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Opt(UserEntry), 'Err' : GggError })],
         ['query'],
       ),
-    'ggg1_realm_info' : IDL.Func([], [Realm], ['query']),
-    'ggg1_user_get' : IDL.Func([IDL.Principal], [UserGetResult], ['query']),
-    'ggg1_user_list' : IDL.Func([ListArgs], [UserListResult], ['query']),
+    'ggg_user_list' : IDL.Func(
+        [ListArgs],
+        [IDL.Variant({ 'Ok' : UserPage, 'Err' : GggError })],
+        ['query'],
+      ),
     'icrc10_supported_standards' : IDL.Func(
         [],
-        [IDL.Vec(SupportedStandard)],
+        [IDL.Vec(IDL.Record({ 'url' : IDL.Text, 'name' : IDL.Text }))],
         ['query'],
       ),
   });

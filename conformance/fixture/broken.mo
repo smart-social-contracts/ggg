@@ -1,35 +1,57 @@
-/// Breaks GGG-1 on purpose, to test that the conformance suite reports failures.
-/// It does not declare GGG-1, its realm has no name, and it has no member or proposal methods.
+/// Breaks GGG on purpose, to test that the conformance suite reports failures.
+/// It doesn't declare GGG, its realm has no name, and it has no member or proposal methods.
 persistent actor {
   public query func icrc10_supported_standards() : async [{ name : Text; url : Text }] {
     [{ name = "ICRC-10"; url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md" }];
   };
 
-  public query func ggg1_realm_info() : async {
+  public query func ggg_realm_info() : async {
+    id : Text;
     name : Text;
     manifesto : Text;
     welcome_message : Text;
     status : { #Setup; #Alpha; #Beta; #Production; #Deprecation; #Terminated };
-    accounting_currency : ?{ symbol : Text; decimals : Nat8 };
+    calendar : ?Text;
+    treasury : ?Text;
+    accounting_currency : ?Text;
+    accounting_currency_decimals : ?Nat8;
+    is_quarter : Bool;
+    is_capital : Bool;
+    federation_realm_id : ?Text;
+    federation_codex : ?Text;
+    quarter_join_mode : ?Text;
+    trusted_principals : [Principal];
+    require_marketplace_approval : Bool;
+    trusted_approvers : [Text];
+    open_registration : Bool;
     logo_url : ?Text;
     background_image_url : ?Text;
-    open_registration : Bool;
-    is_capital : Bool;
-    implementation : { name : Text; version : Text; url : ?Text };
-    member_count : ?Nat;
+    installed_version : Text;
+    network : Text;
   } {
     {
+      id = "1";
       name = "";
       manifesto = "";
       welcome_message = "";
       status = #Beta;
+      calendar = null;
+      treasury = null;
       accounting_currency = null;
+      accounting_currency_decimals = null;
+      is_quarter = false;
+      is_capital = false;
+      federation_realm_id = null;
+      federation_codex = null;
+      quarter_join_mode = null;
+      trusted_principals = [];
+      require_marketplace_approval = false;
+      trusted_approvers = [];
+      open_registration = false;
       logo_url = null;
       background_image_url = null;
-      open_registration = false;
-      is_capital = false;
-      implementation = { name = "broken"; version = "0"; url = null };
-      member_count = null;
+      installed_version = "0";
+      network = "local";
     };
   };
 };

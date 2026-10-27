@@ -1,7 +1,7 @@
 # GGG conformance suite
 
-Checks that a canister implements the [GGG standards](../standards/README.md) it declares. It
-runs against any canister id, on mainnet or on a local replica.
+Checks that a canister implements [`ggg.did`](../ggg.did) as the [model](../model/README.md) says.
+It runs against any canister id, on mainnet or on a local replica.
 
 ```bash
 npx ggg-conformance --canister <id>                          # read-only, on mainnet
@@ -32,14 +32,16 @@ Each check reports one outcome:
 
 ```bash
 npm install
-npm run idl     # regenerate idl/ from the standards; needs didc
-npm test        # build the fixture and run the suite against it on PocketIC; needs moc and didc
+npm run idl     # regenerate idl/ggg.js from ggg.did; needs didc
+npm test        # check ggg.did against the model, and run the suite against the fixture on PocketIC
 ```
 
 `MOC` and `MOTOKO_CORE` default to the copies that ship with dfx, and `DIDC` to a `didc` on the
 path.
 
-- `idl/` holds the JavaScript bindings generated from `standards/*.did`.
-- `fixture/main.mo` is a minimal Motoko GOS that implements GGG-1 and GGG-2. The build checks its
-  interface against the standards with `didc check`, and the tests expect it to pass every check.
-- `fixture/broken.mo` breaks GGG-1 on purpose, and the tests expect the checks to fail.
+- `idl/ggg.js` is the JavaScript binding generated from `ggg.did`.
+- `test/model.test.js` fails when an entity's fields in `ggg.did` differ from the model, or a `ggg_`
+  method is not a model operation.
+- `fixture/main.mo` is a minimal Motoko GOS. The build checks its interface against `ggg.did` with
+  `didc check`, and the tests expect it to pass every check.
+- `fixture/broken.mo` breaks GGG on purpose, and the tests expect the checks to fail.
