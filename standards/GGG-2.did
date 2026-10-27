@@ -1,0 +1,66 @@
+// GGG-2: Operations by name. Status: Draft.
+// Specification: https://github.com/smart-social-contracts/ggg/blob/main/standards/GGG-2.md
+// Model: https://github.com/smart-social-contracts/ggg/blob/main/model/README.md
+
+// The ICRC-3 generic value.
+type Value = variant {
+  Nat : nat;
+  Int : int;
+  Text : text;
+  Blob : blob;
+  Array : vec Value;
+  Map : vec record { text; Value };
+};
+
+type GggError = variant {
+  NotFound;
+  Unauthenticated;
+  Forbidden : record { permission : opt text; message : text };
+  InvalidArgument : text;
+  Conflict : text;
+  Unsupported : text;
+  Unavailable : text;
+  GenericError : record { error_code : nat; message : text };
+};
+
+type SupportedStandard = record { name : text; url : text };
+
+type ListArgs = record {
+  cursor : opt text;
+  limit : opt nat32;
+};
+
+type Operation = record {
+  name : text;
+  description : text;
+  permission : opt text;
+  read : bool;
+  delegable : bool;
+  governed : bool;
+  signing : bool;
+  provided_by : text;
+  args_schema : opt text;
+  result_schema : opt text;
+};
+
+type OperationPage = record { items : vec Operation; next : opt text };
+
+type OperationArgs = record {
+  op : text;
+  args : Value;
+  on_behalf_of : opt principal;
+};
+
+type OperationResult = variant { Ok : opt Operation; Err : GggError };
+type OperationsResult = variant { Ok : OperationPage; Err : GggError };
+type RunResult = variant { Ok : Value; Err : GggError };
+
+service : {
+  icrc10_supported_standards : () -> (vec SupportedStandard) query;
+
+  ggg2_operation : (text) -> (OperationResult) query;
+  ggg2_operations : (ListArgs) -> (OperationsResult) query;
+
+  ggg2_query : (OperationArgs) -> (RunResult) query;
+  ggg2_call : (OperationArgs) -> (RunResult);
+};

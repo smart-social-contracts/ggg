@@ -1,83 +1,38 @@
 # Generalized Global Governance (GGG)
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/your-org/ggg)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+GGG describes what a realm is, a community that governs itself, independently of the software
+that runs it. A program that runs realms is a Governance Operating System (GOS). Anyone can write
+one. GGG is what lets different GOS, wallets, hosting platforms and tools work with each other's
+realms.
 
-GGG is a modeling standard and interoperability framework for defining, executing, and evolving governance systems as modular, programmable entities.
+This repository has three parts:
 
-## Overview
+| | |
+|---|---|
+| [`model/`](model/README.md) | **The GGG model.** What a realm is made of: its entities, the operations that change them, their lifecycles, the invariants that always hold, and the permissions that guard them. It doesn't depend on any GOS. |
+| [`standards/`](standards/README.md) | **The GGG standards.** How a GOS canister on the Internet Computer is called. Each standard binds part of the model to a Candid interface, following Internet Computer conventions (ICRC-10 discovery, ICRC-3 values, ICRC-21 consent messages). |
+| [`conformance/`](conformance/README.md) | **The conformance suite.** Checks that a canister implements the standards it declares, on mainnet or on a local replica. |
 
-GGG enables decentralized, interoperable, and pluralistic forms of governance using semantic class modeling, executed as smart contracts on the Internet Computer (ICP) or compatible systems. It standardizes governance primitives and provides an API for governance evolution while replacing coercive governance with voluntary participation.
+A GOS is GGG compliant when it lists GGG-1 in `icrc10_supported_standards` and passes the GGG-1
+checks of the conformance suite. Every other standard is optional.
 
-### Core Concepts
+## Implementations
 
-- **Realm**: A container of governance logic and institutions
-- **Entity**: Core types including Citizen, State, Law, Token, Assembly, etc.
-- **Graph**: Directed semantic graph connecting governance entities
+| GOS | Language | Standards |
+|---|---|---|
+| [Realms GOS](https://github.com/smart-social-contracts/realms-gos) | Python (Basilisk) | The model; GGG-1 and GGG-2 planned |
+| [`conformance/fixture`](conformance/fixture/main.mo) | Motoko | GGG-1, GGG-2. A minimal GOS for testing the suite. |
 
-## Documentation
+If you write a GOS, run the suite against it and open a pull request to add it here.
 
-Detailed documentation is available in the [docs](./docs) directory:
+## Status
 
-- [Concepts Guide](./docs/concepts.md): Detailed explanation of core GGG concepts
-- [API Reference](./docs/api-reference.md): Complete API documentation
-- [Implementation Guide](./docs/implementation-guide.md): How to implement GGG in different languages
-- [Examples](./docs/examples/): Example implementations and use cases
-- [Interoperability](./docs/interoperability.md): Standards for cross-realm communication
+Everything here is a Draft: the model, GGG-1 and GGG-2. They will change, and drafts that
+implementations build against are tagged (`ggg-1-draft.1`).
 
-## Getting Started
-
-### Prerequisites
-
-- Familiarity with object-oriented programming concepts
-- Understanding of governance systems and relationships
-- (Optional) Knowledge of blockchain or distributed systems for implementations
-
-### Implementation Approaches
-
-GGG can be implemented in any programming language that supports:
-
-- Object-oriented programming with classes or similar constructs
-- Relational or graph data structures
-- Event-driven programming
-- Serialization/deserialization
-
-Refer to the [Implementation Guide](./docs/implementation-guide.md) for language-specific recommendations.
-
-### Conceptual Example
-
-Below is a conceptual example of how GGG entities interact (language-agnostic):
-
-1. Create a realm named "Esperantia" with GGG version 1.0
-2. Define citizens "Alice" and "Bob" as entities
-3. Define a state "Esperantia" as an entity
-4. Add all entities to the realm
-5. Create relationships: Alice and Bob join Esperantia
-6. Execute governance processes in the realm
-
-This demonstrates the core pattern of creating entities, establishing relationships between them, and executing governance logic.
-
-## Use Cases
-
-- Nation-state simulation with programmable tax and welfare systems
-- Governance infrastructure for DAOs
-- Legal registries with identity and voting
-- Dispute resolution systems
-- Stateless service platforms (global identity, currency, courts)
-
-## Reference Implementations
-
-The following projects implement the GGG framework specifications:
-
-- [Realms](https://github.com/smart-social-contracts/realms) - Reference implementation (Python)
-
-If you have created an implementation of GGG, please submit a pull request to add it to this list.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+The documents in [`docs/`](docs) are the 2025 concept notes. The model and the standards replace
+them.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
+MIT.

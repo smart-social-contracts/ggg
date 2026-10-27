@@ -1,0 +1,29 @@
+{
+  "name": "@ggg/conformance",
+  "version": "0.1.0",
+  "description": "Checks that a canister implements the GGG standards it declares.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "ggg-conformance": "bin/ggg-conformance.js"
+  },
+  "files": [
+    "bin",
+    "idl",
+    "src"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "idl": "sh scripts/idl.sh",
+    "build:fixture": "sh fixture/build.sh",
+    "test": "npm run build:fixture && node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@icp-sdk/core": "^6.1.1"
+  },
+  "devDependencies": {
+    "@dfinity/pic": "^0.25.0"
+  }
+}
