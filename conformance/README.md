@@ -15,7 +15,9 @@ titled "GGG conformance check …" and votes on it twice. Use a test realm, or a
 acceptable.
 
 Reads run as the member when one is given, because a GOS may refuse reads that need a model
-permission to anonymous callers.
+permission to anonymous callers. Every list is walked page by page and sent a malformed cursor, and
+every lookup by id is asked for an id that doesn't exist, so a realm with nothing in a domain is
+checked too.
 
 Each check reports one outcome:
 
@@ -32,7 +34,7 @@ Each check reports one outcome:
 
 ```bash
 npm install
-npm run idl     # regenerate idl/ggg.js from ggg.did; needs didc
+npm run idl     # regenerate idl/ggg.js and fixture/Ggg.mo from ggg.did; needs didc
 npm test        # check ggg.did against the model, and run the suite against the fixture on PocketIC
 ```
 
@@ -42,6 +44,7 @@ path.
 - `idl/ggg.js` is the JavaScript binding generated from `ggg.did`.
 - `test/model.test.js` fails when an entity's fields in `ggg.did` differ from the model, or a `ggg_`
   method is not a model operation.
-- `fixture/main.mo` is a minimal Motoko GOS. The build checks its interface against `ggg.did` with
+- `fixture/Ggg.mo` holds the Motoko types generated from `ggg.did`.
+- `fixture/main.mo` is a minimal Motoko GOS: members and proposals, and every other domain empty. The build checks its interface against `ggg.did` with
   `didc check`, and the tests expect it to pass every check.
 - `fixture/broken.mo` breaks GGG on purpose, and the tests expect the checks to fail.

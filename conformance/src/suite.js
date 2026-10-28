@@ -10,6 +10,7 @@ const BAD_CURSOR = 'ggg-conformance:not-a-cursor';
 const NO_PROPOSAL = 'ggg-conformance-no-such-proposal';
 const NO_DEPARTMENT = 'ggg-conformance-no-such-department';
 const NO_METHOD = 'ggg_conformance_no_such_method';
+const UNKNOWN = 'ggg-conformance-no-such-record';
 
 export class Skip extends Error {}
 
@@ -136,6 +137,102 @@ const votePages = (actor, id) => async ({ cursor, limit }) => {
   if (!detail) return { Err: { NotFound: null } };
   return { Ok: { items: detail.votes, next: detail.next } };
 };
+
+const idText = (id) => (id instanceof Principal ? id.toText() : id);
+
+function itemKey(x) {
+  if (typeof x === 'string' || x instanceof Principal) return idText(x);
+  if (x.id !== undefined) return idText(x.id);
+  if (x.verdict) return x.verdict.id;
+  if (x.position) return x.position.id;
+  return show(x);
+}
+
+/** A reply that holds one page in `field`, as a page for walk(). */
+const pageOf = (field) => (result) => {
+  if ('Err' in result) return result;
+  const reply = Array.isArray(result.Ok) ? opt(result.Ok) : result.Ok;
+  if (!reply) return { Err: { NotFound: null } };
+  return { Ok: { items: reply[field], next: reply.next } };
+};
+
+const none = { cursor: [], limit: [] };
+
+/**
+ * Every bound list, in the order the suite walks them. `pages()` returns the list as pages for walk(), and
+ * may throw Skip when it needs a record from an earlier list that the realm doesn't have.
+ */
+function listTable(actor) {
+  let department = null;
+  let scope = null;
+  const list = (what, call, field = 'items', seen) => ({
+    what,
+    pages: () => {
+      const page = pageOf(field);
+      const send = call();
+      return async (a) => page(await send(a));
+    },
+    seen,
+  });
+  const needDepartment = () => {
+    if (!department) throw new Skip('the realm lists no department');
+    return department;
+  };
+  const needScope = () => {
+    if (!scope) throw new Skip('the caller can open no key scope');
+    return scope;
+  };
+  return [
+    list('ggg_invite_list', () => (a) => actor.ggg_invite_list(a)),
+    list('ggg_delegation_list (as grantor)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Grantor: null } })),
+    list('ggg_delegation_list (as delegate)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Delegate: null } })),
+    list('ggg_department_list', () => (a) => actor.ggg_department_list(a), 'items', (items) => {
+      department = items[0]?.id ?? null;
+    }),
+    list('ggg_department_get (seats)', () => {
+      const id = needDepartment();
+      return (a) => actor.ggg_department_get({ ...a, id });
+    }, 'seats'),
+    list('ggg_department_chart (sub-departments)', () => (a) => actor.ggg_department_chart({ ...a, department: [] }), 'children'),
+    list('ggg_organization_list', () => (a) => actor.ggg_organization_list({ ...a, status: [] })),
+    list('ggg_treasury_view (funds)', () => (a) => actor.ggg_treasury_view(a), 'funds'),
+    list('ggg_ledger_view', () => (a) =>
+      actor.ggg_ledger_view({ ...a, transaction: [], symbol: [], kind: [], fund: [], period: [] })),
+    list('ggg_report_view', () => (a) => actor.ggg_report_view({ ...a, id: [] })),
+    list('ggg_land_list', () => (a) => actor.ggg_land_list({ ...a, owner: [] })),
+    list('ggg_land_map (zones)', () => (a) => actor.ggg_land_map({ ...a, x: 0n, y: 0n, w: 32n, h: 32n }), 'zones'),
+    list('ggg_license_list', () => (a) => actor.ggg_license_list({ ...a, holder: [], kind: [], status: [] })),
+    list('ggg_dispute_list_all', () => (a) => actor.ggg_dispute_list_all({ ...a, status: [] })),
+    list('ggg_resolution_query', () => (a) => actor.ggg_resolution_query({ ...a, since: [], court: [], search: [] })),
+    list('ggg_tender_list', () => (a) => actor.ggg_tender_list({ ...a, status: [] })),
+    list('ggg_quarter_directory', () => (a) => actor.ggg_quarter_directory(a)),
+    list('ggg_codex_status (history)', () => (a) => actor.ggg_codex_status(a), 'history'),
+    list('ggg_notification_list', () => (a) =>
+      actor.ggg_notification_list({ ...a, recipient: [], unread: [], on_behalf_of: [] })),
+    list('ggg_events', () => (a) => actor.ggg_events(a)),
+    list('ggg_crypto_scopes', () => (a) => actor.ggg_crypto_scopes(a), 'items', (items) => {
+      scope = items[0] ?? null;
+    }),
+    list('ggg_crypto_access', () => {
+      const s = needScope();
+      return (a) => actor.ggg_crypto_access({ ...a, scope: s });
+    }),
+    list('ggg_document_list', () => {
+      const d = needDepartment();
+      return (a) => actor.ggg_document_list({ ...a, department: d });
+    }),
+  ];
+}
+
+/** Every bound lookup by id. */
+const getTable = (actor) => [
+  ['ggg_department_get', (id) => actor.ggg_department_get({ id, ...none })],
+  ['ggg_organization_get', (id) => actor.ggg_organization_get({ id, ...none })],
+  ['ggg_tender_get', (id) => actor.ggg_tender_get({ id, ...none })],
+  ['ggg_dispute_get', (id) => actor.ggg_dispute_get({ id, on_behalf_of: [] })],
+  ['ggg_crypto_envelope', (id) => actor.ggg_crypto_envelope(id)],
+  ['ggg_document_get', (id) => actor.ggg_document_get(id)],
+];
 
 /**
  * Runs the conformance checks against one canister.
@@ -272,6 +369,42 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     const detail = checkWalk(walked, 'ggg_proposal_get');
     for (const v of walked.items) assert(v.proposal === id, `a vote listed under ${id} is for ${v.proposal}`);
     return `proposal ${id}: ${detail}`;
+  });
+
+  const lists = listTable(reader);
+  for (const [i, list] of lists.entries()) {
+    await check('GGG', `L${i + 1}`, `${list.what} paginates`, async () => {
+      const walked = await walk(list.pages(), itemKey);
+      const detail = checkWalk(walked, list.what);
+      list.seen?.(walked.items);
+      return detail;
+    });
+  }
+
+  await check('GGG', 'C1', 'every list returns InvalidArgument for a malformed cursor', async () => {
+    const refusedTo = [];
+    for (const list of lists) {
+      let pages;
+      try {
+        pages = list.pages();
+      } catch (e) {
+        if (e instanceof Skip) continue;
+        throw e;
+      }
+      const result = await pages({ cursor: [BAD_CURSOR], limit: [PAGE] });
+      if ('Err' in result && ['Forbidden', 'Unauthenticated'].includes(tag(result.Err))) refusedTo.push(list.what);
+      else err(result, ['InvalidArgument'], `${list.what}(malformed cursor)`);
+    }
+    return refusedTo.length ? `refused to this caller: ${refusedTo.join(', ')}` : `${lists.length} lists`;
+  });
+
+  await check('GGG', 'G1', 'every lookup by id returns Ok(null) for an unknown id', async () => {
+    for (const [what, call] of getTable(reader)) {
+      const result = await call(UNKNOWN);
+      if ('Err' in result && ['Forbidden', 'Unauthenticated'].includes(tag(result.Err))) continue;
+      const found = ok(result, `${what}(unknown)`);
+      assert(found.length === 0, `${what}(unknown) returned ${show(found)}`);
+    }
   });
 
   const needWrites = () => {

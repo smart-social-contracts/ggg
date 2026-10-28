@@ -86,8 +86,8 @@ method per operation:
   `Unauthenticated` (anonymous caller), `Forbidden` (names the missing permission),
   `InvalidArgument`, `Conflict` (contradicts the current state), `Unavailable` (during setup or
   while frozen), `GenericError`. Messages are for people, not for parsing.
-- **Lists.** Arguments `cursor : opt text` and `limit : opt nat32`; replies `items` and
-  `next : opt text`. Pages fit the Internet Computer's limits, are never empty when `next` is set, and
+- **Lists.** Arguments `cursor : opt text` and `limit : opt nat32`; replies one page of the list
+  (`items`, or a named field such as a proposal's `votes`) and `next : opt text`. Pages fit the Internet Computer's limits, are never empty when `next` is set, and
   walk every record exactly once in a stable order. A malformed cursor is `InvalidArgument`.
 - **Extra fields.** A GOS may add fields to the records it returns, and `opt` fields to the arguments
   it accepts, named after itself (`realms_gos_tally_required`).
@@ -97,8 +97,9 @@ method per operation:
   [ICRC-21](https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md),
   so wallets can show what a member signs.
 
-Every entity is in `ggg.did`. Of the operations, it binds `realm_info`, `user_get`, `user_list`,
-`proposal_get`, `proposal_list`, `proposal_create` and `proposal_vote` so far; the rest follow. The
+Every entity is in `ggg.did`. Of the operations, it binds every `read` operation except `me`,
+`my_invoices`, `status`, `version`, `token_catalog`, `scale_status`, `join_targets`, `realm_monitor` and
+`realm_export`, and of the updates `proposal_create` and `proposal_vote`; the rest follow. The
 [conformance suite](../conformance/README.md) checks a canister against it.
 
 ### Versions

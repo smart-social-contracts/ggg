@@ -57,10 +57,24 @@ test('once a proposal exists, it is listed, found and its votes paginate', async
   for (const id of ['P1', 'P2', 'P4', 'V1']) assert.equal(o[id], 'pass', id);
 });
 
+test('every list paginates, rejects a malformed cursor, and lookups of unknown ids return null', async () => {
+  const results = await run({ member });
+  assert.deepEqual(failures(results), []);
+  const lists = results.filter((r) => /^L\d+$/.test(r.id));
+  assert.equal(lists.length, 23);
+  const skipped = lists.filter((r) => r.outcome === 'skip').map((r) => r.title);
+  assert.deepEqual(skipped, ['ggg_crypto_access paginates']);
+  const events = lists.find((r) => r.title === 'ggg_events paginates');
+  assert.match(events.detail, /^[1-9]\d* listed$/);
+  const o = outcomes(results);
+  assert.equal(o.C1, 'pass');
+  assert.equal(o.G1, 'pass');
+});
+
 test('a canister that breaks GGG fails', async () => {
   const results = await run({ canisterId: brokenId });
   const o = outcomes(results);
-  for (const id of ['D1', 'R1', 'M1', 'M2', 'P1', 'P3', 'P5']) assert.equal(o[id], 'fail', id);
+  for (const id of ['D1', 'R1', 'M1', 'M2', 'P1', 'P3', 'P5', 'L1', 'C1', 'G1']) assert.equal(o[id], 'fail', id);
   assert.match(results.find((r) => r.id === 'D1').detail, /GGG missing/);
   assert.match(results.find((r) => r.id === 'R1').detail, /name is empty/);
 });

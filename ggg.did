@@ -836,11 +836,50 @@ type Document = record {
 // ---- Operation arguments and results
 
 type ListArgs = record { cursor : opt text; limit : opt nat32 };
+// One record by id, with its children a page at a time.
+type GetArgs = record { id : text; cursor : opt text; limit : opt nat32 };
+
+// §2
 
 type UserEntry = record { user : User; member : opt Member };
 type UserPage = record { items : vec UserEntry; next : opt text };
+type InvitePage = record { items : vec Invite; next : opt text };
 
-type ProposalGetArgs = record { id : text; cursor : opt text; limit : opt nat32 };
+type DelegationListArgs = record {
+  role : variant { Grantor; Delegate };
+  cursor : opt text;
+  limit : opt nat32;
+};
+// The caller's delegations in that role, and its open requests either way.
+type DelegationPage = record { items : vec Delegation; requests : vec DelegationRequest; next : opt text };
+
+type DelegableOperation = record { operation : text; permission : text };
+
+// §3
+
+// A position and the appointments that hold it.
+type Seat = record { position : Position; holders : vec Appointment };
+
+type DepartmentDetail = record { department : Department; seats : vec Seat; next : opt text };
+type DepartmentPage = record { items : vec Department; next : opt text };
+
+type ChartArgs = record { department : opt text; cursor : opt text; limit : opt nat32 };
+// One level of the chart: the department's totals, and its sub-departments a page at a time.
+type Chart = record {
+  department : Department;
+  positions : nat;
+  seats : nat;
+  filled : nat;
+  children : vec Department;
+  next : opt text;
+};
+
+type OrganizationDetail = record { organization : Organization; seats : vec Seat; next : opt text };
+type OrganizationListArgs = record { cursor : opt text; limit : opt nat32; status : opt OrganizationStatus };
+type OrganizationPage = record { items : vec Organization; next : opt text };
+
+// §4
+
 // The proposal, and its votes a page at a time.
 type ProposalDetail = record { proposal : Proposal; votes : vec Vote; next : opt text };
 
@@ -861,19 +900,191 @@ type ProposalVoteArgs = record {
   on_behalf_of : opt principal;
 };
 
+// §5
+
+// The treasury and its registered tokens, and its funds a page at a time.
+type TreasuryView = record {
+  treasury : opt Treasury;
+  tokens : vec Token;
+  nft_tokens : vec NFTToken;
+  funds : vec Fund;
+  next : opt text;
+};
+
+type LedgerArgs = record {
+  cursor : opt text;
+  limit : opt nat32;
+  transaction : opt text;
+  symbol : opt text;
+  kind : opt LedgerKind;
+  fund : opt text;
+  period : opt text;
+};
+type LedgerPage = record { items : vec LedgerEntry; next : opt text };
+
+// One report by id, or a page of reports.
+type ReportArgs = record { id : opt text; cursor : opt text; limit : opt nat32 };
+type ReportPage = record { items : vec FinancialReport; next : opt text };
+
+// §6
+
+type LandListArgs = record { cursor : opt text; limit : opt nat32; owner : opt Ref };
+type LandPage = record { items : vec Land; next : opt text };
+
+// A viewport of at most 32 × 32 cells, and the zones not tied to a parcel a page at a time.
+type LandMapArgs = record { x : nat; y : nat; w : nat; h : nat; cursor : opt text; limit : opt nat32 };
+type LandMap = record { parcels : vec Land; zones : vec Zone; next : opt text };
+
+// The token's ggg: header as read from the ledger, and its frozen flag.
+type CredentialVerifyArgs = record { header : vec record { text; text }; frozen : bool };
+type CredentialCheck = record { valid : bool; ours : bool; licensed : bool; expired : bool; revoked : bool };
+
+// §7
+
+type LicenseListArgs = record {
+  cursor : opt text;
+  limit : opt nat32;
+  holder : opt Ref;
+  kind : opt text;
+  status : opt LicenseStatus;
+};
+type LicensePage = record { items : vec License; next : opt text };
+
+// A licence by id, or the one of `kind` that `holder` holds.
+type LicenseVerifyArgs = record { id : opt text; holder : opt Ref; kind : opt text };
+type LicenseCheck = record { valid : bool; license : opt License };
+
+// §8
+
+type DisputeGetArgs = record { id : text; on_behalf_of : opt principal };
+type DisputeListArgs = record { cursor : opt text; limit : opt nat32; status : opt DisputeStatus };
+type DisputePage = record { items : vec Dispute; next : opt text };
+
+// Verdicts past draft, newest first.
+type ResolutionQueryArgs = record {
+  cursor : opt text;
+  limit : opt nat32;
+  since : opt Timestamp;
+  court : opt text;
+  search : opt text;
+};
+type Resolution = record { verdict : Verdict; penalties : vec Penalty };
+type ResolutionPage = record { items : vec Resolution; next : opt text };
+
+// §9
+
+type TenderListArgs = record { cursor : opt text; limit : opt nat32; status : opt TenderStatus };
+type TenderPage = record { items : vec Tender; next : opt text };
+// A sealed bid shows no price or score.
+type TenderDetail = record { tender : Tender; bids : vec Bid; next : opt text };
+
+// §10
+
+type QuarterDirectory = record { capital : opt text; items : vec Quarter; next : opt text };
+
+// §11
+
+type SigningPolicy = record {
+  agents : vec text;
+  delegable : vec text;
+  supervision : variant { Required; Optional };
+};
+
+// The active codex, and the install history a page at a time.
+type CodexView = record {
+  codex : opt Codex;
+  healthy : bool;
+  signing : SigningPolicy;
+  history : vec Codex;
+  next : opt text;
+};
+
+type NotificationListArgs = record {
+  recipient : opt Ref;
+  unread : opt bool;
+  cursor : opt text;
+  limit : opt nat32;
+  on_behalf_of : opt principal;
+};
+type NotificationPage = record { items : vec Notification; next : opt text };
+
+// Newest first.
+type EventPage = record { items : vec Event; next : opt text };
+
+// §13
+
+type ScopePage = record { items : vec text; next : opt text };
+
+type AccessArgs = record { scope : text; cursor : opt text; limit : opt nat32 };
+type PrincipalPage = record { items : vec principal; next : opt text };
+
+type DocumentListArgs = record { department : text; cursor : opt text; limit : opt nat32 };
+type DocumentPage = record { items : vec Document; next : opt text };
+
+// The document's ciphertext reference, its key scope, and the caller's envelope if it has one.
+type DocumentAccess = record { document : Document; scope : text; envelope : opt KeyEnvelope };
+
 service : {
   icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
 
   // §2
   ggg_user_get : (principal) -> (variant { Ok : opt UserEntry; Err : GggError }) query;
   ggg_user_list : (ListArgs) -> (variant { Ok : UserPage; Err : GggError }) query;
+  ggg_invite_list : (ListArgs) -> (variant { Ok : InvitePage; Err : GggError }) query;
+  ggg_delegation_list : (DelegationListArgs) -> (variant { Ok : DelegationPage; Err : GggError }) query;
+  ggg_delegable_operations : () -> (variant { Ok : vec DelegableOperation; Err : GggError }) query;
+
+  // §3
+  ggg_department_get : (GetArgs) -> (variant { Ok : opt DepartmentDetail; Err : GggError }) query;
+  ggg_department_list : (ListArgs) -> (variant { Ok : DepartmentPage; Err : GggError }) query;
+  ggg_department_chart : (ChartArgs) -> (variant { Ok : Chart; Err : GggError }) query;
+  ggg_organization_get : (GetArgs) -> (variant { Ok : opt OrganizationDetail; Err : GggError }) query;
+  ggg_organization_list : (OrganizationListArgs) -> (variant { Ok : OrganizationPage; Err : GggError }) query;
 
   // §4
-  ggg_proposal_get : (ProposalGetArgs) -> (variant { Ok : opt ProposalDetail; Err : GggError }) query;
+  ggg_proposal_get : (GetArgs) -> (variant { Ok : opt ProposalDetail; Err : GggError }) query;
   ggg_proposal_list : (ProposalListArgs) -> (variant { Ok : ProposalPage; Err : GggError }) query;
   ggg_proposal_create : (ProposalCreateArgs) -> (variant { Ok : text; Err : GggError });
   ggg_proposal_vote : (ProposalVoteArgs) -> (variant { Ok : Vote; Err : GggError });
 
+  // §5
+  ggg_treasury_view : (ListArgs) -> (variant { Ok : TreasuryView; Err : GggError }) query;
+  ggg_ledger_view : (LedgerArgs) -> (variant { Ok : LedgerPage; Err : GggError }) query;
+  ggg_report_view : (ReportArgs) -> (variant { Ok : ReportPage; Err : GggError }) query;
+
+  // §6
+  ggg_land_list : (LandListArgs) -> (variant { Ok : LandPage; Err : GggError }) query;
+  ggg_land_map : (LandMapArgs) -> (variant { Ok : LandMap; Err : GggError }) query;
+  ggg_credential_verify : (CredentialVerifyArgs) -> (variant { Ok : CredentialCheck; Err : GggError }) query;
+
+  // §7
+  ggg_license_list : (LicenseListArgs) -> (variant { Ok : LicensePage; Err : GggError }) query;
+  ggg_license_verify : (LicenseVerifyArgs) -> (variant { Ok : LicenseCheck; Err : GggError }) query;
+
+  // §8
+  ggg_dispute_get : (DisputeGetArgs) -> (variant { Ok : opt Dispute; Err : GggError }) query;
+  ggg_dispute_list_all : (DisputeListArgs) -> (variant { Ok : DisputePage; Err : GggError }) query;
+  ggg_resolution_query : (ResolutionQueryArgs) -> (variant { Ok : ResolutionPage; Err : GggError }) query;
+
+  // §9
+  ggg_tender_list : (TenderListArgs) -> (variant { Ok : TenderPage; Err : GggError }) query;
+  ggg_tender_get : (GetArgs) -> (variant { Ok : opt TenderDetail; Err : GggError }) query;
+
+  // §10
+  ggg_quarter_directory : (ListArgs) -> (variant { Ok : QuarterDirectory; Err : GggError }) query;
+
+  // §11
+  ggg_codex_status : (ListArgs) -> (variant { Ok : CodexView; Err : GggError }) query;
+  ggg_notification_list : (NotificationListArgs) -> (variant { Ok : NotificationPage; Err : GggError }) query;
+  ggg_events : (ListArgs) -> (variant { Ok : EventPage; Err : GggError }) query;
+
   // §12
   ggg_realm_info : () -> (Realm) query;
+
+  // §13
+  ggg_crypto_envelope : (text) -> (variant { Ok : opt KeyEnvelope; Err : GggError }) query;
+  ggg_crypto_scopes : (ListArgs) -> (variant { Ok : ScopePage; Err : GggError }) query;
+  ggg_crypto_access : (AccessArgs) -> (variant { Ok : PrincipalPage; Err : GggError }) query;
+  ggg_document_list : (DocumentListArgs) -> (variant { Ok : DocumentPage; Err : GggError }) query;
+  ggg_document_get : (text) -> (variant { Ok : opt DocumentAccess; Err : GggError }) query;
 };
