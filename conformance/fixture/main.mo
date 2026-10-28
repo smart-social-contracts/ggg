@@ -627,6 +627,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       background_image_url = null;
       installed_version = "ggg-fixture 0.5.0";
       network = "local";
+      member_count = Map.size(members);
     };
   };
 
@@ -779,6 +780,15 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_setup_state() : async Result<T.SetupState> { nobody(caller, "realm.configure") };
   public shared ({ caller }) func ggg_setup_step(_ : T.SetupStep) : async Result<T.SetupState> { nobody(caller, "realm.configure") };
   public shared ({ caller }) func ggg_setup_launch() : async Result<T.Realm> { nobody(caller, "realm.configure") };
+  // The fixture is installed already launched, with no host: nobody may install it again.
+  func notHost<A>(caller : Principal) : Result<A> {
+    if (Principal.isAnonymous(caller)) return #Err(#Unauthenticated);
+    #Err(#Forbidden({ permission = null; message = "Only the realm's host does this, during setup." }));
+  };
+  public shared ({ caller }) func ggg_host_install(_ : T.HostInstallArgs) : async Result<T.SetupState> { notHost(caller) };
+  public shared ({ caller }) func ggg_host_infrastructure(_ : T.HostInfrastructure) : async Result<T.SetupState> {
+    notHost(caller);
+  };
   public shared ({ caller }) func ggg_realm_configure(_ : T.RealmConfigureArgs) : async Result<T.Governed> { nobody(caller, "realm.configure") };
   public shared ({ caller }) func ggg_realm_configure_branding(_ : T.BrandingArgs) : async Result<T.Governed> { nobody(caller, "realm.configure.branding") };
   public shared ({ caller }) func ggg_realm_configure_tokens(_ : T.TokensArgs) : async Result<T.Governed> { nobody(caller, "realm.configure.tokens") };

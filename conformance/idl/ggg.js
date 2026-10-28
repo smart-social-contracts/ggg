@@ -669,6 +669,31 @@ export const idlFactory = ({ IDL }) => {
     'voting_quorum' : IDL.Opt(IDL.Nat),
     'voting_threshold' : IDL.Opt(IDL.Nat),
   });
+  const HostInfrastructure = IDL.Record({
+    'file_registry' : IDL.Opt(IDL.Principal),
+    'frontend' : IDL.Opt(IDL.Principal),
+    'extra' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Principal)),
+  });
+  const RealmStatus = IDL.Variant({
+    'Setup' : IDL.Null,
+    'Terminated' : IDL.Null,
+    'Production' : IDL.Null,
+    'Beta' : IDL.Null,
+    'Alpha' : IDL.Null,
+    'Deprecation' : IDL.Null,
+  });
+  const SetupState = IDL.Record({
+    'status' : RealmStatus,
+    'done' : IDL.Vec(IDL.Text),
+    'todo' : IDL.Vec(IDL.Text),
+    'founder' : IDL.Opt(IDL.Principal),
+  });
+  const HostInstallArgs = IDL.Record({
+    'test_mode' : IDL.Bool,
+    'network' : IDL.Text,
+    'founder' : IDL.Principal,
+    'registry' : IDL.Opt(IDL.Principal),
+  });
   const IdentityReviewArgs = IDL.Record({
     'status' : IDL.Variant({ 'Rejected' : IDL.Null, 'Verified' : IDL.Null }),
     'identity' : IDL.Text,
@@ -1340,14 +1365,6 @@ export const idlFactory = ({ IDL }) => {
     'next' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Value),
   });
-  const RealmStatus = IDL.Variant({
-    'Setup' : IDL.Null,
-    'Terminated' : IDL.Null,
-    'Production' : IDL.Null,
-    'Beta' : IDL.Null,
-    'Alpha' : IDL.Null,
-    'Deprecation' : IDL.Null,
-  });
   const Realm = IDL.Record({
     'id' : IDL.Text,
     'status' : RealmStatus,
@@ -1367,6 +1384,7 @@ export const idlFactory = ({ IDL }) => {
     'accounting_currency_decimals' : IDL.Opt(IDL.Nat8),
     'welcome_message' : IDL.Text,
     'trusted_approvers' : IDL.Vec(IDL.Text),
+    'member_count' : IDL.Nat,
     'voting_quorum' : IDL.Nat,
     'background_image_url' : IDL.Opt(IDL.Text),
     'voting_threshold' : IDL.Nat,
@@ -1475,12 +1493,6 @@ export const idlFactory = ({ IDL }) => {
     'subject' : Ref,
     'origin' : IDL.Text,
     'moved_at' : Timestamp,
-  });
-  const SetupState = IDL.Record({
-    'status' : RealmStatus,
-    'done' : IDL.Vec(IDL.Text),
-    'todo' : IDL.Vec(IDL.Text),
-    'founder' : IDL.Opt(IDL.Principal),
   });
   const SetupStep = IDL.Variant({
     'TrustPolicy' : TrustPolicyArgs,
@@ -2080,6 +2092,16 @@ export const idlFactory = ({ IDL }) => {
     'ggg_governance_update' : IDL.Func(
         [GovernanceUpdateArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_host_infrastructure' : IDL.Func(
+        [HostInfrastructure],
+        [IDL.Variant({ 'Ok' : SetupState, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_host_install' : IDL.Func(
+        [HostInstallArgs],
+        [IDL.Variant({ 'Ok' : SetupState, 'Err' : GggError })],
         [],
       ),
     'ggg_identity_review' : IDL.Func(

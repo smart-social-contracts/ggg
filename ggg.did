@@ -696,6 +696,8 @@ type Realm = record {
   background_image_url : opt text;
   installed_version : text;
   network : text;
+  // Its members; on a capital, with its quarters' as they last reported.
+  member_count : nat;
 };
 
 type Cycle = record { name : text; every : Duration };
@@ -1474,6 +1476,24 @@ type SetupStep = variant {
   TrustPolicy : TrustPolicyArgs;
 };
 type SetupState = record { status : RealmStatus; founder : opt principal; done : vec text; todo : vec text };
+// What the platform that installs a realm (its host: an installer, a registry) tells it, once.
+type HostInstallArgs = record {
+  // Configures the realm until it launches.
+  founder : principal;
+  // Where it runs: "ic", "staging", "local".
+  network : text;
+  // The realm registry that lists it, if the host has one.
+  registry : opt principal;
+  // Whether test features may be turned on.
+  test_mode : bool;
+};
+// The canisters a realm works with. Ones only some GOS use go in `extra`, named "<gos>:<role>"
+// ("realms_gos:baton").
+type HostInfrastructure = record {
+  frontend : opt principal;
+  file_registry : opt principal;
+  extra : vec record { text; principal };
+};
 
 type Monitor = record {
   status : RealmStatus;
@@ -1719,6 +1739,8 @@ service : {
   ggg_setup_state : () -> (variant { Ok : SetupState; Err : GggError });
   ggg_setup_step : (SetupStep) -> (variant { Ok : SetupState; Err : GggError });
   ggg_setup_launch : () -> (variant { Ok : Realm; Err : GggError });
+  ggg_host_install : (HostInstallArgs) -> (variant { Ok : SetupState; Err : GggError });
+  ggg_host_infrastructure : (HostInfrastructure) -> (variant { Ok : SetupState; Err : GggError });
   ggg_realm_configure : (RealmConfigureArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_realm_configure_branding : (BrandingArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_realm_configure_tokens : (TokensArgs) -> (variant { Ok : Governed; Err : GggError });

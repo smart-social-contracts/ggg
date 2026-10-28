@@ -558,7 +558,7 @@ A realm can be one canister or a federation of quarters, one of which is the cap
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Realm` | `id` (`1`), `name`, `manifesto`, `welcome_message`, `status`, `calendar` → `Calendar`, `treasury` → `Treasury`, `accounting_currency`, `accounting_currency_decimals`; federation: `is_quarter`, `is_capital`, `federation_realm_id`, `federation_codex`, `quarter_join_mode`; trust: `trusted_principals`, `require_marketplace_approval`, `trusted_approvers`; governance: `voting_threshold`, `voting_quorum` (basis points, for realm-wide proposals); settings: `open_registration`, `logo_url`, `background_image_url`, `installed_version`, `network` | Singleton per canister. An implementation adds its own settings next to these. | Agora: `beta`, capital, currency REALM (8 decimals), open registration off |
+| `Realm` | `id` (`1`), `name`, `manifesto`, `welcome_message`, `status`, `calendar` → `Calendar`, `treasury` → `Treasury`, `accounting_currency`, `accounting_currency_decimals`; federation: `is_quarter`, `is_capital`, `federation_realm_id`, `federation_codex`, `quarter_join_mode`; trust: `trusted_principals`, `require_marketplace_approval`, `trusted_approvers`; governance: `voting_threshold`, `voting_quorum` (basis points, for realm-wide proposals); settings: `open_registration`, `logo_url`, `background_image_url`, `installed_version`, `network`; `member_count` (its members, and on a capital its quarters' as they last reported) | Singleton per canister. An implementation adds its own settings next to these. | Agora: `beta`, capital, currency REALM (8 decimals), open registration off |
 | `Calendar` | `id`, `realm` → `Realm`, `epoch`, `fiscal_period`, `voting_window`, `codex_release_cycle`, `benefit_cycle`, `service_payment_cycle`, `license_review_cycle`, `custom_cycles` (Json) | The realm's governance time cycles, as durations. | Voting window 7 days, fiscal period 1 year, licence review every 2 years |
 | `Registry` | `id` (name), `description`, `principal_id` | A registry canister the realm is listed in. | `realm-registry`, `ufxgi-…` |
 | `Quarter` | `id` (canister id), `name`, `index`, `status`, `population`, `codex_id`, `codex_version`, `last_sync`, `last_activity_at` | Known on the capital. | North: population 1,240, `active`, codex agora 1.4.2 |
@@ -675,6 +675,8 @@ trusted approver.
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
 | `realm_info` | — (public) | read | Agora: `beta`, installed version 0.9.0 |
+| `host_install` | `realm.host` (the host only) | | The installer names Alice founder, network `ic`, the registry that lists Agora |
+| `host_infrastructure` | `realm.host` (the host only) | | The installer gives Agora its frontend and file registry canisters |
 | `setup_state`, `setup_step`, `setup_launch` | `realm.configure` (founder during `setup`) | | The founder picks codex, token and branding, then launches |
 | `realm_configure` | `realm.configure` | governed | Turn on open registration |
 | `realm_configure_branding` | `realm.configure.branding` | governed | Logo and primary colour `#1E6B52` |
@@ -685,8 +687,18 @@ trusted approver.
 | `realm_monitor` | `realm.monitor` | read | Cycles 4.2T, memory 310 MB |
 | `realm_export` | `db.export` | read | Export a snapshot for backup |
 
+A realm is installed by its **host**: the platform that creates its canisters, such as an installer
+or a registry. The host is a controller of the canister, or the principal the canister was installed
+with (an init argument). Before the founder configures anything, the host calls `host_install` once
+with the founder, the network, the registry and whether test features are allowed, then
+`host_infrastructure` with the canisters the realm works with. A canister only one GOS uses goes in
+`extra`, named `<gos>:<role>`. `setup_state` lists `install` in `todo` until `host_install` has run.
+
 ### Invariants
 
+- I-ADM-1: Only the host calls `host_install` and `host_infrastructure`, `host_install` once, and both
+  only during `setup`; anyone else gets `Unauthenticated` or `Forbidden`, and a second install or a
+  call after launch gets `Conflict`.
 - I-ADM-2: During `setup`, only the founder can configure; after `setup_launch`, configuration is governed.
 - I-ADM-3: A realm upgrade installs only a release the trust policy accepts: its `sha256:<module_hash>` is pinned, or
   the registry's release wasm has exactly that hash and its namespace is approved by a trusted approver.
@@ -768,7 +780,7 @@ outside the model.
   `quarter.join_federation`, `federal_vote.propose`, `federal_vote.manage`, `realm.register`.
 - Codex: `codex.install`, `codex.uninstall`, `codex.revert`.
 - Private content: `document.manage`.
-- Administration: `all`, `realm.upgrade`, `realm.configure`, `realm.configure.branding`,
+- Administration: `all`, `realm.host` (the host's alone: `all` does not include it), `realm.upgrade`, `realm.configure`, `realm.configure.branding`,
   `realm.configure.infrastructure`, `realm.configure.tokens`,
   `realm.configure.trust_policy`, `realm.data_view`, `realm.monitor`, `db.export`.
 

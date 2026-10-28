@@ -33,6 +33,7 @@ persistent actor {
       background_image_url = null;
       installed_version = "0";
       network = "local";
+      member_count = 0;
     };
   };
 };

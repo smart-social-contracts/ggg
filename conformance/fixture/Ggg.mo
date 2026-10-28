@@ -643,6 +643,24 @@ module {
     permissions : [Text];
     home_quarter : Text;
   };
+  /// The canisters a realm works with. Ones only some GOS use go in `extra`, named "<gos>:<role>"
+  /// ("realms_gos:baton").
+  public type HostInfrastructure = {
+    file_registry : ?Principal;
+    frontend : ?Principal;
+    extra : [(Text, Principal)];
+  };
+  /// What the platform that installs a realm (its host: an installer, a registry) tells it, once.
+  public type HostInstallArgs = {
+    /// Whether test features may be turned on.
+    test_mode : Bool;
+    /// Where it runs: "ic", "staging", "local".
+    network : Text;
+    /// Configures the realm until it launches.
+    founder : Principal;
+    /// The realm registry that lists it, if the host has one.
+    registry : ?Principal;
+  };
   public type Human = {
     id : Text;
     h3_index : ?Text;
@@ -1274,6 +1292,8 @@ module {
     accounting_currency_decimals : ?Nat8;
     welcome_message : Text;
     trusted_approvers : [Text];
+    /// Its members; on a capital, with its quarters' as they last reported.
+    member_count : Nat;
     voting_quorum : Nat;
     background_image_url : ?Text;
     voting_threshold : Nat;
@@ -1910,6 +1930,14 @@ module {
       };
     ggg_governance_update : shared GovernanceUpdateArgs -> async {
         #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_host_infrastructure : shared HostInfrastructure -> async {
+        #Ok : SetupState;
+        #Err : GggError;
+      };
+    ggg_host_install : shared HostInstallArgs -> async {
+        #Ok : SetupState;
         #Err : GggError;
       };
     ggg_identity_review : shared IdentityReviewArgs -> async {
