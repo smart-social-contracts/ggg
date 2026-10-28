@@ -197,6 +197,29 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     #Ok([]);
   };
 
+  public query ({ caller }) func ggg_me(args : T.MeArgs) : async Result<T.Me> {
+    let entry = switch (self(caller, "self.data_view", args.on_behalf_of)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(entry)) entry;
+    };
+    #Ok({
+      user = entry.user;
+      member = entry.member;
+      permissions = [
+        "self.data_view",
+        "self.update_public_profile",
+        "self.update_private_data",
+        "proposal.create",
+        "proposal.vote",
+        "realm.data_view",
+        "realm.monitor",
+        "db.export",
+      ];
+      delegations = [];
+      requests = [];
+    });
+  };
+
   public shared ({ caller }) func ggg_realm_join(args : T.JoinArgs) : async Result<T.UserEntry> {
     if (Principal.isAnonymous(caller)) return #Err(#Unauthenticated);
     switch (args.code) {
@@ -443,6 +466,12 @@ persistent actor class GggFixture(initMembers : [Principal]) {
 
   // §5
 
+  public query ({ caller }) func ggg_my_invoices(args : T.MyInvoicesArgs) : async Result<T.MyInvoicePage> {
+    switch (requireMember(caller, "self.data_view")) { case (?e) return #Err(e); case null {} };
+    if (args.on_behalf_of != null) return #Err(noDelegation("self.data_view"));
+    none(args.cursor, args.limit);
+  };
+
   public query func ggg_treasury_view(args : T.ListArgs) : async Result<T.TreasuryView> {
     switch (none<T.Fund>(args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
@@ -522,6 +551,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
   };
 
+  public query func ggg_join_targets() : async Result<T.JoinTargets> {
+    #Ok({ default = null; targets = []; mode = null });
+  };
+
   // §11
 
   public query func ggg_codex_status(args : T.ListArgs) : async Result<T.CodexView> {
@@ -547,6 +580,26 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   };
 
   // §12
+
+  public query ({ caller }) func ggg_realm_monitor() : async Result<T.Monitor> {
+    switch (requireMember(caller, "realm.monitor")) { case (?e) return #Err(e); case null {} };
+    #Ok({
+      status = #Production;
+      installed_version = "ggg-fixture 0.5.0";
+      cycles = 0;
+      memory = 0;
+      events = Map.size(events);
+    });
+  };
+
+  public query ({ caller }) func ggg_realm_export(args : T.ExportArgs) : async Result<T.ExportPage> {
+    switch (requireMember(caller, "db.export")) { case (?e) return #Err(e); case null {} };
+    if (Text.size(args.entity) == 0) return #Err(#InvalidArgument("entity is empty"));
+    switch (none<T.Value>(args.cursor, args.limit)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok({ items; next })) #Ok({ entity = args.entity; items; next });
+    };
+  };
 
   public query func ggg_realm_info() : async T.Realm {
     {
@@ -712,6 +765,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_federal_vote_cancel(_ : Text) : async Result<T.Governed> { nobody(caller, "federal_vote.manage") };
   public shared func ggg_federal_vote_finalize(_ : Text) : async Result<T.FederalVote> { #Err(#NotFound) };
   public shared ({ caller }) func ggg_federation_message(_ : T.FederationMessageArgs) : async Result<?T.Value> { nobody(caller, "quarter.sync") };
+  public shared ({ caller }) func ggg_quarter_sync() : async Result<T.QuarterDirectory> { nobody(caller, "quarter.sync") };
+  public shared ({ caller }) func ggg_quarter_report(_ : T.QuarterReportArgs) : async Result<T.QuarterReport> { nobody(caller, "quarter.sync") };
 
   // §11
   public shared ({ caller }) func ggg_codex_install(_ : T.CodexSource) : async Result<T.Governed> { nobody(caller, "codex.install") };

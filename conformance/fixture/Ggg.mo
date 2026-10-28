@@ -516,6 +516,9 @@ module {
     on_behalf_of : ?Principal;
   };
   public type ExpelArgs = { user : Principal; department : Text };
+  /// One page of an entity's records as ICRC-3 maps, for backup. `entity` is the model's type name.
+  public type ExportArgs = { entity : Text; cursor : ?Text; limit : ?Nat32 };
+  public type ExportPage = { entity : Text; next : ?Text; items : [Value] };
   public type FederalVote = {
     id : Text;
     status : FederalVoteStatus;
@@ -720,6 +723,8 @@ module {
   public type InvoiceStatus = { #Paid; #Overdue; #Cancelled; #Pending };
   public type JoinArgs = { nickname : ?Text; code : ?Text };
   public type JoinFederationArgs = { name : ?Text; capital : Principal };
+  /// The least-populated active quarter a new member joins, and every quarter that takes joins.
+  public type JoinTargets = { mode : ?Text; targets : [Text]; default : ?Text };
   public type Judge = {
     id : Text;
     appointed_at : Timestamp;
@@ -896,6 +901,15 @@ module {
   public type MandateExecutorArgs = { mandate : Text; executor : Text };
   public type MandateRevokeArgs = { mandate : Text };
   public type MandateStatus = { #Active; #Revoked; #Completed; #Expired };
+  public type Me = {
+    member : ?Member;
+    permissions : [Text];
+    user : User;
+    delegations : [Delegation];
+    requests : [DelegationRequest];
+  };
+  /// The caller, their permissions, and their open delegations. Private data is omitted when delegated.
+  public type MeArgs = { on_behalf_of : ?Principal };
   public type Member = {
     id : Text;
     status : MemberStatus;
@@ -903,6 +917,21 @@ module {
     joined_at : ?Timestamp;
   };
   public type MemberStatus = { #Inactive; #Active; #Suspended; #Banned };
+  public type Monitor = {
+    memory : Nat;
+    status : RealmStatus;
+    cycles : Nat;
+    events : Nat;
+    installed_version : Text;
+  };
+  public type MyInvoice = { invoice : Invoice; pay_to : Account };
+  public type MyInvoicePage = { next : ?Text; items : [MyInvoice] };
+  /// One page of the caller's invoices, each with the account to pay it into.
+  public type MyInvoicesArgs = {
+    cursor : ?Text;
+    limit : ?Nat32;
+    on_behalf_of : ?Principal;
+  };
   public type NFTToken = {
     id : Text;
     supply_cap : ?Nat;
@@ -1211,6 +1240,14 @@ module {
     items : [Quarter];
   };
   public type QuarterRegisterArgs = { name : ?Text; canister : Principal };
+  public type QuarterReport = { quarter : Text; drifting : Bool };
+  /// A quarter's report to the capital.
+  public type QuarterReportArgs = {
+    leg : ?FederalVoteLeg;
+    codex_version : ?Text;
+    codex_id : ?Text;
+    population : Nat;
+  };
   public type QuarterStatus = {
     #Splitting;
     #Setup;
@@ -1904,6 +1941,10 @@ module {
         #Ok : InvoicePage;
         #Err : GggError;
       };
+    ggg_join_targets : shared query () -> async {
+        #Ok : JoinTargets;
+        #Err : GggError;
+      };
     ggg_judge_appoint : shared JudgeAppointArgs -> async {
         #Ok : Governed;
         #Err : GggError;
@@ -1978,6 +2019,11 @@ module {
       };
     ggg_mandate_revoke : shared MandateRevokeArgs -> async {
         #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_me : shared query MeArgs -> async { #Ok : Me; #Err : GggError };
+    ggg_my_invoices : shared query MyInvoicesArgs -> async {
+        #Ok : MyInvoicePage;
         #Err : GggError;
       };
     ggg_nft_token_register : shared NFTTokenRegisterArgs -> async {
@@ -2119,7 +2165,15 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
+    ggg_quarter_report : shared QuarterReportArgs -> async {
+        #Ok : QuarterReport;
+        #Err : GggError;
+      };
     ggg_quarter_secede : shared () -> async { #Ok : Governed; #Err : GggError };
+    ggg_quarter_sync : shared () -> async {
+        #Ok : QuarterDirectory;
+        #Err : GggError;
+      };
     ggg_realm_configure : shared RealmConfigureArgs -> async {
         #Ok : Governed;
         #Err : GggError;
@@ -2136,10 +2190,18 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
+    ggg_realm_export : shared query ExportArgs -> async {
+        #Ok : ExportPage;
+        #Err : GggError;
+      };
     /// §12
     ggg_realm_info : shared query () -> async Realm;
     ggg_realm_join : shared JoinArgs -> async {
         #Ok : UserEntry;
+        #Err : GggError;
+      };
+    ggg_realm_monitor : shared query () -> async {
+        #Ok : Monitor;
         #Err : GggError;
       };
     ggg_realm_register : shared RealmRegisterArgs -> async {

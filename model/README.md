@@ -105,9 +105,7 @@ method per operation:
   [ICRC-21](https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md),
   so wallets can show what a member signs.
 
-Every entity and operation is in `ggg.did`, except twelve operations still under review: `me`,
-`my_invoices`, `status`, `version`, `token_catalog`, `join_targets`, `scale_status`, `quarter_sync`,
-`quarter_report`, `realm_configure_infrastructure`, `realm_monitor` and `realm_export`. The
+Every entity and operation is in `ggg.did`. The
 [conformance suite](../conformance/README.md) checks a canister against it.
 
 ### Versions
@@ -587,7 +585,7 @@ whole federation.
 | `quarter_register`, `quarter_deregister`, `quarter_configure` | `quarter.register`, `quarter.deregister`, `quarter.configure` | governed | Register quarter South |
 | `quarter_secede` | `quarter.secede` | governed | South leaves the federation after its own vote |
 | `quarter_join_federation` | `quarter.join_federation` | governed | The independent realm Harbor joins Agora as a quarter |
-| `quarter_directory`, `join_targets`, `scale_status` | — (public) | read | Quarters and their populations |
+| `quarter_directory`, `join_targets` | — (public) | read | Quarters and their populations; the least-populated active quarter a new member joins |
 | `self_change_quarter` | `self.change_quarter` | delegable | Bob moves to South |
 | `quarter_sync`, `quarter_report` (quarter → capital) | `quarter.sync` | | North reports population 1,240 and codex 1.4.2 to the capital |
 | `federal_vote_propose` | `federal_vote.propose` | delegable | Propose `FV-3` |
@@ -676,12 +674,11 @@ trusted approver.
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `status`, `version`, `realm_info`, `token_catalog` | — (public) | read | Version 0.9.0, `beta`, 3 quarters; catalog lists ckBTC, ckUSDC, ckEURC |
+| `realm_info` | — (public) | read | Agora: `beta`, installed version 0.9.0 |
 | `setup_state`, `setup_step`, `setup_launch` | `realm.configure` (founder during `setup`) | | The founder picks codex, token and branding, then launches |
 | `realm_configure` | `realm.configure` | governed | Turn on open registration |
 | `realm_configure_branding` | `realm.configure.branding` | governed | Logo and primary colour `#1E6B52` |
 | `realm_configure_tokens` | `realm.configure.tokens` | governed | Accounting currency ckUSDC |
-| `realm_configure_infrastructure` | `realm.configure.infrastructure` | governed | Point to the file-registry canister |
 | `realm_configure_trust_policy` | `realm.configure.trust_policy` | governed | Require marketplace approval for new code |
 | `realm_register` | `realm.register` | governed | List Agora in the realm registry |
 | `realm_upgrade` | `realm.upgrade` | governed | Upgrade to release 0.9.1 |

@@ -865,6 +865,16 @@ type DelegationPage = record { items : vec Delegation; requests : vec Delegation
 
 type DelegableOperation = record { operation : text; permission : text };
 
+// The caller, their permissions, and their open delegations. Private data is omitted when delegated.
+type MeArgs = record { on_behalf_of : opt principal };
+type Me = record {
+  user : User;
+  member : opt Member;
+  permissions : vec text;
+  delegations : vec Delegation;
+  requests : vec DelegationRequest;
+};
+
 type JoinArgs = record { code : opt text; nickname : opt text };
 type ProfileUpdateArgs = record { nickname : opt text; avatar : opt text; on_behalf_of : opt principal };
 
@@ -1125,6 +1135,10 @@ type InvoiceCreateArgs = record {
 // The invoice, and the account to pay it into.
 type InvoiceCreated = record { invoice : Invoice; pay_to : Account };
 type InvoiceCheckArgs = record { invoice : text; on_behalf_of : opt principal };
+// One page of the caller's invoices, each with the account to pay it into.
+type MyInvoicesArgs = record { cursor : opt text; limit : opt nat32; on_behalf_of : opt principal };
+type MyInvoice = record { invoice : Invoice; pay_to : Account };
+type MyInvoicePage = record { items : vec MyInvoice; next : opt text };
 // One invoice, or a batch of the pending and overdue ones (at most 20 per call).
 type InvoiceRefreshArgs = record { invoice : opt text; cursor : opt text; limit : opt nat32 };
 type InvoicePage = record { items : vec Invoice; next : opt text };
@@ -1355,6 +1369,16 @@ type TenderAwardArgs = record { tender : text; bid : opt text; justification : o
 // §10
 
 type QuarterDirectory = record { capital : opt text; items : vec Quarter; next : opt text };
+// The least-populated active quarter a new member joins, and every quarter that takes joins.
+type JoinTargets = record { default : opt text; targets : vec text; mode : opt text };
+// A quarter's report to the capital.
+type QuarterReportArgs = record {
+  population : nat;
+  codex_id : opt text;
+  codex_version : opt text;
+  leg : opt FederalVoteLeg;
+};
+type QuarterReport = record { quarter : text; drifting : bool };
 
 type QuarterRegisterArgs = record { canister : principal; name : opt text };
 type QuarterConfigureArgs = record {
@@ -1451,6 +1475,17 @@ type SetupStep = variant {
 };
 type SetupState = record { status : RealmStatus; founder : opt principal; done : vec text; todo : vec text };
 
+type Monitor = record {
+  status : RealmStatus;
+  installed_version : text;
+  cycles : nat;
+  memory : nat;
+  events : nat;
+};
+// One page of an entity's records as ICRC-3 maps, for backup. `entity` is the model's type name.
+type ExportArgs = record { entity : text; cursor : opt text; limit : opt nat32 };
+type ExportPage = record { entity : text; items : vec Value; next : opt text };
+
 // §13
 
 type ScopePage = record { items : vec text; next : opt text };
@@ -1493,6 +1528,7 @@ service : {
   ggg_invite_list : (ListArgs) -> (variant { Ok : InvitePage; Err : GggError }) query;
   ggg_delegation_list : (DelegationListArgs) -> (variant { Ok : DelegationPage; Err : GggError }) query;
   ggg_delegable_operations : () -> (variant { Ok : vec DelegableOperation; Err : GggError }) query;
+  ggg_me : (MeArgs) -> (variant { Ok : Me; Err : GggError }) query;
   ggg_realm_join : (JoinArgs) -> (variant { Ok : UserEntry; Err : GggError });
   ggg_profile_update : (ProfileUpdateArgs) -> (variant { Ok : User; Err : GggError });
   ggg_private_data_update : (blob) -> (variant { Ok : User; Err : GggError });
@@ -1567,6 +1603,7 @@ service : {
   ggg_transfer_revert : (TransferRevertArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_invoice_create : (InvoiceCreateArgs) -> (variant { Ok : InvoiceCreated; Err : GggError });
   ggg_invoice_check : (InvoiceCheckArgs) -> (variant { Ok : Invoice; Err : GggError });
+  ggg_my_invoices : (MyInvoicesArgs) -> (variant { Ok : MyInvoicePage; Err : GggError }) query;
   ggg_invoice_refresh : (InvoiceRefreshArgs) -> (variant { Ok : InvoicePage; Err : GggError });
   ggg_fund_create : (FundCreateArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_period_open : (PeriodOpenArgs) -> (variant { Ok : Governed; Err : GggError });
@@ -1651,6 +1688,9 @@ service : {
 
   // §10
   ggg_quarter_directory : (ListArgs) -> (variant { Ok : QuarterDirectory; Err : GggError }) query;
+  ggg_join_targets : () -> (variant { Ok : JoinTargets; Err : GggError }) query;
+  ggg_quarter_sync : () -> (variant { Ok : QuarterDirectory; Err : GggError });
+  ggg_quarter_report : (QuarterReportArgs) -> (variant { Ok : QuarterReport; Err : GggError });
   ggg_quarter_register : (QuarterRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_quarter_deregister : (text) -> (variant { Ok : Governed; Err : GggError });
   ggg_quarter_configure : (QuarterConfigureArgs) -> (variant { Ok : Governed; Err : GggError });
@@ -1674,6 +1714,8 @@ service : {
 
   // §12
   ggg_realm_info : () -> (Realm) query;
+  ggg_realm_monitor : () -> (variant { Ok : Monitor; Err : GggError }) query;
+  ggg_realm_export : (ExportArgs) -> (variant { Ok : ExportPage; Err : GggError }) query;
   ggg_setup_state : () -> (variant { Ok : SetupState; Err : GggError });
   ggg_setup_step : (SetupStep) -> (variant { Ok : SetupState; Err : GggError });
   ggg_setup_launch : () -> (variant { Ok : Realm; Err : GggError });

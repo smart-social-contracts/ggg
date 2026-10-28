@@ -763,6 +763,11 @@ export const idlFactory = ({ IDL }) => {
     'next' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Invoice),
   });
+  const JoinTargets = IDL.Record({
+    'mode' : IDL.Opt(IDL.Text),
+    'targets' : IDL.Vec(IDL.Text),
+    'default' : IDL.Opt(IDL.Text),
+  });
   const JudgeAppointArgs = IDL.Record({
     'court' : IDL.Text,
     'user' : IDL.Principal,
@@ -956,6 +961,44 @@ export const idlFactory = ({ IDL }) => {
     'symbol' : IDL.Opt(IDL.Text),
   });
   const MandateRevokeArgs = IDL.Record({ 'mandate' : IDL.Text });
+  const MeArgs = IDL.Record({ 'on_behalf_of' : IDL.Opt(IDL.Principal) });
+  const MemberStatus = IDL.Variant({
+    'Inactive' : IDL.Null,
+    'Active' : IDL.Null,
+    'Suspended' : IDL.Null,
+    'Banned' : IDL.Null,
+  });
+  const Member = IDL.Record({
+    'id' : IDL.Text,
+    'status' : MemberStatus,
+    'user' : IDL.Principal,
+    'joined_at' : IDL.Opt(Timestamp),
+  });
+  const User = IDL.Record({
+    'id' : IDL.Principal,
+    'private_data' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+    'nickname' : IDL.Opt(IDL.Text),
+    'home_quarter' : IDL.Opt(IDL.Text),
+    'profiles' : IDL.Vec(IDL.Text),
+    'avatar' : IDL.Opt(IDL.Text),
+  });
+  const Me = IDL.Record({
+    'member' : IDL.Opt(Member),
+    'permissions' : IDL.Vec(IDL.Text),
+    'user' : User,
+    'delegations' : IDL.Vec(Delegation),
+    'requests' : IDL.Vec(DelegationRequest),
+  });
+  const MyInvoicesArgs = IDL.Record({
+    'cursor' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
+  });
+  const MyInvoice = IDL.Record({ 'invoice' : Invoice, 'pay_to' : Account });
+  const MyInvoicePage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(MyInvoice),
+  });
   const NFTTokenRegisterArgs = IDL.Record({
     'supply_cap' : IDL.Opt(IDL.Nat),
     'transferable' : IDL.Opt(IDL.Bool),
@@ -1104,14 +1147,6 @@ export const idlFactory = ({ IDL }) => {
     'position' : IDL.Text,
     'profile' : IDL.Opt(IDL.Text),
   });
-  const User = IDL.Record({
-    'id' : IDL.Principal,
-    'private_data' : IDL.Opt(IDL.Vec(IDL.Nat8)),
-    'nickname' : IDL.Opt(IDL.Text),
-    'home_quarter' : IDL.Opt(IDL.Text),
-    'profiles' : IDL.Vec(IDL.Text),
-    'avatar' : IDL.Opt(IDL.Text),
-  });
   const ProfileCreateArgs = IDL.Record({
     'allowed_to' : IDL.Vec(IDL.Text),
     'description' : IDL.Text,
@@ -1247,6 +1282,34 @@ export const idlFactory = ({ IDL }) => {
     'name' : IDL.Opt(IDL.Text),
     'canister' : IDL.Principal,
   });
+  const FederalVoteLegStatus = IDL.Variant({
+    'Open' : IDL.Null,
+    'Reported' : IDL.Null,
+  });
+  const Outcome = IDL.Variant({ 'Failed' : IDL.Null, 'Passed' : IDL.Null });
+  const FederalVoteLeg = IDL.Record({
+    'id' : IDL.Text,
+    'no' : IDL.Nat,
+    'yes' : IDL.Nat,
+    'status' : FederalVoteLegStatus,
+    'hash' : IDL.Opt(IDL.Text),
+    'quarter' : IDL.Text,
+    'vote' : IDL.Text,
+    'abstain' : IDL.Nat,
+    'proposal_id' : IDL.Opt(IDL.Text),
+    'eligible' : IDL.Nat,
+    'outcome' : IDL.Opt(Outcome),
+  });
+  const QuarterReportArgs = IDL.Record({
+    'leg' : IDL.Opt(FederalVoteLeg),
+    'codex_version' : IDL.Opt(IDL.Text),
+    'codex_id' : IDL.Opt(IDL.Text),
+    'population' : IDL.Nat,
+  });
+  const QuarterReport = IDL.Record({
+    'quarter' : IDL.Text,
+    'drifting' : IDL.Bool,
+  });
   const RealmConfigureArgs = IDL.Record({
     'name' : IDL.Opt(IDL.Text),
     'manifesto' : IDL.Opt(IDL.Text),
@@ -1266,6 +1329,16 @@ export const idlFactory = ({ IDL }) => {
     'require_marketplace_approval' : IDL.Opt(IDL.Bool),
     'trusted_principals' : IDL.Opt(IDL.Vec(IDL.Principal)),
     'trusted_approvers' : IDL.Opt(IDL.Vec(IDL.Text)),
+  });
+  const ExportArgs = IDL.Record({
+    'entity' : IDL.Text,
+    'cursor' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+  });
+  const ExportPage = IDL.Record({
+    'entity' : IDL.Text,
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Value),
   });
   const RealmStatus = IDL.Variant({
     'Setup' : IDL.Null,
@@ -1305,19 +1378,14 @@ export const idlFactory = ({ IDL }) => {
     'nickname' : IDL.Opt(IDL.Text),
     'code' : IDL.Opt(IDL.Text),
   });
-  const MemberStatus = IDL.Variant({
-    'Inactive' : IDL.Null,
-    'Active' : IDL.Null,
-    'Suspended' : IDL.Null,
-    'Banned' : IDL.Null,
-  });
-  const Member = IDL.Record({
-    'id' : IDL.Text,
-    'status' : MemberStatus,
-    'user' : IDL.Principal,
-    'joined_at' : IDL.Opt(Timestamp),
-  });
   const UserEntry = IDL.Record({ 'member' : IDL.Opt(Member), 'user' : User });
+  const Monitor = IDL.Record({
+    'memory' : IDL.Nat,
+    'status' : RealmStatus,
+    'cycles' : IDL.Nat,
+    'events' : IDL.Nat,
+    'installed_version' : IDL.Text,
+  });
   const RealmRegisterArgs = IDL.Record({
     'url' : IDL.Opt(IDL.Text),
     'registry' : IDL.Principal,
@@ -2054,6 +2122,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : InvoicePage, 'Err' : GggError })],
         [],
       ),
+    'ggg_join_targets' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : JoinTargets, 'Err' : GggError })],
+        ['query'],
+      ),
     'ggg_judge_appoint' : IDL.Func(
         [JudgeAppointArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
@@ -2153,6 +2226,16 @@ export const idlFactory = ({ IDL }) => {
         [MandateRevokeArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
+      ),
+    'ggg_me' : IDL.Func(
+        [MeArgs],
+        [IDL.Variant({ 'Ok' : Me, 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_my_invoices' : IDL.Func(
+        [MyInvoicesArgs],
+        [IDL.Variant({ 'Ok' : MyInvoicePage, 'Err' : GggError })],
+        ['query'],
       ),
     'ggg_nft_token_register' : IDL.Func(
         [NFTTokenRegisterArgs],
@@ -2329,9 +2412,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
+    'ggg_quarter_report' : IDL.Func(
+        [QuarterReportArgs],
+        [IDL.Variant({ 'Ok' : QuarterReport, 'Err' : GggError })],
+        [],
+      ),
     'ggg_quarter_secede' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_quarter_sync' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : QuarterDirectory, 'Err' : GggError })],
         [],
       ),
     'ggg_realm_configure' : IDL.Func(
@@ -2354,11 +2447,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
+    'ggg_realm_export' : IDL.Func(
+        [ExportArgs],
+        [IDL.Variant({ 'Ok' : ExportPage, 'Err' : GggError })],
+        ['query'],
+      ),
     'ggg_realm_info' : IDL.Func([], [Realm], ['query']),
     'ggg_realm_join' : IDL.Func(
         [JoinArgs],
         [IDL.Variant({ 'Ok' : UserEntry, 'Err' : GggError })],
         [],
+      ),
+    'ggg_realm_monitor' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : Monitor, 'Err' : GggError })],
+        ['query'],
       ),
     'ggg_realm_register' : IDL.Func(
         [RealmRegisterArgs],

@@ -199,6 +199,7 @@ function listTable(actor) {
     list('ggg_ledger_view', () => (a) =>
       actor.ggg_ledger_view({ ...a, transaction: [], symbol: [], kind: [], fund: [], period: [] })),
     list('ggg_report_view', () => (a) => actor.ggg_report_view({ ...a, id: [] })),
+    list('ggg_my_invoices', () => (a) => actor.ggg_my_invoices({ ...a, on_behalf_of: [] })),
     list('ggg_land_list', () => (a) => actor.ggg_land_list({ ...a, owner: [] })),
     list('ggg_land_map (zones)', () => (a) => actor.ggg_land_map({ ...a, x: 0n, y: 0n, w: 32n, h: 32n }), 'zones'),
     list('ggg_license_list', () => (a) => actor.ggg_license_list({ ...a, holder: [], kind: [], status: [] })),
@@ -221,6 +222,7 @@ function listTable(actor) {
     list('ggg_notification_list', () => (a) =>
       actor.ggg_notification_list({ ...a, recipient: [], unread: [], on_behalf_of: [] })),
     list('ggg_events', () => (a) => actor.ggg_events(a)),
+    list('ggg_realm_export', () => (a) => actor.ggg_realm_export({ ...a, entity: 'User' })),
     list('ggg_crypto_scopes', () => (a) => actor.ggg_crypto_scopes(a), 'items', (items) => {
       scope = items[0] ?? null;
     }),
@@ -352,6 +354,19 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
       assert(show(found.member) === show(e.member), `user ${id.toText()}: the membership differs between list and get`);
     }
     return detail;
+  });
+
+  await check('GGG', 'M3', 'ggg_me returns the caller, their permissions and their delegations', async () => {
+    const result = await reader.ggg_me({ on_behalf_of: [] });
+    refused(result.Err, 'ggg_me');
+    const card = ok(result, 'ggg_me');
+    checkUser({ user: card.user, member: card.member });
+    if (mine) {
+      const me = member.getPrincipal();
+      assert(card.user.id.toText() === me.toText(), `ggg_me returns ${card.user.id.toText()}`);
+    }
+    assert(card.permissions.every((p) => p.length > 0), 'a permission name is empty');
+    return `${card.permissions.length} permissions, ${card.delegations.length} delegations`;
   });
 
   await check('GGG', 'P1', 'ggg_proposal_list paginates and returns well-formed summaries', async () => {
