@@ -3,6 +3,8 @@
 
 module {
   public type AccessArgs = { cursor : ?Text; limit : ?Nat32; scope : Text };
+  /// An ICRC-1 account.
+  public type Account = { owner : Principal; subaccount : ?Blob };
   /// AllocationRule and TaxPolicy.
   public type AdoptionStatus = { #Superseded; #Draft; #Proposed; #Adopted };
   /// share in basis points.
@@ -12,6 +14,11 @@ module {
     status : AdoptionStatus;
     source_fund : Text;
     proposal : ?Text;
+    rules : [Allocation];
+  };
+  /// Shares in basis points, adding up to at most 10 000.
+  public type AllocationRuleDraftArgs = {
+    source_fund : Text;
     rules : [Allocation];
   };
   public type Appeal = {
@@ -25,12 +32,34 @@ module {
     new_verdict : ?Text;
     appellant : Principal;
   };
+  /// Granting issues a new verdict that overturns the appealed one.
+  public type AppealDecideArgs = {
+    decision : ?Text;
+    granted : Bool;
+    appeal : Text;
+    reasoning_ref : ?Text;
+    penalties : [PenaltyTerms];
+  };
+  /// `court` defaults to the issuing court's parent, and must rank above it.
+  public type AppealFileArgs = {
+    court : ?Text;
+    grounds_ref : ?Text;
+    verdict : Text;
+    on_behalf_of : ?Principal;
+  };
   public type AppealStatus = {
     #UnderReview;
     #Granted;
     #Withdrawn;
     #Filed;
     #Denied;
+  };
+  /// An agent needs a supervisor holding a non-agent seat in the same department or organization.
+  public type AppointArgs = {
+    supervisor : ?Principal;
+    agent : Bool;
+    user : Principal;
+    position : Text;
   };
   public type Appointment = {
     id : Text;
@@ -52,6 +81,11 @@ module {
     target : Ref;
     operations : [Text];
   };
+  public type AuthorityGrantArgs = {
+    target : Ref;
+    operations : [Text];
+    department : Text;
+  };
   public type Balance = { amount : Nat; symbol : Text };
   public type Bid = {
     id : Text;
@@ -64,6 +98,7 @@ module {
     submitted_at : Timestamp;
     payload_hash : Text;
   };
+  public type BidOpening = { bid : Text; nonce : Text; price : Nat };
   public type BidScore = {
     id : Text;
     bid : Text;
@@ -72,6 +107,22 @@ module {
     scored_at : Timestamp;
     criterion : Text;
   };
+  /// Marks from 0 to 10 per rubric criterion; scoring again replaces the caller's marks.
+  public type BidScoreArgs = {
+    bid : Text;
+    scores : [{ score : Nat; criterion : Text }];
+  };
+  /// For a vendor the caller represents. `payload_hash` is the sha256 of `price:nonce`.
+  public type BidSubmitArgs = {
+    vendor : Text;
+    on_behalf_of : ?Principal;
+    payload_ref : Text;
+    tender : Text;
+    payload_hash : Text;
+  };
+  public type BidWithdrawArgs = { bid : Text; on_behalf_of : ?Principal };
+  public type BidsRevealArgs = { tender : Text; openings : [BidOpening] };
+  public type BrandingArgs = { logo_url : ?Text; background_image_url : ?Text };
   public type Budget = {
     id : Text;
     status : BudgetStatus;
@@ -82,6 +133,14 @@ module {
     planned : Nat;
     category : Text;
     proposal : ?Text;
+  };
+  public type BudgetAmendArgs = { planned : Nat; budget : Text };
+  public type BudgetDraftArgs = {
+    period : Text;
+    fund : Text;
+    kind : ?Text;
+    planned : Nat;
+    category : Text;
   };
   public type BudgetStatus = { #Closed; #Draft; #Proposed; #Amended; #Adopted };
   public type Calendar = {
@@ -109,6 +168,7 @@ module {
     dispute : ?Text;
     plaintiff : Ref;
   };
+  public type CaseAssignArgs = { case_ : Text; judge : Text };
   public type CaseStatus = {
     #VerdictIssued;
     #Closed;
@@ -119,6 +179,7 @@ module {
     #Appealed;
     #Assigned;
   };
+  public type ChangeQuarterArgs = { quarter : Text; on_behalf_of : ?Principal };
   /// One level of the chart: the department's totals, and its sub-departments a page at a time.
   public type Chart = {
     next : ?Text;
@@ -144,14 +205,19 @@ module {
     checksum : Text;
     manifest : Value;
   };
+  public type CodexSource = {
+    #Package : { source : Text; manifest : Value };
+    #Registry : { codex : Text; version : Text };
+  };
   public type CodexStatus = { #Inactive; #Active; #Reverted };
-  /// The active codex, and the install history a page at a time.
+  /// The active codex and a page of earlier ones, each named by its checksum ("sha256:<hex>").
+  /// No method returns a Codex record.
   public type CodexView = {
     signing : SigningPolicy;
     next : ?Text;
-    codex : ?Codex;
-    history : [Codex];
+    history : [Text];
     healthy : Bool;
+    checksum : ?Text;
   };
   public type Contract = {
     id : Text;
@@ -194,6 +260,14 @@ module {
     license : ?Text;
     parent : ?Text;
   };
+  /// `operator` is a department, or an organization holding an active court licence.
+  public type CourtCreateArgs = {
+    operator : Ref;
+    name : Text;
+    level : ?CourtLevel;
+    jurisdiction : ?Text;
+    parent : ?Text;
+  };
   public type CourtLevel = {
     #Supreme;
     #Specialized;
@@ -207,6 +281,24 @@ module {
     valid : Bool;
     licensed : Bool;
     ours : Bool;
+  };
+  public type CredentialIssueArgs = {
+    prepared_by : ?Principal;
+    subject : ?Text;
+    schema : Text;
+    fields : [(Text, Text)];
+    payload_ref : ?Text;
+    organization : Text;
+    holder : Principal;
+    expires_at : ?Timestamp;
+    payload_hash : ?Text;
+  };
+  public type CredentialIssued = { token_id : Nat; header : [(Text, Text)] };
+  public type CredentialRevokeArgs = {
+    token_id : Nat;
+    schema : Text;
+    organization : Text;
+    reason : Text;
   };
   /// The token's ggg: header as read from the ledger, and its frozen flag.
   public type CredentialVerifyArgs = { frozen : Bool; header : [(Text, Text)] };
@@ -292,12 +384,25 @@ module {
     parent : ?Text;
     policy : Policy;
   };
+  public type DepartmentCreateArgs = {
+    description : Text;
+    department : Text;
+    parent : ?Text;
+  };
   public type DepartmentDetail = {
     next : ?Text;
     seats : [Seat];
     department : Department;
   };
+  /// The parent is never the department itself or one of its sub-departments; the root has none.
+  public type DepartmentEditArgs = {
+    head : ?{ #Set : Principal; #Clear };
+    description : ?Text;
+    department : Text;
+    parent : ?Text;
+  };
   public type DepartmentPage = { next : ?Text; items : [Department] };
+  public type DepartmentPolicyArgs = { department : Text; policy : Policy };
   public type Dispute = {
     id : Text;
     status : DisputeStatus;
@@ -308,6 +413,14 @@ module {
     case_ : ?Text;
     respondent : Ref;
   };
+  public type DisputeAcceptArgs = { court : Text; dispute : Text };
+  public type DisputeFileArgs = {
+    title : Text;
+    subject : ?Ref;
+    description_ref : ?Text;
+    on_behalf_of : ?Principal;
+    respondent : Ref;
+  };
   public type DisputeGetArgs = { id : Text; on_behalf_of : ?Principal };
   public type DisputeListArgs = {
     status : ?DisputeStatus;
@@ -316,6 +429,10 @@ module {
   };
   public type DisputePage = { next : ?Text; items : [Dispute] };
   public type DisputeStatus = { #Withdrawn; #Rejected; #Filed; #Accepted };
+  public type DisputeWithdrawArgs = {
+    on_behalf_of : ?Principal;
+    dispute : Text;
+  };
   public type Document = {
     at : Timestamp;
     id : Text;
@@ -331,14 +448,39 @@ module {
     scope : Text;
     document : Document;
   };
+  /// Deletes the wrapped keys `limit` at a time (at most 500), then the document: call again until `deleted`.
+  public type DocumentDeleteArgs = { limit : ?Nat32; document : Text };
+  public type DocumentDeleted = { deleted : Bool; revoked : Nat };
   public type DocumentListArgs = {
     cursor : ?Text;
     limit : ?Nat32;
     department : Text;
   };
   public type DocumentPage = { next : ?Text; items : [Document] };
+  public type DocumentRevokeArgs = {
+    document : Text;
+    principals : [Principal];
+  };
+  public type DocumentShareArgs = { keys : [WrappedKey]; document : Text };
+  /// Stores a new document, or replaces `document`.
+  public type DocumentStoreArgs = {
+    ref : Text;
+    title : Text;
+    hash : Text;
+    keys : [WrappedKey];
+    document : ?Text;
+    department : Text;
+  };
+  public type DocumentStored = { scope : Text; document : Document };
   /// Nanoseconds.
   public type Duration = Nat64;
+  public type EnforcementArgs = { note : Text; verdict : Text };
+  public type EnforcementNotifyArgs = {
+    to : Ref;
+    title : ?Text;
+    body : ?Text;
+    verdict : Text;
+  };
   public type Event = {
     at : Timestamp;
     by : ?Principal;
@@ -362,11 +504,24 @@ module {
     items : [Event];
     archives : [EventArchive];
   };
+  public type EvidenceEvaluateArgs = {
+    admitted : Bool;
+    case_ : Text;
+    evidence : Text;
+  };
+  public type EvidenceSubmitArgs = {
+    ref : Text;
+    case_ : Text;
+    hash : Text;
+    on_behalf_of : ?Principal;
+  };
+  public type ExpelArgs = { user : Principal; department : Text };
   public type FederalVote = {
     id : Text;
     status : FederalVoteStatus;
     tally : Value;
-    action : Value;
+    title : Text;
+    action : ProposalAction;
     hash : Text;
     rule : Value;
     origin_quarter : Text;
@@ -386,6 +541,11 @@ module {
     outcome : ?Outcome;
   };
   public type FederalVoteLegStatus = { #Open; #Reported };
+  public type FederalVoteProposeArgs = {
+    title : Text;
+    action : ProposalAction;
+    on_behalf_of : ?Principal;
+  };
   public type FederalVoteStatus = { #Failed; #Passed; #Open; #Cancelled };
   public type FederationMessage = {
     id : Text;
@@ -393,6 +553,12 @@ module {
     source : Text;
     body : Value;
     response : ?Value;
+  };
+  /// To quarter `to`, or by default every active quarter.
+  public type FederationMessageArgs = {
+    to : ?Text;
+    topic : Text;
+    body : Value;
   };
   public type FinancialReport = {
     id : Text;
@@ -414,6 +580,14 @@ module {
     statements : Value;
   };
   public type FiscalPeriodStatus = { #Open; #Closed; #Archived };
+  /// By court order.
+  public type ForceTransferArgs = {
+    to : Principal;
+    from : Principal;
+    amount : Nat;
+    symbol : Text;
+    reason : ?Text;
+  };
   public type Forward = {
     id : Text;
     destination : Text;
@@ -422,6 +596,12 @@ module {
     origin : Text;
     moved_at : Timestamp;
   };
+  public type FreezeArgs = {
+    account : Principal;
+    frozen : Bool;
+    symbol : Text;
+    reason : ?Text;
+  };
   public type Fund = {
     id : Text;
     allocation_rule : ?Text;
@@ -429,6 +609,13 @@ module {
     name : Text;
     department : ?Text;
     balances : [Balance];
+  };
+  /// `department` is the fund's owner; a department owns at most one fund.
+  public type FundCreateArgs = {
+    fund : Text;
+    kind : ?Text;
+    name : ?Text;
+    department : ?Text;
   };
   /// One record by id, with its children a page at a time.
   public type GetArgs = { id : Text; cursor : ?Text; limit : ?Nat32 };
@@ -513,8 +700,26 @@ module {
     symbol : Text;
     reason : ?Ref;
   };
+  public type InvoiceCheckArgs = { invoice : Text; on_behalf_of : ?Principal };
+  public type InvoiceCreateArgs = {
+    due_at : ?Timestamp;
+    payer : Ref;
+    amount : Nat;
+    symbol : ?Text;
+    reason : ?Ref;
+  };
+  /// The invoice, and the account to pay it into.
+  public type InvoiceCreated = { invoice : Invoice; pay_to : Account };
+  public type InvoicePage = { next : ?Text; items : [Invoice] };
+  /// One invoice, or a batch of the pending and overdue ones (at most 20 per call).
+  public type InvoiceRefreshArgs = {
+    cursor : ?Text;
+    invoice : ?Text;
+    limit : ?Nat32;
+  };
   public type InvoiceStatus = { #Paid; #Overdue; #Cancelled; #Pending };
   public type JoinArgs = { nickname : ?Text; code : ?Text };
+  public type JoinFederationArgs = { name : ?Text; capital : Principal };
   public type Judge = {
     id : Text;
     appointed_at : Timestamp;
@@ -522,6 +727,11 @@ module {
     court : Text;
     user : Principal;
     specialization : Text;
+  };
+  public type JudgeAppointArgs = {
+    court : Text;
+    user : Principal;
+    specialization : ?Text;
   };
   public type JudgeStatus = { #Active; #Revoked };
   public type KeyEnvelope = {
@@ -532,6 +742,9 @@ module {
     granted_by : Principal;
     wrapped_dek : Blob;
   };
+  /// At most 500 keys or principals per call.
+  public type KeyGrantArgs = { keys : [WrappedKey]; scope : Text };
+  public type KeyRevokeArgs = { scope : Text; principals : [Principal] };
   public type Land = {
     x : Nat;
     y : Nat;
@@ -545,6 +758,7 @@ module {
     width : Nat;
     registered_by : Principal;
   };
+  public type LandFreezeArgs = { land : Text; reason : ?Text };
   public type LandListArgs = { owner : ?Ref; cursor : ?Text; limit : ?Nat32 };
   public type LandMap = { next : ?Text; zones : [Zone]; parcels : [Land] };
   /// A viewport of at most 32 × 32 cells, and the zones not tied to a parcel a page at a time.
@@ -556,8 +770,21 @@ module {
     cursor : ?Text;
     limit : ?Nat32;
   };
+  public type LandMintArgs = { prepared_by : ?Principal; land : Text };
   public type LandPage = { next : ?Text; items : [Land] };
+  /// At most 16 × 16 cells, overlapping no other parcel.
+  public type LandRegisterArgs = {
+    x : Nat;
+    y : Nat;
+    height : ?Nat;
+    owner : Ref;
+    metadata : ?Value;
+    kind : ?Text;
+    width : ?Nat;
+  };
   public type LandStatus = { #Disputed; #Active; #Revoked };
+  /// Under a court order: an issued or final verdict in a case about the parcel, with `to` a party.
+  public type LandTransferArgs = { to : Ref; order : Text; land : Text };
   public type LedgerArgs = {
     period : ?Text;
     cursor : ?Text;
@@ -603,7 +830,23 @@ module {
     holder : Ref;
     expires_at : ?Timestamp;
   };
+  /// For the caller, or an organization they administer.
+  public type LicenseApplyArgs = {
+    evidence_ref : ?Text;
+    kind : Text;
+    on_behalf_of : ?Principal;
+    conditions : ?Value;
+    department : ?Text;
+    holder : ?Ref;
+  };
   public type LicenseCheck = { valid : Bool; license : ?License };
+  public type LicenseDecideArgs = {
+    approve : Bool;
+    conditions : ?Value;
+    department : ?Text;
+    license : Text;
+    expires_at : ?Timestamp;
+  };
   public type LicenseListArgs = {
     status : ?LicenseStatus;
     cursor : ?Text;
@@ -612,6 +855,11 @@ module {
     holder : ?Ref;
   };
   public type LicensePage = { next : ?Text; items : [License] };
+  public type LicenseRenewArgs = {
+    evidence_ref : ?Text;
+    on_behalf_of : ?Principal;
+    license : Text;
+  };
   public type LicenseStatus = {
     #Applied;
     #Active;
@@ -620,6 +868,8 @@ module {
     #Revoked;
     #Expired;
   };
+  /// With `resume`, reinstates a suspended licence.
+  public type LicenseSuspendArgs = { resume : Bool; license : Text };
   /// A licence by id, or the one of `kind` that `holder` holds.
   public type LicenseVerifyArgs = { id : ?Text; kind : ?Text; holder : ?Ref };
   public type ListArgs = { cursor : ?Text; limit : ?Nat32 };
@@ -663,6 +913,15 @@ module {
     required_license : ?Text;
     total_supply : Nat;
   };
+  public type NFTTokenRegisterArgs = {
+    supply_cap : ?Nat;
+    transferable : ?Bool;
+    name : ?Text;
+    description : ?Text;
+    canister : Principal;
+    required_license : ?Text;
+    symbol : Text;
+  };
   public type NewUser = { nickname : ?Text; user : Principal };
   public type Notification = {
     at : Timestamp;
@@ -684,6 +943,22 @@ module {
     on_behalf_of : ?Principal;
   };
   public type NotificationPage = { next : ?Text; items : [Notification] };
+  /// One notification, or with `recipient` a page of that recipient's.
+  public type NotificationReadArgs = {
+    cursor : ?Text;
+    recipient : ?Ref;
+    notification : ?Text;
+    limit : ?Nat32;
+    on_behalf_of : ?Principal;
+  };
+  public type NotificationSendArgs = {
+    title : Text;
+    topic : ?Text;
+    body : ?Text;
+    href : ?Text;
+    recipient : Ref;
+  };
+  public type NotificationsRead = { next : ?Text; read : Nat };
   public type Organization = {
     id : Text;
     status : OrganizationStatus;
@@ -695,13 +970,26 @@ module {
     seats : [Seat];
     organization : Organization;
   };
+  public type OrganizationEditArgs = {
+    description : ?Text;
+    admins : ?[Principal];
+    organization : Text;
+  };
   public type OrganizationListArgs = {
     status : ?OrganizationStatus;
     cursor : ?Text;
     limit : ?Nat32;
   };
   public type OrganizationPage = { next : ?Text; items : [Organization] };
+  public type OrganizationRegisterArgs = {
+    description : Text;
+    organization : Text;
+  };
   public type OrganizationStatus = { #Active; #Dissolved; #Suspended };
+  public type OrganizationStatusArgs = {
+    status : OrganizationStatus;
+    organization : Text;
+  };
   public type Outcome = { #Failed; #Passed };
   public type PaymentAccount = {
     id : Text;
@@ -711,6 +999,25 @@ module {
     label_ : Text;
     address : Text;
     symbol : Text;
+  };
+  public type PaymentAccountAddArgs = {
+    network : Text;
+    label_ : ?Text;
+    address : Text;
+    on_behalf_of : ?Principal;
+    organization : ?Text;
+    symbol : ?Text;
+  };
+  public type PaymentAccountRemoveArgs = {
+    account : Text;
+    on_behalf_of : ?Principal;
+    organization : ?Text;
+  };
+  /// Pays each active, non-agent appointee once per period label.
+  public type PayrollRunArgs = {
+    period : Text;
+    department : Text;
+    symbol : ?Text;
   };
   public type Penalty = {
     id : Text;
@@ -724,6 +1031,7 @@ module {
     amount : ?Nat;
     symbol : ?Text;
   };
+  public type PenaltyExecuteArgs = { penalty : Text; due_at : ?Timestamp };
   public type PenaltyKind = {
     #CommunityService;
     #Fine;
@@ -735,6 +1043,20 @@ module {
     #Revocation;
   };
   public type PenaltyStatus = { #Executed; #Waived; #Pending };
+  public type PenaltyTerms = {
+    kind : PenaltyKind;
+    target : Ref;
+    due_at : ?Timestamp;
+    amount : ?Nat;
+    symbol : ?Text;
+  };
+  /// Periods open in order: one starts no earlier than the latest ends.
+  public type PeriodOpenArgs = {
+    starts_at : Timestamp;
+    period : Text;
+    ends_at : Timestamp;
+    name : ?Text;
+  };
   public type Permission = {
     id : Text;
     departments : [Text];
@@ -756,6 +1078,25 @@ module {
     organization : ?Text;
     department : ?Text;
     inherit_from_capital : Bool;
+    profile : ?Text;
+  };
+  public type PositionCreateArgs = {
+    title : Text;
+    salary_period : ?Duration;
+    salary : ?Nat;
+    headcount : ?Nat;
+    department : Text;
+    position : Text;
+    profile : ?Text;
+  };
+  /// Closing is position_close.
+  public type PositionEditArgs = {
+    status : ?{ #Open; #Frozen };
+    title : ?Text;
+    salary_period : ?Duration;
+    salary : ?Nat;
+    headcount : ?Nat;
+    position : Text;
     profile : ?Text;
   };
   public type PositionStatus = { #Open; #Closed; #Frozen };
@@ -856,11 +1197,20 @@ module {
     index : Nat;
     population : Nat;
   };
+  public type QuarterConfigureArgs = {
+    status : ?QuarterStatus;
+    quarter : ?Text;
+    name : ?Text;
+    rule : ?Value;
+    federation_codex : ?Text;
+    quarter_join_mode : ?Text;
+  };
   public type QuarterDirectory = {
     next : ?Text;
     capital : ?Text;
     items : [Quarter];
   };
+  public type QuarterRegisterArgs = { name : ?Text; canister : Principal };
   public type QuarterStatus = {
     #Splitting;
     #Setup;
@@ -894,6 +1244,18 @@ module {
     treasury : ?Text;
     accounting_currency : ?Text;
   };
+  public type RealmConfigureArgs = {
+    name : ?Text;
+    manifesto : ?Text;
+    quarter_join_mode : ?Text;
+    open_registration : ?Bool;
+    welcome_message : ?Text;
+  };
+  public type RealmRegisterArgs = {
+    url : ?Text;
+    registry : Principal;
+    backend_url : ?Text;
+  };
   public type RealmStatus = {
     #Setup;
     #Terminated;
@@ -902,6 +1264,8 @@ module {
     #Alpha;
     #Deprecation;
   };
+  /// Accepts exactly this module, if the trust policy does.
+  public type RealmUpgradeArgs = { version : Text; module_hash : Blob };
   /// A reference to any entity: `kind` is the entity's name in the model.
   public type Ref = { id : Text; kind : Text };
   public type Registry = {
@@ -911,7 +1275,19 @@ module {
   };
   /// One report by id, or a page of reports.
   public type ReportArgs = { id : ?Text; cursor : ?Text; limit : ?Nat32 };
+  public type ReportIssueArgs = { period : Text; kind : ?Text };
   public type ReportPage = { next : ?Text; items : [FinancialReport] };
+  /// Seats the user in the organization's position, creating the position if it is new.
+  public type RepresentativeAddArgs = {
+    supervisor : ?Principal;
+    title : ?Text;
+    agent : Bool;
+    headcount : ?Nat;
+    user : Principal;
+    organization : Text;
+    position : Text;
+    profile : ?Text;
+  };
   public type Resolution = { verdict : Verdict; penalties : [Penalty] };
   public type ResolutionPage = { next : ?Text; items : [Resolution] };
   /// Verdicts past draft, newest first.
@@ -932,12 +1308,36 @@ module {
   public type Sealed = { ref : Text; hash : Text };
   /// A position and the appointments that hold it.
   public type Seat = { holders : [Appointment]; position : Position };
+  public type SetupState = {
+    status : RealmStatus;
+    done : [Text];
+    todo : [Text];
+    founder : ?Principal;
+  };
+  public type SetupStep = {
+    #TrustPolicy : TrustPolicyArgs;
+    #Realm : RealmConfigureArgs;
+    #Branding : BrandingArgs;
+    #Tokens : TokensArgs;
+  };
   public type SigningPolicy = {
     supervision : { #Required; #Optional };
     agents : [Text];
     delegable : [Text];
   };
   public type Tally = { no : Nat; yes : Nat; abstain : Nat; eligible : ?Nat };
+  /// Bills one batch of taxpayers for the period; those already billed are skipped.
+  public type TaxAssessArgs = {
+    tax : ?Text;
+    period : Text;
+    cursor : ?Text;
+    limit : ?Nat32;
+  };
+  public type TaxAssessPage = {
+    skipped : Nat;
+    next : ?Text;
+    items : [Invoice];
+  };
   public type TaxDeclaration = {
     id : Text;
     status : TaxDeclarationStatus;
@@ -948,6 +1348,18 @@ module {
     amount : Nat;
   };
   public type TaxDeclarationStatus = { #Disputed; #Filed; #Assessed; #Settled };
+  /// For the caller, or an organization they administer.
+  public type TaxDeclareArgs = {
+    period : Text;
+    base : Text;
+    on_behalf_of : ?Principal;
+    organization : ?Text;
+    amount : Nat;
+  };
+  public type TaxDeclared = {
+    invoice : ?Invoice;
+    declaration : TaxDeclaration;
+  };
   public type TaxPolicy = {
     id : Text;
     status : AdoptionStatus;
@@ -956,6 +1368,7 @@ module {
     document : Value;
     proposal : ?Text;
   };
+  public type TaxPolicyDraftArgs = { description : ?Text; document : Value };
   public type Tender = {
     id : Text;
     opens_at : ?Timestamp;
@@ -967,6 +1380,21 @@ module {
     contract : ?Text;
     winner : ?Text;
     description : Text;
+  };
+  /// `bid` defaults to the best-scored revealed bid; a lower-scored one needs a justification.
+  public type TenderAwardArgs = {
+    bid : ?Text;
+    justification : ?Text;
+    tender : Text;
+  };
+  /// Weights in basis points, adding up to 10 000.
+  public type TenderCreateArgs = {
+    opens_at : ?Timestamp;
+    title : Text;
+    requester : Text;
+    closes_at : ?Timestamp;
+    rubric : [Criterion];
+    description : ?Text;
   };
   /// A sealed bid shows no price or score.
   public type TenderDetail = { bids : [Bid]; next : ?Text; tender : Tender };
@@ -994,6 +1422,17 @@ module {
     ledger : Principal;
     indexer : ?Principal;
   };
+  public type TokenRegisterArgs = {
+    fee : ?Nat;
+    decimals : ?Nat8;
+    ledger : Principal;
+    indexer : ?Principal;
+    symbol : Text;
+  };
+  public type TokensArgs = {
+    accounting_currency_decimals : ?Nat8;
+    accounting_currency : ?Text;
+  };
   public type Trade = {
     id : Text;
     status : TradeStatus;
@@ -1014,6 +1453,18 @@ module {
     symbol : Text;
     payroll : ?Text;
   };
+  /// The fund must also cover the ledger fee. `symbol` defaults to the accounting currency.
+  public type TransferCreateArgs = {
+    to : Ref;
+    contract : ?Text;
+    fund : Text;
+    description : ?Text;
+    category : ?Text;
+    on_behalf_of : ?Principal;
+    amount : Nat;
+    symbol : ?Text;
+  };
+  public type TransferRevertArgs = { transfer : Text; reason : ?Text };
   public type TransferStatus = { #Failed; #Sending; #Completed; #Pending };
   public type Treasury = { id : Text; config : TreasuryConfig };
   public type TreasuryConfig = {
@@ -1022,6 +1473,12 @@ module {
     source_fund : Text;
     anchor_month : Nat8;
   };
+  public type TreasuryConfigureArgs = {
+    auto_allocate : ?Bool;
+    epoch : ?Duration;
+    source_fund : ?Text;
+    anchor_month : ?Nat8;
+  };
   /// The treasury and its registered tokens, and its funds a page at a time.
   public type TreasuryView = {
     funds : [Fund];
@@ -1029,6 +1486,11 @@ module {
     tokens : [Token];
     nft_tokens : [NFTToken];
     treasury : ?Treasury;
+  };
+  public type TrustPolicyArgs = {
+    require_marketplace_approval : ?Bool;
+    trusted_principals : ?[Principal];
+    trusted_approvers : ?[Text];
   };
   public type User = {
     id : Principal;
@@ -1084,7 +1546,21 @@ module {
     case_ : Text;
     reasoning_ref : ?Text;
   };
+  public type VerdictContractArgs = { contract : Text; verdict : Text };
+  public type VerdictDraftArgs = {
+    decision : Text;
+    case_ : Text;
+    reasoning_ref : ?Text;
+    penalties : [PenaltyTerms];
+  };
   public type VerdictStatus = { #Draft; #Final; #Overturned; #Issued };
+  /// New penalties replace them all. Changing an issued verdict restarts its appeal window.
+  public type VerdictTermsArgs = {
+    decision : ?Text;
+    verdict : Text;
+    reasoning_ref : ?Text;
+    penalties : ?[PenaltyTerms];
+  };
   public type Vote = {
     id : Text;
     voter : Principal;
@@ -1094,6 +1570,7 @@ module {
     choice : VoteChoice;
   };
   public type VoteChoice = { #No; #Yes; #Abstain };
+  public type WrappedKey = { principal : Principal; wrapped_dek : Blob };
   public type Zone = {
     id : Text;
     metadata : Value;
@@ -1102,10 +1579,92 @@ module {
     name : Text;
     user : ?Principal;
   };
+  public type ZoneClearArgs = { zone : Text; on_behalf_of : ?Principal };
+  /// An h3 cell as the caller's home; it replaces the previous one.
+  public type ZoneSetArgs = {
+    kind : ?Text;
+    name : ?Text;
+    zone : Text;
+    on_behalf_of : ?Principal;
+  };
   public type Self = actor {
+    ggg_allocation_rule_draft : shared AllocationRuleDraftArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_allocation_rule_propose : shared Text -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_appeal_decide : shared AppealDecideArgs -> async {
+        #Ok : Appeal;
+        #Err : GggError;
+      };
+    ggg_appeal_file : shared AppealFileArgs -> async {
+        #Ok : Appeal;
+        #Err : GggError;
+      };
+    ggg_appoint : shared AppointArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_appoint_acting : shared AppointArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_appointment_end : shared Text -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_authority_grant : shared AuthorityGrantArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_authority_revoke : shared Text -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_bid_score : shared BidScoreArgs -> async { #Ok : Bid; #Err : GggError };
+    ggg_bid_submit : shared BidSubmitArgs -> async {
+        #Ok : Bid;
+        #Err : GggError;
+      };
+    ggg_bid_withdraw : shared BidWithdrawArgs -> async {
+        #Ok : Bid;
+        #Err : GggError;
+      };
+    ggg_bids_reveal : shared BidsRevealArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_budget_amend : shared BudgetAmendArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_budget_draft : shared BudgetDraftArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_budget_propose : shared Text -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_case_assign : shared CaseAssignArgs -> async {
+        #Ok : Case;
+        #Err : GggError;
+      };
+    ggg_codex_install : shared CodexSource -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_codex_revert : shared () -> async { #Ok : Governed; #Err : GggError };
     /// §11
     ggg_codex_status : shared query ListArgs -> async {
         #Ok : CodexView;
+        #Err : GggError;
+      };
+    ggg_codex_uninstall : shared () -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     ggg_contract_create : shared ContractCreateArgs -> async {
@@ -1116,6 +1675,18 @@ module {
         #Ok : Contract;
         #Err : GggError;
       };
+    ggg_court_create : shared CourtCreateArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_credential_issue : shared CredentialIssueArgs -> async {
+        #Ok : CredentialIssued;
+        #Err : GggError;
+      };
+    ggg_credential_revoke : shared CredentialRevokeArgs -> async {
+        #Ok : Nat;
+        #Err : GggError;
+      };
     ggg_credential_verify : shared query CredentialVerifyArgs -> async {
         #Ok : CredentialCheck;
         #Err : GggError;
@@ -1124,9 +1695,22 @@ module {
         #Ok : PrincipalPage;
         #Err : GggError;
       };
+    ggg_crypto_derive_key : shared Blob -> async {
+        #Ok : Blob;
+        #Err : GggError;
+      };
     /// §13
     ggg_crypto_envelope : shared query Text -> async {
         #Ok : ?KeyEnvelope;
+        #Err : GggError;
+      };
+    ggg_crypto_grant : shared KeyGrantArgs -> async {
+        #Ok : Nat;
+        #Err : GggError;
+      };
+    ggg_crypto_public_key : shared () -> async { #Ok : Blob; #Err : GggError };
+    ggg_crypto_revoke : shared KeyRevokeArgs -> async {
+        #Ok : Nat;
         #Err : GggError;
       };
     ggg_crypto_scopes : shared query ListArgs -> async {
@@ -1165,6 +1749,22 @@ module {
         #Ok : Chart;
         #Err : GggError;
       };
+    ggg_department_create : shared DepartmentCreateArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_department_delete : shared Text -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_department_edit : shared DepartmentEditArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_department_expel : shared ExpelArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
     /// §3
     ggg_department_get : shared query GetArgs -> async {
         #Ok : ?DepartmentDetail;
@@ -1172,6 +1772,18 @@ module {
       };
     ggg_department_list : shared query ListArgs -> async {
         #Ok : DepartmentPage;
+        #Err : GggError;
+      };
+    ggg_department_set_policy : shared DepartmentPolicyArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_dispute_accept : shared DisputeAcceptArgs -> async {
+        #Ok : Case;
+        #Err : GggError;
+      };
+    ggg_dispute_file : shared DisputeFileArgs -> async {
+        #Ok : Dispute;
         #Err : GggError;
       };
     /// §8
@@ -1183,6 +1795,18 @@ module {
         #Ok : DisputePage;
         #Err : GggError;
       };
+    ggg_dispute_reject : shared Text -> async {
+        #Ok : Dispute;
+        #Err : GggError;
+      };
+    ggg_dispute_withdraw : shared DisputeWithdrawArgs -> async {
+        #Ok : Dispute;
+        #Err : GggError;
+      };
+    ggg_document_delete : shared DocumentDeleteArgs -> async {
+        #Ok : DocumentDeleted;
+        #Err : GggError;
+      };
     ggg_document_get : shared query Text -> async {
         #Ok : ?DocumentAccess;
         #Err : GggError;
@@ -1191,8 +1815,60 @@ module {
         #Ok : DocumentPage;
         #Err : GggError;
       };
+    ggg_document_revoke : shared DocumentRevokeArgs -> async {
+        #Ok : Nat;
+        #Err : GggError;
+      };
+    ggg_document_share : shared DocumentShareArgs -> async {
+        #Ok : Nat;
+        #Err : GggError;
+      };
+    ggg_document_store : shared DocumentStoreArgs -> async {
+        #Ok : DocumentStored;
+        #Err : GggError;
+      };
+    ggg_enforcement_escalate : shared EnforcementArgs -> async {
+        #Ok : Notification;
+        #Err : GggError;
+      };
+    ggg_enforcement_notify : shared EnforcementNotifyArgs -> async {
+        #Ok : Notification;
+        #Err : GggError;
+      };
+    ggg_enforcement_record : shared EnforcementArgs -> async {
+        #Ok : Event;
+        #Err : GggError;
+      };
     ggg_events : shared query ListArgs -> async {
         #Ok : EventPage;
+        #Err : GggError;
+      };
+    ggg_evidence_evaluate : shared EvidenceEvaluateArgs -> async {
+        #Ok : Bool;
+        #Err : GggError;
+      };
+    ggg_evidence_submit : shared EvidenceSubmitArgs -> async {
+        #Ok : Text;
+        #Err : GggError;
+      };
+    ggg_federal_vote_cancel : shared Text -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_federal_vote_finalize : shared Text -> async {
+        #Ok : FederalVote;
+        #Err : GggError;
+      };
+    ggg_federal_vote_propose : shared FederalVoteProposeArgs -> async {
+        #Ok : FederalVote;
+        #Err : GggError;
+      };
+    ggg_federation_message : shared FederationMessageArgs -> async {
+        #Ok : ?Value;
+        #Err : GggError;
+      };
+    ggg_fund_create : shared FundCreateArgs -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     ggg_governance_update : shared GovernanceUpdateArgs -> async {
@@ -1216,6 +1892,27 @@ module {
         #Err : GggError;
       };
     ggg_invite_revoke : shared Text -> async { #Ok : Invite; #Err : GggError };
+    ggg_invoice_check : shared InvoiceCheckArgs -> async {
+        #Ok : Invoice;
+        #Err : GggError;
+      };
+    ggg_invoice_create : shared InvoiceCreateArgs -> async {
+        #Ok : InvoiceCreated;
+        #Err : GggError;
+      };
+    ggg_invoice_refresh : shared InvoiceRefreshArgs -> async {
+        #Ok : InvoicePage;
+        #Err : GggError;
+      };
+    ggg_judge_appoint : shared JudgeAppointArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_judge_revoke : shared Text -> async { #Ok : Governed; #Err : GggError };
+    ggg_land_freeze : shared LandFreezeArgs -> async {
+        #Ok : Land;
+        #Err : GggError;
+      };
     /// §6
     ggg_land_list : shared query LandListArgs -> async {
         #Ok : LandPage;
@@ -1225,13 +1922,46 @@ module {
         #Ok : LandMap;
         #Err : GggError;
       };
+    ggg_land_mint_nft : shared LandMintArgs -> async {
+        #Ok : Nat;
+        #Err : GggError;
+      };
+    ggg_land_register : shared LandRegisterArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_land_transfer : shared LandTransferArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_land_unfreeze : shared Text -> async { #Ok : Land; #Err : GggError };
     ggg_ledger_view : shared query LedgerArgs -> async {
         #Ok : LedgerPage;
+        #Err : GggError;
+      };
+    ggg_license_apply : shared LicenseApplyArgs -> async {
+        #Ok : License;
+        #Err : GggError;
+      };
+    ggg_license_decide : shared LicenseDecideArgs -> async {
+        #Ok : License;
         #Err : GggError;
       };
     /// §7
     ggg_license_list : shared query LicenseListArgs -> async {
         #Ok : LicensePage;
+        #Err : GggError;
+      };
+    ggg_license_renew : shared LicenseRenewArgs -> async {
+        #Ok : License;
+        #Err : GggError;
+      };
+    ggg_license_revoke : shared Text -> async {
+        #Ok : License;
+        #Err : GggError;
+      };
+    ggg_license_suspend : shared LicenseSuspendArgs -> async {
+        #Ok : License;
         #Err : GggError;
       };
     ggg_license_verify : shared query LicenseVerifyArgs -> async {
@@ -1250,8 +1980,24 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
+    ggg_nft_token_register : shared NFTTokenRegisterArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
     ggg_notification_list : shared query NotificationListArgs -> async {
         #Ok : NotificationPage;
+        #Err : GggError;
+      };
+    ggg_notification_read : shared NotificationReadArgs -> async {
+        #Ok : NotificationsRead;
+        #Err : GggError;
+      };
+    ggg_notification_send : shared NotificationSendArgs -> async {
+        #Ok : Notification;
+        #Err : GggError;
+      };
+    ggg_organization_edit : shared OrganizationEditArgs -> async {
+        #Ok : Organization;
         #Err : GggError;
       };
     ggg_organization_get : shared query GetArgs -> async {
@@ -1260,6 +2006,47 @@ module {
       };
     ggg_organization_list : shared query OrganizationListArgs -> async {
         #Ok : OrganizationPage;
+        #Err : GggError;
+      };
+    ggg_organization_register : shared OrganizationRegisterArgs -> async {
+        #Ok : Organization;
+        #Err : GggError;
+      };
+    ggg_organization_set_status : shared OrganizationStatusArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_payment_account_add : shared PaymentAccountAddArgs -> async {
+        #Ok : PaymentAccount;
+        #Err : GggError;
+      };
+    ggg_payment_account_remove : shared PaymentAccountRemoveArgs -> async {
+        #Ok : PaymentAccount;
+        #Err : GggError;
+      };
+    ggg_payroll_run : shared PayrollRunArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_penalty_execute : shared PenaltyExecuteArgs -> async {
+        #Ok : Penalty;
+        #Err : GggError;
+      };
+    ggg_period_close : shared Text -> async { #Ok : Governed; #Err : GggError };
+    ggg_period_open : shared PeriodOpenArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_position_close : shared Text -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_position_create : shared PositionCreateArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_position_edit : shared PositionEditArgs -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     ggg_private_data_update : shared Blob -> async {
@@ -1311,9 +2098,42 @@ module {
         #Ok : Proposal;
         #Err : GggError;
       };
+    ggg_quarter_configure : shared QuarterConfigureArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_quarter_deregister : shared Text -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
     /// §10
     ggg_quarter_directory : shared query ListArgs -> async {
         #Ok : QuarterDirectory;
+        #Err : GggError;
+      };
+    ggg_quarter_join_federation : shared JoinFederationArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_quarter_register : shared QuarterRegisterArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_quarter_secede : shared () -> async { #Ok : Governed; #Err : GggError };
+    ggg_realm_configure : shared RealmConfigureArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_realm_configure_branding : shared BrandingArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_realm_configure_tokens : shared TokensArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_realm_configure_trust_policy : shared TrustPolicyArgs -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     /// §12
@@ -1322,8 +2142,28 @@ module {
         #Ok : UserEntry;
         #Err : GggError;
       };
+    ggg_realm_register : shared RealmRegisterArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_realm_upgrade : shared RealmUpgradeArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_report_issue : shared ReportIssueArgs -> async {
+        #Ok : FinancialReport;
+        #Err : GggError;
+      };
     ggg_report_view : shared query ReportArgs -> async {
         #Ok : ReportPage;
+        #Err : GggError;
+      };
+    ggg_representative_add : shared RepresentativeAddArgs -> async {
+        #Ok : Appointment;
+        #Err : GggError;
+      };
+    ggg_representative_remove : shared Text -> async {
+        #Ok : Appointment;
         #Err : GggError;
       };
     ggg_resolution_query : shared query ResolutionQueryArgs -> async {
@@ -1338,6 +2178,45 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
+    ggg_self_change_quarter : shared ChangeQuarterArgs -> async {
+        #Ok : Forward;
+        #Err : GggError;
+      };
+    ggg_setup_launch : shared () -> async { #Ok : Realm; #Err : GggError };
+    ggg_setup_state : shared () -> async { #Ok : SetupState; #Err : GggError };
+    ggg_setup_step : shared SetupStep -> async {
+        #Ok : SetupState;
+        #Err : GggError;
+      };
+    ggg_tax_assess : shared TaxAssessArgs -> async {
+        #Ok : TaxAssessPage;
+        #Err : GggError;
+      };
+    ggg_tax_declare : shared TaxDeclareArgs -> async {
+        #Ok : TaxDeclared;
+        #Err : GggError;
+      };
+    ggg_tax_policy_draft : shared TaxPolicyDraftArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_tax_policy_propose : shared Text -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_tender_award : shared TenderAwardArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_tender_cancel : shared Text -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_tender_close : shared Text -> async { #Ok : Governed; #Err : GggError };
+    ggg_tender_create : shared TenderCreateArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
     ggg_tender_get : shared query GetArgs -> async {
         #Ok : ?TenderDetail;
         #Err : GggError;
@@ -1345,6 +2224,31 @@ module {
     /// §9
     ggg_tender_list : shared query TenderListArgs -> async {
         #Ok : TenderPage;
+        #Err : GggError;
+      };
+    ggg_tender_open : shared Text -> async { #Ok : Governed; #Err : GggError };
+    ggg_token_force_transfer : shared ForceTransferArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_token_freeze : shared FreezeArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_token_register : shared TokenRegisterArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_transfer_create : shared TransferCreateArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_transfer_revert : shared TransferRevertArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_treasury_configure : shared TreasuryConfigureArgs -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     /// §5
@@ -1381,6 +2285,28 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
+    ggg_verdict_draft : shared VerdictDraftArgs -> async {
+        #Ok : Verdict;
+        #Err : GggError;
+      };
+    ggg_verdict_finalize : shared Text -> async {
+        #Ok : Verdict;
+        #Err : GggError;
+      };
+    ggg_verdict_issue : shared Text -> async { #Ok : Verdict; #Err : GggError };
+    ggg_verdict_link_contract : shared VerdictContractArgs -> async {
+        #Ok : Verdict;
+        #Err : GggError;
+      };
+    ggg_verdict_modify_terms : shared VerdictTermsArgs -> async {
+        #Ok : Verdict;
+        #Err : GggError;
+      };
+    ggg_zone_clear : shared ZoneClearArgs -> async {
+        #Ok : Zone;
+        #Err : GggError;
+      };
+    ggg_zone_set : shared ZoneSetArgs -> async { #Ok : Zone; #Err : GggError };
     icrc10_supported_standards : shared query () -> async [
         { url : Text; name : Text }
       ];

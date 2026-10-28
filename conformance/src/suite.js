@@ -206,7 +206,18 @@ function listTable(actor) {
     list('ggg_resolution_query', () => (a) => actor.ggg_resolution_query({ ...a, since: [], court: [], search: [] })),
     list('ggg_tender_list', () => (a) => actor.ggg_tender_list({ ...a, status: [] })),
     list('ggg_quarter_directory', () => (a) => actor.ggg_quarter_directory(a)),
-    list('ggg_codex_status (history)', () => (a) => actor.ggg_codex_status(a), 'history'),
+    list('ggg_codex_status (history)', () => async (a) => {
+      const result = await actor.ggg_codex_status(a);
+      if ('Ok' in result) {
+        const checksum = opt(result.Ok.checksum);
+        assert(checksum === null || /^sha256:[0-9a-f]{64}$/.test(checksum), `active codex checksum "${checksum}" is not sha256:<hex>`);
+      }
+      return result;
+    }, 'history', (items) => {
+      for (const checksum of items) {
+        assert(/^sha256:[0-9a-f]{64}$/.test(checksum), `codex history checksum "${checksum}" is not sha256:<hex>`);
+      }
+    }),
     list('ggg_notification_list', () => (a) =>
       actor.ggg_notification_list({ ...a, recipient: [], unread: [], on_behalf_of: [] })),
     list('ggg_events', () => (a) => actor.ggg_events(a)),
@@ -234,50 +245,30 @@ const getTable = (actor) => [
   ['ggg_document_get', (id) => actor.ggg_document_get(id)],
 ];
 
-/** Arguments for every update method, which a compliant canister refuses to an anonymous caller. */
-export function updateTable(proposal) {
-  const nobody = Principal.anonymous();
-  const span = { starts_at: [], expires_at: 0n, label: '', description: '' };
-  const args = {
-    ggg_realm_join: { code: [], nickname: [] },
-    ggg_profile_update: { nickname: [], avatar: [], on_behalf_of: [] },
-    ggg_private_data_update: new Uint8Array(),
-    ggg_user_add: { user: nobody, nickname: [], department: [] },
-    ggg_user_import: { users: [], department: [] },
-    ggg_user_edit: { user: nobody, nickname: [], avatar: [], home_quarter: [] },
-    ggg_user_set_status: { user: nobody, status: { Active: null }, department: [] },
-    ggg_user_remove: { user: nobody, department: [] },
-    ggg_identity_submit: { kind: 'email', issuer: [], ref: UNKNOWN, on_behalf_of: [] },
-    ggg_identity_review: { identity: UNKNOWN, status: { Rejected: null } },
-    ggg_invite_create: { profile: [], department: [], position: [], code: [], max_uses: [], expires_at: [] },
-    ggg_invite_revoke: UNKNOWN,
-    ggg_profile_create: { profile: UNKNOWN, description: '', allowed_to: [], department: [] },
-    ggg_profile_edit: { profile: UNKNOWN, description: [], allowed_to: [], department: [] },
-    ggg_role_assign: { user: nobody, profile: UNKNOWN, department: [] },
-    ggg_role_revoke: { user: nobody, profile: UNKNOWN, department: [] },
-    ggg_delegation_grant: { delegate: nobody, scope: [], ...span },
-    ggg_delegation_accept: UNKNOWN,
-    ggg_delegation_revoke: UNKNOWN,
-    ggg_delegation_request: { grantor: nobody, scope: [], ...span },
-    ggg_delegation_request_decide: { request: UNKNOWN, approve: false, scope: [], expires_at: [] },
-    ggg_proposal_create: { title: 'anonymous', description: '', department: [], action: { Motion: null }, on_behalf_of: [] },
-    ggg_proposal_vote: { proposal, choice: { Yes: null }, on_behalf_of: [] },
-    ggg_proposal_withdraw: { proposal, on_behalf_of: [] },
-    ggg_proposal_open: proposal,
-    ggg_proposal_finalize: proposal,
-    ggg_proposal_execute: proposal,
-    ggg_mandate_create: {
-      title: UNKNOWN, scope: { Map: [] }, max_value: [], symbol: [], executor: [], expires_at: [],
-    },
-    ggg_mandate_revoke: { mandate: UNKNOWN },
-    ggg_mandate_assign_executor: { mandate: UNKNOWN, executor: UNKNOWN },
-    ggg_contract_create: {
-      title: UNKNOWN, parties: [], mandate: [], value: 0n, symbol: '', terms_ref: '', terms_hash: '', starts_at: [], ends_at: [],
-    },
-    ggg_contract_terminate: UNKNOWN,
-    ggg_governance_update: { voting_window: [], voting_threshold: [], voting_quorum: [] },
-  };
-  return Object.entries(args);
+/** Update methods any caller may use, so the anonymous check skips them. */
+export const PUBLIC_UPDATES = new Set(['ggg_federal_vote_finalize']);
+
+/** A value of the type that decodes, with nothing in it: empty options and lists, zeros, the first variant. */
+function blank(type) {
+  if (type instanceof IDL.RecClass) return blank(type.getType());
+  if (type instanceof IDL.TupleClass) return type._components.map(blank);
+  if (type instanceof IDL.RecordClass) return Object.fromEntries(type._fields.map(([k, t]) => [k, blank(t)]));
+  if (type instanceof IDL.VariantClass) return { [type._fields[0][0]]: blank(type._fields[0][1]) };
+  if (type instanceof IDL.OptClass || type instanceof IDL.VecClass) return [];
+  if (type instanceof IDL.TextClass) return UNKNOWN;
+  if (type instanceof IDL.NatClass || type instanceof IDL.IntClass) return 0n;
+  if (type instanceof IDL.FixedNatClass || type instanceof IDL.FixedIntClass) return type._bits > 32 ? 0n : 0;
+  if (type instanceof IDL.BoolClass) return false;
+  if (type instanceof IDL.PrincipalClass) return Principal.anonymous();
+  if (type instanceof IDL.FloatClass) return 0;
+  return null;
+}
+
+/** Every update method of ggg.did, with blank arguments. */
+export function updateTable() {
+  return idlFactory({ IDL })
+    ._fields.filter(([name, fn]) => name.startsWith('ggg_') && !fn.annotations.includes('query'))
+    .map(([name, fn]) => [name, fn.argTypes.map(blank)]);
 }
 
 /**
@@ -482,8 +473,8 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
 
   await check('GGG', 'W1', 'every update refuses an anonymous caller', async () => {
     needWrites();
-    const updates = updateTable(proposals[0]?.id ?? NO_PROPOSAL);
-    for (const [method, args] of updates) err(await anon[method](args), ['Unauthenticated'], method);
+    const updates = updateTable().filter(([method]) => !PUBLIC_UPDATES.has(method));
+    for (const [method, args] of updates) err(await anon[method](...args), ['Unauthenticated'], method);
     return `${updates.length} updates`;
   });
 
@@ -566,17 +557,22 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
   await check('GGG', 'W9', 'acting on behalf of someone without their delegation returns Forbidden', async () => {
     needMember();
     const forStranger = [Ed25519KeyIdentity.generate().getPrincipal()];
-    const delegable = [
+    const real = [
       ['ggg_proposal_create', motion('no delegation', { on_behalf_of: forStranger })],
       ['ggg_profile_update', { nickname: ['GGG conformance'], avatar: [], on_behalf_of: forStranger }],
-      ['ggg_identity_submit', { kind: 'email', issuer: [], ref: UNKNOWN, on_behalf_of: forStranger }],
     ];
     if (created) {
-      delegable.push(['ggg_proposal_vote', { ...vote(created.id, 'Yes'), on_behalf_of: forStranger }]);
-      delegable.push(['ggg_proposal_withdraw', { proposal: created.id, on_behalf_of: forStranger }]);
+      real.push(['ggg_proposal_vote', { ...vote(created.id, 'Yes'), on_behalf_of: forStranger }]);
+      real.push(['ggg_proposal_withdraw', { proposal: created.id, on_behalf_of: forStranger }]);
     }
-    for (const [method, args] of delegable) err(await mine[method](args), ['Forbidden'], `${method}(on_behalf_of a stranger)`);
-    return `${delegable.length} delegable updates`;
+    for (const [method, args] of real) err(await mine[method](args), ['Forbidden'], `${method}(on_behalf_of a stranger)`);
+    // With blank arguments, a GOS may find the arguments wrong before it checks the delegation.
+    const delegable = updateTable().filter(([method, [args]]) => args?.on_behalf_of && !real.some(([m]) => m === method));
+    for (const [method, [args]] of delegable) {
+      const result = await mine[method]({ ...args, on_behalf_of: forStranger });
+      err(result, ['Forbidden', 'NotFound', 'InvalidArgument'], `${method}(on_behalf_of a stranger)`);
+    }
+    return `${real.length} with real arguments, ${delegable.length} more with blank ones`;
   });
 
   await check('GGG', 'W10', "the member's proposal is in the audit log", async () => {

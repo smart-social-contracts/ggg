@@ -526,9 +526,9 @@ persistent actor class GggFixture(initMembers : [Principal]) {
 
   public query func ggg_codex_status(args : T.ListArgs) : async Result<T.CodexView> {
     let signing = { agents = []; delegable = []; supervision = #Required };
-    switch (none<T.Codex>(args.cursor, args.limit)) {
+    switch (none<Text>(args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok({ codex = null; healthy = false; signing; history = items; next });
+      case (#Ok({ items; next })) #Ok({ checksum = null; healthy = false; signing; history = items; next });
     };
   };
 
@@ -598,4 +598,147 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public query func ggg_document_get(_ : Text) : async Result<?T.DocumentAccess> {
     #Ok(null);
   };
+
+  // Operations whose permission no member holds.
+
+  // §3
+  public shared ({ caller }) func ggg_department_create(_ : T.DepartmentCreateArgs) : async Result<T.Governed> { nobody(caller, "org.create") };
+  public shared ({ caller }) func ggg_department_edit(_ : T.DepartmentEditArgs) : async Result<T.Governed> { nobody(caller, "org.set_policy") };
+  public shared ({ caller }) func ggg_department_delete(_ : Text) : async Result<T.Governed> { nobody(caller, "org.set_policy") };
+  public shared ({ caller }) func ggg_department_set_policy(_ : T.DepartmentPolicyArgs) : async Result<T.Governed> { nobody(caller, "org.set_policy") };
+  public shared ({ caller }) func ggg_position_create(_ : T.PositionCreateArgs) : async Result<T.Governed> { nobody(caller, "org.manage_members") };
+  public shared ({ caller }) func ggg_position_edit(_ : T.PositionEditArgs) : async Result<T.Governed> { nobody(caller, "org.manage_members") };
+  public shared ({ caller }) func ggg_position_close(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_members") };
+  public shared ({ caller }) func ggg_appoint(_ : T.AppointArgs) : async Result<T.Governed> { nobody(caller, "org.appoint") };
+  public shared ({ caller }) func ggg_appoint_acting(_ : T.AppointArgs) : async Result<T.Governed> { nobody(caller, "org.appoint") };
+  public shared ({ caller }) func ggg_appointment_end(_ : Text) : async Result<T.Governed> { nobody(caller, "org.appoint") };
+  public shared ({ caller }) func ggg_department_expel(_ : T.ExpelArgs) : async Result<T.Governed> { nobody(caller, "org.expel") };
+  public shared ({ caller }) func ggg_authority_grant(_ : T.AuthorityGrantArgs) : async Result<T.Governed> { nobody(caller, "org.grant_authority") };
+  public shared ({ caller }) func ggg_authority_revoke(_ : Text) : async Result<T.Governed> { nobody(caller, "org.grant_authority") };
+  public shared ({ caller }) func ggg_organization_register(_ : T.OrganizationRegisterArgs) : async Result<T.Organization> { nobody(caller, "organization.add") };
+  public shared ({ caller }) func ggg_organization_edit(_ : T.OrganizationEditArgs) : async Result<T.Organization> { nobody(caller, "organization.edit") };
+  public shared ({ caller }) func ggg_representative_add(_ : T.RepresentativeAddArgs) : async Result<T.Appointment> { nobody(caller, "organization.edit") };
+  public shared ({ caller }) func ggg_representative_remove(_ : Text) : async Result<T.Appointment> { nobody(caller, "organization.edit") };
+  public shared ({ caller }) func ggg_organization_set_status(_ : T.OrganizationStatusArgs) : async Result<T.Governed> { nobody(caller, "organization.delete") };
+
+  // §5
+  public shared ({ caller }) func ggg_treasury_configure(_ : T.TreasuryConfigureArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
+  public shared ({ caller }) func ggg_token_register(_ : T.TokenRegisterArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
+  public shared ({ caller }) func ggg_nft_token_register(_ : T.NFTTokenRegisterArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
+  public shared ({ caller }) func ggg_transfer_create(_ : T.TransferCreateArgs) : async Result<T.Governed> { nobody(caller, "transfer.create") };
+  public shared ({ caller }) func ggg_transfer_revert(_ : T.TransferRevertArgs) : async Result<T.Governed> { nobody(caller, "transfer.delete") };
+  public shared ({ caller }) func ggg_invoice_create(_ : T.InvoiceCreateArgs) : async Result<T.InvoiceCreated> { nobody(caller, "treasury.manage") };
+  public shared ({ caller }) func ggg_invoice_check(_ : T.InvoiceCheckArgs) : async Result<T.Invoice> { nobody(caller, "self.invoice_refresh") };
+  public shared ({ caller }) func ggg_invoice_refresh(_ : T.InvoiceRefreshArgs) : async Result<T.InvoicePage> { nobody(caller, "invoice.refresh") };
+  public shared ({ caller }) func ggg_fund_create(_ : T.FundCreateArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_period_open(_ : T.PeriodOpenArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_period_close(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_budget_draft(_ : T.BudgetDraftArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_budget_propose(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_budget_amend(_ : T.BudgetAmendArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_allocation_rule_draft(_ : T.AllocationRuleDraftArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_allocation_rule_propose(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_payroll_run(_ : T.PayrollRunArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_report_issue(_ : T.ReportIssueArgs) : async Result<T.FinancialReport> { nobody(caller, "treasury.manage") };
+  public shared ({ caller }) func ggg_tax_policy_draft(_ : T.TaxPolicyDraftArgs) : async Result<T.Governed> { nobody(caller, "tax.manage") };
+  public shared ({ caller }) func ggg_tax_policy_propose(_ : Text) : async Result<T.Governed> { nobody(caller, "tax.manage") };
+  public shared ({ caller }) func ggg_tax_assess(_ : T.TaxAssessArgs) : async Result<T.TaxAssessPage> { nobody(caller, "tax.assess") };
+  public shared ({ caller }) func ggg_tax_declare(_ : T.TaxDeclareArgs) : async Result<T.TaxDeclared> { nobody(caller, "tax.declare") };
+  public shared ({ caller }) func ggg_payment_account_add(_ : T.PaymentAccountAddArgs) : async Result<T.PaymentAccount> { nobody(caller, "self.data_manage") };
+  public shared ({ caller }) func ggg_payment_account_remove(_ : T.PaymentAccountRemoveArgs) : async Result<T.PaymentAccount> { nobody(caller, "self.data_manage") };
+  public shared ({ caller }) func ggg_token_force_transfer(_ : T.ForceTransferArgs) : async Result<T.Governed> { nobody(caller, "token.force_transfer") };
+  public shared ({ caller }) func ggg_token_freeze(_ : T.FreezeArgs) : async Result<T.Governed> { nobody(caller, "token.force_transfer") };
+
+  // §6
+  public shared ({ caller }) func ggg_land_register(_ : T.LandRegisterArgs) : async Result<T.Governed> { nobody(caller, "nft.mint") };
+  public shared ({ caller }) func ggg_land_transfer(_ : T.LandTransferArgs) : async Result<T.Governed> { nobody(caller, "nft.force_transfer") };
+  public shared ({ caller }) func ggg_land_mint_nft(_ : T.LandMintArgs) : async Result<Nat> { nobody(caller, "nft.mint") };
+  public shared ({ caller }) func ggg_land_freeze(_ : T.LandFreezeArgs) : async Result<T.Land> { nobody(caller, "nft.freeze") };
+  public shared ({ caller }) func ggg_land_unfreeze(_ : Text) : async Result<T.Land> { nobody(caller, "nft.freeze") };
+  public shared ({ caller }) func ggg_zone_set(_ : T.ZoneSetArgs) : async Result<T.Zone> { nobody(caller, "self.data_manage") };
+  public shared ({ caller }) func ggg_zone_clear(_ : T.ZoneClearArgs) : async Result<T.Zone> { nobody(caller, "self.data_manage") };
+  public shared ({ caller }) func ggg_credential_issue(_ : T.CredentialIssueArgs) : async Result<T.CredentialIssued> { nobody(caller, "credential.sign") };
+  public shared ({ caller }) func ggg_credential_revoke(_ : T.CredentialRevokeArgs) : async Result<Nat> { nobody(caller, "credential.sign") };
+
+  // §7
+  public shared ({ caller }) func ggg_license_apply(_ : T.LicenseApplyArgs) : async Result<T.License> { nobody(caller, "license.apply") };
+  public shared ({ caller }) func ggg_license_renew(_ : T.LicenseRenewArgs) : async Result<T.License> { nobody(caller, "license.apply") };
+  public shared ({ caller }) func ggg_license_decide(_ : T.LicenseDecideArgs) : async Result<T.License> { nobody(caller, "license.issue") };
+  public shared ({ caller }) func ggg_license_suspend(_ : T.LicenseSuspendArgs) : async Result<T.License> { nobody(caller, "license.revoke") };
+  public shared ({ caller }) func ggg_license_revoke(_ : Text) : async Result<T.License> { nobody(caller, "license.revoke") };
+
+  // §8
+  public shared ({ caller }) func ggg_dispute_file(_ : T.DisputeFileArgs) : async Result<T.Dispute> { nobody(caller, "dispute.create") };
+  public shared ({ caller }) func ggg_dispute_withdraw(_ : T.DisputeWithdrawArgs) : async Result<T.Dispute> { nobody(caller, "dispute.create") };
+  public shared ({ caller }) func ggg_dispute_accept(_ : T.DisputeAcceptArgs) : async Result<T.Case> { nobody(caller, "dispute.accept") };
+  public shared ({ caller }) func ggg_dispute_reject(_ : Text) : async Result<T.Dispute> { nobody(caller, "dispute.accept") };
+  public shared ({ caller }) func ggg_case_assign(_ : T.CaseAssignArgs) : async Result<T.Case> { nobody(caller, "dispute.assign") };
+  public shared ({ caller }) func ggg_evidence_submit(_ : T.EvidenceSubmitArgs) : async Result<Text> { nobody(caller, "dispute.create") };
+  public shared ({ caller }) func ggg_evidence_evaluate(_ : T.EvidenceEvaluateArgs) : async Result<Bool> { nobody(caller, "evidence.evaluate") };
+  public shared ({ caller }) func ggg_verdict_draft(_ : T.VerdictDraftArgs) : async Result<T.Verdict> { nobody(caller, "resolution.draft") };
+  public shared ({ caller }) func ggg_verdict_issue(_ : Text) : async Result<T.Verdict> { nobody(caller, "resolution.issue") };
+  public shared ({ caller }) func ggg_verdict_finalize(_ : Text) : async Result<T.Verdict> { nobody(caller, "resolution.issue") };
+  public shared ({ caller }) func ggg_verdict_link_contract(_ : T.VerdictContractArgs) : async Result<T.Verdict> { nobody(caller, "resolution.link_contract") };
+  public shared ({ caller }) func ggg_verdict_modify_terms(_ : T.VerdictTermsArgs) : async Result<T.Verdict> { nobody(caller, "resolution.link_contract") };
+  public shared ({ caller }) func ggg_appeal_file(_ : T.AppealFileArgs) : async Result<T.Appeal> { nobody(caller, "dispute.create") };
+  public shared ({ caller }) func ggg_appeal_decide(_ : T.AppealDecideArgs) : async Result<T.Appeal> { nobody(caller, "appeal.allow") };
+  public shared ({ caller }) func ggg_penalty_execute(_ : T.PenaltyExecuteArgs) : async Result<T.Penalty> { nobody(caller, "fine.apply") };
+  public shared ({ caller }) func ggg_enforcement_record(_ : T.EnforcementArgs) : async Result<T.Event> { nobody(caller, "enforcement.record") };
+  public shared ({ caller }) func ggg_enforcement_escalate(_ : T.EnforcementArgs) : async Result<T.Notification> { nobody(caller, "enforcement.record") };
+  public shared ({ caller }) func ggg_enforcement_notify(_ : T.EnforcementNotifyArgs) : async Result<T.Notification> { nobody(caller, "enforcement.record") };
+  public shared ({ caller }) func ggg_court_create(_ : T.CourtCreateArgs) : async Result<T.Governed> { nobody(caller, "org.create") };
+  public shared ({ caller }) func ggg_judge_appoint(_ : T.JudgeAppointArgs) : async Result<T.Governed> { nobody(caller, "org.create") };
+  public shared ({ caller }) func ggg_judge_revoke(_ : Text) : async Result<T.Governed> { nobody(caller, "org.create") };
+
+  // §9
+  public shared ({ caller }) func ggg_tender_create(_ : T.TenderCreateArgs) : async Result<T.Governed> { nobody(caller, "tender.manage") };
+  public shared ({ caller }) func ggg_tender_open(_ : Text) : async Result<T.Governed> { nobody(caller, "tender.manage") };
+  public shared ({ caller }) func ggg_tender_close(_ : Text) : async Result<T.Governed> { nobody(caller, "tender.manage") };
+  public shared ({ caller }) func ggg_tender_cancel(_ : Text) : async Result<T.Governed> { nobody(caller, "tender.manage") };
+  public shared ({ caller }) func ggg_bid_submit(_ : T.BidSubmitArgs) : async Result<T.Bid> { nobody(caller, "bid.submit") };
+  public shared ({ caller }) func ggg_bid_withdraw(_ : T.BidWithdrawArgs) : async Result<T.Bid> { nobody(caller, "bid.submit") };
+  public shared ({ caller }) func ggg_bids_reveal(_ : T.BidsRevealArgs) : async Result<T.Governed> { nobody(caller, "tender.manage") };
+  public shared ({ caller }) func ggg_bid_score(_ : T.BidScoreArgs) : async Result<T.Bid> { nobody(caller, "bid.evaluate") };
+  public shared ({ caller }) func ggg_tender_award(_ : T.TenderAwardArgs) : async Result<T.Governed> { nobody(caller, "tender.manage") };
+
+  // §10
+  public shared ({ caller }) func ggg_quarter_register(_ : T.QuarterRegisterArgs) : async Result<T.Governed> { nobody(caller, "quarter.register") };
+  public shared ({ caller }) func ggg_quarter_deregister(_ : Text) : async Result<T.Governed> { nobody(caller, "quarter.register") };
+  public shared ({ caller }) func ggg_quarter_configure(_ : T.QuarterConfigureArgs) : async Result<T.Governed> { nobody(caller, "quarter.register") };
+  public shared ({ caller }) func ggg_quarter_secede() : async Result<T.Governed> { nobody(caller, "quarter.secede") };
+  public shared ({ caller }) func ggg_quarter_join_federation(_ : T.JoinFederationArgs) : async Result<T.Governed> { nobody(caller, "quarter.join_federation") };
+  public shared ({ caller }) func ggg_self_change_quarter(_ : T.ChangeQuarterArgs) : async Result<T.Forward> { nobody(caller, "self.change_quarter") };
+  public shared ({ caller }) func ggg_federal_vote_propose(_ : T.FederalVoteProposeArgs) : async Result<T.FederalVote> { nobody(caller, "federal_vote.propose") };
+  public shared ({ caller }) func ggg_federal_vote_cancel(_ : Text) : async Result<T.Governed> { nobody(caller, "federal_vote.manage") };
+  public shared func ggg_federal_vote_finalize(_ : Text) : async Result<T.FederalVote> { #Err(#NotFound) };
+  public shared ({ caller }) func ggg_federation_message(_ : T.FederationMessageArgs) : async Result<?T.Value> { nobody(caller, "quarter.sync") };
+
+  // §11
+  public shared ({ caller }) func ggg_codex_install(_ : T.CodexSource) : async Result<T.Governed> { nobody(caller, "codex.install") };
+  public shared ({ caller }) func ggg_codex_uninstall() : async Result<T.Governed> { nobody(caller, "codex.install") };
+  public shared ({ caller }) func ggg_codex_revert() : async Result<T.Governed> { nobody(caller, "codex.install") };
+  public shared ({ caller }) func ggg_notification_read(_ : T.NotificationReadArgs) : async Result<T.NotificationsRead> { nobody(caller, "self.data_manage") };
+  public shared ({ caller }) func ggg_notification_send(_ : T.NotificationSendArgs) : async Result<T.Notification> { nobody(caller, "notification.send") };
+
+  // §12
+  public shared ({ caller }) func ggg_setup_state() : async Result<T.SetupState> { nobody(caller, "realm.configure") };
+  public shared ({ caller }) func ggg_setup_step(_ : T.SetupStep) : async Result<T.SetupState> { nobody(caller, "realm.configure") };
+  public shared ({ caller }) func ggg_setup_launch() : async Result<T.Realm> { nobody(caller, "realm.configure") };
+  public shared ({ caller }) func ggg_realm_configure(_ : T.RealmConfigureArgs) : async Result<T.Governed> { nobody(caller, "realm.configure") };
+  public shared ({ caller }) func ggg_realm_configure_branding(_ : T.BrandingArgs) : async Result<T.Governed> { nobody(caller, "realm.configure.branding") };
+  public shared ({ caller }) func ggg_realm_configure_tokens(_ : T.TokensArgs) : async Result<T.Governed> { nobody(caller, "realm.configure.tokens") };
+  public shared ({ caller }) func ggg_realm_configure_trust_policy(_ : T.TrustPolicyArgs) : async Result<T.Governed> { nobody(caller, "realm.configure.trust_policy") };
+  public shared ({ caller }) func ggg_realm_register(_ : T.RealmRegisterArgs) : async Result<T.Governed> { nobody(caller, "realm.register") };
+  public shared ({ caller }) func ggg_realm_upgrade(_ : T.RealmUpgradeArgs) : async Result<T.Governed> { nobody(caller, "realm.upgrade") };
+
+  // §13
+  public shared ({ caller }) func ggg_crypto_public_key() : async Result<Blob> { nobody(caller, "self.data_manage") };
+  public shared ({ caller }) func ggg_crypto_derive_key(_ : Blob) : async Result<Blob> { nobody(caller, "self.data_manage") };
+  public shared ({ caller }) func ggg_crypto_grant(_ : T.KeyGrantArgs) : async Result<Nat> { nobody(caller, "self.data_manage") };
+  public shared ({ caller }) func ggg_crypto_revoke(_ : T.KeyRevokeArgs) : async Result<Nat> { nobody(caller, "self.data_manage") };
+  public shared ({ caller }) func ggg_document_store(_ : T.DocumentStoreArgs) : async Result<T.DocumentStored> { nobody(caller, "document.manage") };
+  public shared ({ caller }) func ggg_document_share(_ : T.DocumentShareArgs) : async Result<Nat> { nobody(caller, "document.manage") };
+  public shared ({ caller }) func ggg_document_revoke(_ : T.DocumentRevokeArgs) : async Result<Nat> { nobody(caller, "document.manage") };
+  public shared ({ caller }) func ggg_document_delete(_ : T.DocumentDeleteArgs) : async Result<T.DocumentDeleted> { nobody(caller, "document.manage") };
+
 };

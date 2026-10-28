@@ -90,6 +90,9 @@ method per operation:
   any record it created, or `Proposed` with the id of the proposal it filed. The proposal's action is
   the same call, `Call { method; arg }`, and replaying it applies the change. A `delegable` operation
   takes `on_behalf_of : opt principal`.
+- **Codex.** A method never returns a `Codex`. It returns that codex's checksum, `sha256:<64 hex digits>`.
+  `ggg_codex_status` returns the active checksum (absent when none is installed), whether it is
+  healthy, the signing policy, and a page of earlier checksums.
 - **Lists.** Arguments `cursor : opt text` and `limit : opt nat32`; replies one page of the list
   (`items`, or a named field such as a proposal's `votes`) and `next : opt text`. Pages fit the
   Internet Computer's limits, are never empty when `next` is set, and walk every record exactly once
@@ -102,9 +105,9 @@ method per operation:
   [ICRC-21](https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md),
   so wallets can show what a member signs.
 
-Every entity is in `ggg.did`. Of the operations, it binds every `read` operation except `me`,
-`my_invoices`, `status`, `version`, `token_catalog`, `scale_status`, `join_targets`, `realm_monitor` and
-`realm_export`, and the updates of identity (§2) and governance (§4); the rest follow. The
+Every entity and operation is in `ggg.did`, except twelve operations still under review: `me`,
+`my_invoices`, `status`, `version`, `token_catalog`, `join_targets`, `scale_status`, `quarter_sync`,
+`quarter_report`, `realm_configure_infrastructure`, `realm_monitor` and `realm_export`. The
 [conformance suite](../conformance/README.md) checks a canister against it.
 
 ### Versions
@@ -562,7 +565,7 @@ A realm can be one canister or a federation of quarters, one of which is the cap
 | `Registry` | `id` (name), `description`, `principal_id` | A registry canister the realm is listed in. | `realm-registry`, `ufxgi-…` |
 | `Quarter` | `id` (canister id), `name`, `index`, `status`, `population`, `codex_id`, `codex_version`, `last_sync`, `last_activity_at` | Known on the capital. | North: population 1,240, `active`, codex agora 1.4.2 |
 | `Forward` | `id`, `subject` (`Entity:id`), `origin`, `destination`, `moved_at`, `signature` | Signed pointer left when a user moves quarter. | Bob moved North → South on 2026-09-01, signed by North |
-| `FederalVote` | `id`, `origin_quarter`, `action` (Json), `rule` (Json), `hash`, `deadline`, `status`, `tally` (Json) | | `FV-3` Adopt tax policy 3: majority of quarters, deadline 15 Nov |
+| `FederalVote` | `id`, `title`, `origin_quarter`, `action` (one operation call, as a proposal's), `rule` (Json), `hash`, `deadline`, `status`, `tally` (Json) | | `FV-3` Adopt tax policy 3: majority of quarters, deadline 15 Nov |
 | `FederalVoteLeg` | `id`, `vote` → `FederalVote`, `quarter`, `proposal_id`, `outcome`, `yes`, `no`, `abstain`, `eligible`, `status`, `hash` | One per quarter. | North on `FV-3`: 812 yes, 301 no of 1,240 eligible → passed |
 | `FederationMessage` | `id`, `topic`, `source`, `body` (Json), `response` (Json) | | North → capital: population report |
 
@@ -606,7 +609,7 @@ whole federation.
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Codex` | `id` (`name@version`), `version`, `checksum`, `status` (`active`, `inactive`, `reverted`), `manifest` (Json, including the signing policy), `capabilities` (Json: operation names), `source` (its code), `installed_at`, `previous` → `Codex` | The realm's policy package. At most one is `active`. | `agora@1.4.2`, `active`, capabilities `[invoice_create, notification_send, …]` |
+| `Codex` | `id` (`name@version`), `version`, `checksum`, `status` (`active`, `inactive`, `reverted`), `manifest` (Json, including the signing policy), `capabilities` (Json: operation names), `source` (its code), `installed_at`, `previous` → `Codex` | The realm's policy package. At most one is `active`. Methods return its `checksum` (`sha256:<hex>`), never this record. | `agora@1.4.2`, checksum `sha256:4be1…` |
 | `Notification` | `id`, `recipient` (`Entity:id`: user, department or organization), `topic`, `title`, `body`, `href`, `sender`, `visibility`, `read_by` (Json), `at` | | To Alice: "P-7 passed", link `/proposals/P-7` |
 | `Event` | `id`, `op`, `user`, `by` (the delegate, when delegated), `agent` (the caller acted as an agent), `supervisor` (that agent's supervisor), `origin`, `args` (Json, secrets stripped), `result` (Json), `at` | The audit log. Append-only. | `proposal_vote` by `claude-conn` for `alice` at 09:31 → ok |
 
@@ -629,7 +632,7 @@ operations:
 
 Without an active codex, or when the section is missing, the defaults apply: only non-agents sign,
 nobody signs on another's behalf, and every agent has a supervisor. The policy changes only with the
-codex, through `codex_install`, which is governed. `codex_status` returns it.
+codex, through `codex_install`, which is governed. `codex_status` returns the active checksum and this policy.
 
 For example, Agora's codex sets `agents: [bid.evaluate]`: an evaluation agent appointed in
 Infrastructure may score bids, while `credential.sign` stays with Clinic B's physicians.
@@ -642,7 +645,7 @@ supervisor, and the grantor when delegated (I-ALL-7).
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
 | `codex_install`, `codex_uninstall`, `codex_revert` | `codex.install`, `codex.uninstall`, `codex.revert` | governed | Install agora 1.5.0 → realm-wide vote; revert to 1.4.2 if it misbehaves |
-| `codex_status` (including the signing policy) | `realm.data_view` | read | agora 1.4.2, healthy; agents may hold `bid.evaluate` |
+| `codex_status` (the active checksum, health and the signing policy; earlier checksums a page at a time) | `realm.data_view` | read | `sha256:4be1…`, healthy; agents may hold `bid.evaluate` |
 | `notification_list` (one recipient a page at a time) | `self.data_view` | read, delegable | Alice's notifications, then Civil Registry's |
 | `notification_read` (mark as read) | `self.data_manage` | delegable | Alice marks "P-7 passed" as read |
 | `notification_send` | `notification.send` | | Justice notifies Mallory of her fine |

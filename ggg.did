@@ -742,8 +742,9 @@ type FederalVoteStatus = variant { Open; Passed; Failed; Cancelled };
 
 type FederalVote = record {
   id : text;
+  title : text;
   origin_quarter : text;
-  action : Value;
+  action : ProposalAction;
   rule : Value;
   hash : text;
   deadline : Timestamp;
@@ -945,6 +946,56 @@ type OrganizationDetail = record { organization : Organization; seats : vec Seat
 type OrganizationListArgs = record { cursor : opt text; limit : opt nat32; status : opt OrganizationStatus };
 type OrganizationPage = record { items : vec Organization; next : opt text };
 
+type DepartmentCreateArgs = record { department : text; parent : opt text; description : text };
+// The parent is never the department itself or one of its sub-departments; the root has none.
+type DepartmentEditArgs = record {
+  department : text;
+  description : opt text;
+  parent : opt text;
+  head : opt variant { Set : principal; Clear };
+};
+type DepartmentPolicyArgs = record { department : text; policy : Policy };
+
+type PositionCreateArgs = record {
+  department : text;
+  position : text;
+  title : text;
+  headcount : opt nat;
+  salary : opt nat;
+  salary_period : opt Duration;
+  profile : opt text;
+};
+// Closing is position_close.
+type PositionEditArgs = record {
+  position : text;
+  status : opt variant { Open; Frozen };
+  headcount : opt nat;
+  title : opt text;
+  salary : opt nat;
+  salary_period : opt Duration;
+  profile : opt text;
+};
+
+// An agent needs a supervisor holding a non-agent seat in the same department or organization.
+type AppointArgs = record { position : text; user : principal; agent : bool; supervisor : opt principal };
+type ExpelArgs = record { department : text; user : principal };
+type AuthorityGrantArgs = record { department : text; target : Ref; operations : vec text };
+
+type OrganizationRegisterArgs = record { organization : text; description : text };
+type OrganizationEditArgs = record { organization : text; description : opt text; admins : opt vec principal };
+// Seats the user in the organization's position, creating the position if it is new.
+type RepresentativeAddArgs = record {
+  organization : text;
+  position : text;
+  user : principal;
+  agent : bool;
+  supervisor : opt principal;
+  title : opt text;
+  profile : opt text;
+  headcount : opt nat;
+};
+type OrganizationStatusArgs = record { organization : text; status : OrganizationStatus };
+
 // §4
 
 // The proposal, and its votes a page at a time.
@@ -1025,6 +1076,99 @@ type LedgerPage = record { items : vec LedgerEntry; next : opt text };
 type ReportArgs = record { id : opt text; cursor : opt text; limit : opt nat32 };
 type ReportPage = record { items : vec FinancialReport; next : opt text };
 
+// An ICRC-1 account.
+type Account = record { owner : principal; subaccount : opt blob };
+
+type TreasuryConfigureArgs = record {
+  epoch : opt Duration;
+  anchor_month : opt nat8;
+  source_fund : opt text;
+  auto_allocate : opt bool;
+};
+type TokenRegisterArgs = record {
+  symbol : text;
+  ledger : principal;
+  indexer : opt principal;
+  decimals : opt nat8;
+  fee : opt nat;
+};
+type NFTTokenRegisterArgs = record {
+  symbol : text;
+  canister : principal;
+  name : opt text;
+  description : opt text;
+  transferable : opt bool;
+  required_license : opt text;
+  supply_cap : opt nat;
+};
+
+// The fund must also cover the ledger fee. `symbol` defaults to the accounting currency.
+type TransferCreateArgs = record {
+  fund : text;
+  to : Ref;
+  amount : nat;
+  symbol : opt text;
+  category : opt text;
+  description : opt text;
+  contract : opt text;
+  on_behalf_of : opt principal;
+};
+type TransferRevertArgs = record { transfer : text; reason : opt text };
+
+type InvoiceCreateArgs = record {
+  payer : Ref;
+  amount : nat;
+  symbol : opt text;
+  due_at : opt Timestamp;
+  reason : opt Ref;
+};
+// The invoice, and the account to pay it into.
+type InvoiceCreated = record { invoice : Invoice; pay_to : Account };
+type InvoiceCheckArgs = record { invoice : text; on_behalf_of : opt principal };
+// One invoice, or a batch of the pending and overdue ones (at most 20 per call).
+type InvoiceRefreshArgs = record { invoice : opt text; cursor : opt text; limit : opt nat32 };
+type InvoicePage = record { items : vec Invoice; next : opt text };
+
+// `department` is the fund's owner; a department owns at most one fund.
+type FundCreateArgs = record { fund : text; name : opt text; kind : opt text; department : opt text };
+// Periods open in order: one starts no earlier than the latest ends.
+type PeriodOpenArgs = record { period : text; name : opt text; starts_at : Timestamp; ends_at : Timestamp };
+type BudgetDraftArgs = record { fund : text; period : text; category : text; kind : opt text; planned : nat };
+type BudgetAmendArgs = record { budget : text; planned : nat };
+// Shares in basis points, adding up to at most 10 000.
+type AllocationRuleDraftArgs = record { source_fund : text; rules : vec Allocation };
+// Pays each active, non-agent appointee once per period label.
+type PayrollRunArgs = record { department : text; period : text; symbol : opt text };
+type ReportIssueArgs = record { period : text; kind : opt text };
+
+type TaxPolicyDraftArgs = record { document : Value; description : opt text };
+// Bills one batch of taxpayers for the period; those already billed are skipped.
+type TaxAssessArgs = record { period : text; tax : opt text; cursor : opt text; limit : opt nat32 };
+type TaxAssessPage = record { items : vec Invoice; skipped : nat; next : opt text };
+// For the caller, or an organization they administer.
+type TaxDeclareArgs = record {
+  base : text;
+  period : text;
+  amount : nat;
+  organization : opt text;
+  on_behalf_of : opt principal;
+};
+type TaxDeclared = record { declaration : TaxDeclaration; invoice : opt Invoice };
+
+type PaymentAccountAddArgs = record {
+  network : text;
+  address : text;
+  symbol : opt text;
+  label : opt text;
+  organization : opt text;
+  on_behalf_of : opt principal;
+};
+type PaymentAccountRemoveArgs = record { account : text; organization : opt text; on_behalf_of : opt principal };
+
+// By court order.
+type ForceTransferArgs = record { symbol : text; from : principal; to : principal; amount : nat; reason : opt text };
+type FreezeArgs = record { symbol : text; account : principal; frozen : bool; reason : opt text };
+
 // §6
 
 type LandListArgs = record { cursor : opt text; limit : opt nat32; owner : opt Ref };
@@ -1037,6 +1181,39 @@ type LandMap = record { parcels : vec Land; zones : vec Zone; next : opt text };
 // The token's ggg: header as read from the ledger, and its frozen flag.
 type CredentialVerifyArgs = record { header : vec record { text; text }; frozen : bool };
 type CredentialCheck = record { valid : bool; ours : bool; licensed : bool; expired : bool; revoked : bool };
+
+// At most 16 × 16 cells, overlapping no other parcel.
+type LandRegisterArgs = record {
+  x : nat;
+  y : nat;
+  width : opt nat;
+  height : opt nat;
+  owner : Ref;
+  kind : opt text;
+  metadata : opt Value;
+};
+// Under a court order: an issued or final verdict in a case about the parcel, with `to` a party.
+type LandTransferArgs = record { land : text; to : Ref; order : text };
+type LandMintArgs = record { land : text; prepared_by : opt principal };
+type LandFreezeArgs = record { land : text; reason : opt text };
+
+// An h3 cell as the caller's home; it replaces the previous one.
+type ZoneSetArgs = record { zone : text; name : opt text; kind : opt text; on_behalf_of : opt principal };
+type ZoneClearArgs = record { zone : text; on_behalf_of : opt principal };
+
+type CredentialIssueArgs = record {
+  schema : text;
+  holder : principal;
+  organization : text;
+  subject : opt text;
+  fields : vec record { text; text };
+  payload_hash : opt text;
+  payload_ref : opt text;
+  prepared_by : opt principal;
+  expires_at : opt Timestamp;
+};
+type CredentialIssued = record { token_id : nat; header : vec record { text; text } };
+type CredentialRevokeArgs = record { schema : text; token_id : nat; organization : text; reason : text };
 
 // §7
 
@@ -1052,6 +1229,26 @@ type LicensePage = record { items : vec License; next : opt text };
 // A licence by id, or the one of `kind` that `holder` holds.
 type LicenseVerifyArgs = record { id : opt text; holder : opt Ref; kind : opt text };
 type LicenseCheck = record { valid : bool; license : opt License };
+
+// For the caller, or an organization they administer.
+type LicenseApplyArgs = record {
+  kind : text;
+  holder : opt Ref;
+  department : opt text;
+  evidence_ref : opt text;
+  conditions : opt Value;
+  on_behalf_of : opt principal;
+};
+type LicenseRenewArgs = record { license : text; evidence_ref : opt text; on_behalf_of : opt principal };
+type LicenseDecideArgs = record {
+  license : text;
+  approve : bool;
+  department : opt text;
+  expires_at : opt Timestamp;
+  conditions : opt Value;
+};
+// With `resume`, reinstates a suspended licence.
+type LicenseSuspendArgs = record { license : text; resume : bool };
 
 // §8
 
@@ -1070,6 +1267,59 @@ type ResolutionQueryArgs = record {
 type Resolution = record { verdict : Verdict; penalties : vec Penalty };
 type ResolutionPage = record { items : vec Resolution; next : opt text };
 
+type DisputeFileArgs = record {
+  title : text;
+  respondent : Ref;
+  subject : opt Ref;
+  description_ref : opt text;
+  on_behalf_of : opt principal;
+};
+type DisputeWithdrawArgs = record { dispute : text; on_behalf_of : opt principal };
+type DisputeAcceptArgs = record { dispute : text; court : text };
+type CaseAssignArgs = record { case : text; judge : text };
+type EvidenceSubmitArgs = record { case : text; ref : text; hash : text; on_behalf_of : opt principal };
+type EvidenceEvaluateArgs = record { case : text; evidence : text; admitted : bool };
+
+type PenaltyTerms = record {
+  kind : PenaltyKind;
+  target : Ref;
+  amount : opt nat;
+  symbol : opt text;
+  due_at : opt Timestamp;
+};
+type VerdictDraftArgs = record { case : text; decision : text; reasoning_ref : opt text; penalties : vec PenaltyTerms };
+type VerdictContractArgs = record { verdict : text; contract : text };
+// New penalties replace them all. Changing an issued verdict restarts its appeal window.
+type VerdictTermsArgs = record {
+  verdict : text;
+  decision : opt text;
+  reasoning_ref : opt text;
+  penalties : opt vec PenaltyTerms;
+};
+// `court` defaults to the issuing court's parent, and must rank above it.
+type AppealFileArgs = record { verdict : text; court : opt text; grounds_ref : opt text; on_behalf_of : opt principal };
+// Granting issues a new verdict that overturns the appealed one.
+type AppealDecideArgs = record {
+  appeal : text;
+  granted : bool;
+  decision : opt text;
+  reasoning_ref : opt text;
+  penalties : vec PenaltyTerms;
+};
+type PenaltyExecuteArgs = record { penalty : text; due_at : opt Timestamp };
+type EnforcementArgs = record { verdict : text; note : text };
+type EnforcementNotifyArgs = record { verdict : text; to : Ref; title : opt text; body : opt text };
+
+// `operator` is a department, or an organization holding an active court licence.
+type CourtCreateArgs = record {
+  name : text;
+  operator : Ref;
+  level : opt CourtLevel;
+  jurisdiction : opt text;
+  parent : opt text;
+};
+type JudgeAppointArgs = record { court : text; user : principal; specialization : opt text };
+
 // §9
 
 type TenderListArgs = record { cursor : opt text; limit : opt nat32; status : opt TenderStatus };
@@ -1077,9 +1327,49 @@ type TenderPage = record { items : vec Tender; next : opt text };
 // A sealed bid shows no price or score.
 type TenderDetail = record { tender : Tender; bids : vec Bid; next : opt text };
 
+// Weights in basis points, adding up to 10 000.
+type TenderCreateArgs = record {
+  requester : text;
+  title : text;
+  description : opt text;
+  opens_at : opt Timestamp;
+  closes_at : opt Timestamp;
+  rubric : vec Criterion;
+};
+// For a vendor the caller represents. `payload_hash` is the sha256 of `price:nonce`.
+type BidSubmitArgs = record {
+  tender : text;
+  vendor : text;
+  payload_ref : text;
+  payload_hash : text;
+  on_behalf_of : opt principal;
+};
+type BidWithdrawArgs = record { bid : text; on_behalf_of : opt principal };
+type BidOpening = record { bid : text; price : nat; nonce : text };
+type BidsRevealArgs = record { tender : text; openings : vec BidOpening };
+// Marks from 0 to 10 per rubric criterion; scoring again replaces the caller's marks.
+type BidScoreArgs = record { bid : text; scores : vec record { criterion : text; score : nat } };
+// `bid` defaults to the best-scored revealed bid; a lower-scored one needs a justification.
+type TenderAwardArgs = record { tender : text; bid : opt text; justification : opt text };
+
 // §10
 
 type QuarterDirectory = record { capital : opt text; items : vec Quarter; next : opt text };
+
+type QuarterRegisterArgs = record { canister : principal; name : opt text };
+type QuarterConfigureArgs = record {
+  quarter : opt text;
+  name : opt text;
+  status : opt QuarterStatus;
+  quarter_join_mode : opt text;
+  federation_codex : opt text;
+  rule : opt Value;
+};
+type JoinFederationArgs = record { capital : principal; name : opt text };
+type ChangeQuarterArgs = record { quarter : text; on_behalf_of : opt principal };
+type FederalVoteProposeArgs = record { title : text; action : ProposalAction; on_behalf_of : opt principal };
+// To quarter `to`, or by default every active quarter.
+type FederationMessageArgs = record { topic : text; body : Value; to : opt text };
 
 // §11
 
@@ -1089,12 +1379,13 @@ type SigningPolicy = record {
   supervision : variant { Required; Optional };
 };
 
-// The active codex, and the install history a page at a time.
+// The active codex and a page of earlier ones, each named by its checksum ("sha256:<hex>").
+// No method returns a Codex record.
 type CodexView = record {
-  codex : opt Codex;
+  checksum : opt text;
   healthy : bool;
   signing : SigningPolicy;
-  history : vec Codex;
+  history : vec text;
   next : opt text;
 };
 
@@ -1111,6 +1402,55 @@ type NotificationPage = record { items : vec Notification; next : opt text };
 type EventArchive = record { canister : principal; first : text; last : text };
 type EventPage = record { items : vec Event; next : opt text; archives : vec EventArchive };
 
+type CodexSource = variant {
+  Package : record { manifest : Value; source : text };
+  Registry : record { codex : text; version : text };
+};
+// One notification, or with `recipient` a page of that recipient's.
+type NotificationReadArgs = record {
+  notification : opt text;
+  recipient : opt Ref;
+  cursor : opt text;
+  limit : opt nat32;
+  on_behalf_of : opt principal;
+};
+type NotificationsRead = record { read : nat; next : opt text };
+type NotificationSendArgs = record {
+  recipient : Ref;
+  title : text;
+  body : opt text;
+  href : opt text;
+  topic : opt text;
+};
+
+// §12
+
+type RealmConfigureArgs = record {
+  name : opt text;
+  manifesto : opt text;
+  welcome_message : opt text;
+  open_registration : opt bool;
+  quarter_join_mode : opt text;
+};
+type BrandingArgs = record { logo_url : opt text; background_image_url : opt text };
+type TokensArgs = record { accounting_currency : opt text; accounting_currency_decimals : opt nat8 };
+type TrustPolicyArgs = record {
+  require_marketplace_approval : opt bool;
+  trusted_approvers : opt vec text;
+  trusted_principals : opt vec principal;
+};
+type RealmRegisterArgs = record { registry : principal; url : opt text; backend_url : opt text };
+// Accepts exactly this module, if the trust policy does.
+type RealmUpgradeArgs = record { version : text; module_hash : blob };
+
+type SetupStep = variant {
+  Realm : RealmConfigureArgs;
+  Branding : BrandingArgs;
+  Tokens : TokensArgs;
+  TrustPolicy : TrustPolicyArgs;
+};
+type SetupState = record { status : RealmStatus; founder : opt principal; done : vec text; todo : vec text };
+
 // §13
 
 type ScopePage = record { items : vec text; next : opt text };
@@ -1124,6 +1464,26 @@ type DocumentPage = record { items : vec Document; next : opt text };
 // The document's ciphertext reference, its key scope, and the caller's envelope if it has one.
 type DocumentAccess = record { document : Document; scope : text; envelope : opt KeyEnvelope };
 
+type WrappedKey = record { "principal" : principal; wrapped_dek : blob };
+// At most 500 keys or principals per call.
+type KeyGrantArgs = record { scope : text; keys : vec WrappedKey };
+type KeyRevokeArgs = record { scope : text; principals : vec principal };
+
+// Stores a new document, or replaces `document`.
+type DocumentStoreArgs = record {
+  document : opt text;
+  department : text;
+  title : text;
+  ref : text;
+  hash : text;
+  keys : vec WrappedKey;
+};
+type DocumentStored = record { document : Document; scope : text };
+type DocumentShareArgs = record { document : text; keys : vec WrappedKey };
+type DocumentRevokeArgs = record { document : text; principals : vec principal };
+// Deletes the wrapped keys `limit` at a time (at most 500), then the document: call again until `deleted`.
+type DocumentDeleteArgs = record { document : text; limit : opt nat32 };
+type DocumentDeleted = record { revoked : nat; deleted : bool };
 service : {
   icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
 
@@ -1161,6 +1521,24 @@ service : {
   ggg_department_chart : (ChartArgs) -> (variant { Ok : Chart; Err : GggError }) query;
   ggg_organization_get : (GetArgs) -> (variant { Ok : opt OrganizationDetail; Err : GggError }) query;
   ggg_organization_list : (OrganizationListArgs) -> (variant { Ok : OrganizationPage; Err : GggError }) query;
+  ggg_department_create : (DepartmentCreateArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_department_edit : (DepartmentEditArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_department_delete : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_department_set_policy : (DepartmentPolicyArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_position_create : (PositionCreateArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_position_edit : (PositionEditArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_position_close : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_appoint : (AppointArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_appoint_acting : (AppointArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_appointment_end : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_department_expel : (ExpelArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_authority_grant : (AuthorityGrantArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_authority_revoke : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_organization_register : (OrganizationRegisterArgs) -> (variant { Ok : Organization; Err : GggError });
+  ggg_organization_edit : (OrganizationEditArgs) -> (variant { Ok : Organization; Err : GggError });
+  ggg_representative_add : (RepresentativeAddArgs) -> (variant { Ok : Appointment; Err : GggError });
+  ggg_representative_remove : (text) -> (variant { Ok : Appointment; Err : GggError });
+  ggg_organization_set_status : (OrganizationStatusArgs) -> (variant { Ok : Governed; Err : GggError });
 
   // §4
   ggg_proposal_get : (GetArgs) -> (variant { Ok : opt ProposalDetail; Err : GggError }) query;
@@ -1182,35 +1560,129 @@ service : {
   ggg_treasury_view : (ListArgs) -> (variant { Ok : TreasuryView; Err : GggError }) query;
   ggg_ledger_view : (LedgerArgs) -> (variant { Ok : LedgerPage; Err : GggError }) query;
   ggg_report_view : (ReportArgs) -> (variant { Ok : ReportPage; Err : GggError }) query;
+  ggg_treasury_configure : (TreasuryConfigureArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_token_register : (TokenRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_nft_token_register : (NFTTokenRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_transfer_create : (TransferCreateArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_transfer_revert : (TransferRevertArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_invoice_create : (InvoiceCreateArgs) -> (variant { Ok : InvoiceCreated; Err : GggError });
+  ggg_invoice_check : (InvoiceCheckArgs) -> (variant { Ok : Invoice; Err : GggError });
+  ggg_invoice_refresh : (InvoiceRefreshArgs) -> (variant { Ok : InvoicePage; Err : GggError });
+  ggg_fund_create : (FundCreateArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_period_open : (PeriodOpenArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_period_close : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_budget_draft : (BudgetDraftArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_budget_propose : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_budget_amend : (BudgetAmendArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_allocation_rule_draft : (AllocationRuleDraftArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_allocation_rule_propose : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_payroll_run : (PayrollRunArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_report_issue : (ReportIssueArgs) -> (variant { Ok : FinancialReport; Err : GggError });
+  ggg_tax_policy_draft : (TaxPolicyDraftArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_tax_policy_propose : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_tax_assess : (TaxAssessArgs) -> (variant { Ok : TaxAssessPage; Err : GggError });
+  ggg_tax_declare : (TaxDeclareArgs) -> (variant { Ok : TaxDeclared; Err : GggError });
+  ggg_payment_account_add : (PaymentAccountAddArgs) -> (variant { Ok : PaymentAccount; Err : GggError });
+  ggg_payment_account_remove : (PaymentAccountRemoveArgs) -> (variant { Ok : PaymentAccount; Err : GggError });
+  ggg_token_force_transfer : (ForceTransferArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_token_freeze : (FreezeArgs) -> (variant { Ok : Governed; Err : GggError });
 
   // §6
   ggg_land_list : (LandListArgs) -> (variant { Ok : LandPage; Err : GggError }) query;
   ggg_land_map : (LandMapArgs) -> (variant { Ok : LandMap; Err : GggError }) query;
   ggg_credential_verify : (CredentialVerifyArgs) -> (variant { Ok : CredentialCheck; Err : GggError }) query;
+  ggg_land_register : (LandRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_land_transfer : (LandTransferArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_land_mint_nft : (LandMintArgs) -> (variant { Ok : nat; Err : GggError });
+  ggg_land_freeze : (LandFreezeArgs) -> (variant { Ok : Land; Err : GggError });
+  ggg_land_unfreeze : (text) -> (variant { Ok : Land; Err : GggError });
+  ggg_zone_set : (ZoneSetArgs) -> (variant { Ok : Zone; Err : GggError });
+  ggg_zone_clear : (ZoneClearArgs) -> (variant { Ok : Zone; Err : GggError });
+  ggg_credential_issue : (CredentialIssueArgs) -> (variant { Ok : CredentialIssued; Err : GggError });
+  ggg_credential_revoke : (CredentialRevokeArgs) -> (variant { Ok : nat; Err : GggError });
 
   // §7
   ggg_license_list : (LicenseListArgs) -> (variant { Ok : LicensePage; Err : GggError }) query;
   ggg_license_verify : (LicenseVerifyArgs) -> (variant { Ok : LicenseCheck; Err : GggError }) query;
+  ggg_license_apply : (LicenseApplyArgs) -> (variant { Ok : License; Err : GggError });
+  ggg_license_renew : (LicenseRenewArgs) -> (variant { Ok : License; Err : GggError });
+  ggg_license_decide : (LicenseDecideArgs) -> (variant { Ok : License; Err : GggError });
+  ggg_license_suspend : (LicenseSuspendArgs) -> (variant { Ok : License; Err : GggError });
+  ggg_license_revoke : (text) -> (variant { Ok : License; Err : GggError });
 
   // §8
   ggg_dispute_get : (DisputeGetArgs) -> (variant { Ok : opt Dispute; Err : GggError }) query;
   ggg_dispute_list_all : (DisputeListArgs) -> (variant { Ok : DisputePage; Err : GggError }) query;
   ggg_resolution_query : (ResolutionQueryArgs) -> (variant { Ok : ResolutionPage; Err : GggError }) query;
+  ggg_dispute_file : (DisputeFileArgs) -> (variant { Ok : Dispute; Err : GggError });
+  ggg_dispute_withdraw : (DisputeWithdrawArgs) -> (variant { Ok : Dispute; Err : GggError });
+  ggg_dispute_accept : (DisputeAcceptArgs) -> (variant { Ok : Case; Err : GggError });
+  ggg_dispute_reject : (text) -> (variant { Ok : Dispute; Err : GggError });
+  ggg_case_assign : (CaseAssignArgs) -> (variant { Ok : Case; Err : GggError });
+  ggg_evidence_submit : (EvidenceSubmitArgs) -> (variant { Ok : text; Err : GggError });
+  ggg_evidence_evaluate : (EvidenceEvaluateArgs) -> (variant { Ok : bool; Err : GggError });
+  ggg_verdict_draft : (VerdictDraftArgs) -> (variant { Ok : Verdict; Err : GggError });
+  ggg_verdict_issue : (text) -> (variant { Ok : Verdict; Err : GggError });
+  ggg_verdict_finalize : (text) -> (variant { Ok : Verdict; Err : GggError });
+  ggg_verdict_link_contract : (VerdictContractArgs) -> (variant { Ok : Verdict; Err : GggError });
+  ggg_verdict_modify_terms : (VerdictTermsArgs) -> (variant { Ok : Verdict; Err : GggError });
+  ggg_appeal_file : (AppealFileArgs) -> (variant { Ok : Appeal; Err : GggError });
+  ggg_appeal_decide : (AppealDecideArgs) -> (variant { Ok : Appeal; Err : GggError });
+  ggg_penalty_execute : (PenaltyExecuteArgs) -> (variant { Ok : Penalty; Err : GggError });
+  ggg_enforcement_record : (EnforcementArgs) -> (variant { Ok : Event; Err : GggError });
+  ggg_enforcement_escalate : (EnforcementArgs) -> (variant { Ok : Notification; Err : GggError });
+  ggg_enforcement_notify : (EnforcementNotifyArgs) -> (variant { Ok : Notification; Err : GggError });
+  ggg_court_create : (CourtCreateArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_judge_appoint : (JudgeAppointArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_judge_revoke : (text) -> (variant { Ok : Governed; Err : GggError });
 
   // §9
   ggg_tender_list : (TenderListArgs) -> (variant { Ok : TenderPage; Err : GggError }) query;
   ggg_tender_get : (GetArgs) -> (variant { Ok : opt TenderDetail; Err : GggError }) query;
+  ggg_tender_create : (TenderCreateArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_tender_open : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_tender_close : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_tender_cancel : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_bid_submit : (BidSubmitArgs) -> (variant { Ok : Bid; Err : GggError });
+  ggg_bid_withdraw : (BidWithdrawArgs) -> (variant { Ok : Bid; Err : GggError });
+  ggg_bids_reveal : (BidsRevealArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_bid_score : (BidScoreArgs) -> (variant { Ok : Bid; Err : GggError });
+  ggg_tender_award : (TenderAwardArgs) -> (variant { Ok : Governed; Err : GggError });
 
   // §10
   ggg_quarter_directory : (ListArgs) -> (variant { Ok : QuarterDirectory; Err : GggError }) query;
+  ggg_quarter_register : (QuarterRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_quarter_deregister : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_quarter_configure : (QuarterConfigureArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_quarter_secede : () -> (variant { Ok : Governed; Err : GggError });
+  ggg_quarter_join_federation : (JoinFederationArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_self_change_quarter : (ChangeQuarterArgs) -> (variant { Ok : Forward; Err : GggError });
+  ggg_federal_vote_propose : (FederalVoteProposeArgs) -> (variant { Ok : FederalVote; Err : GggError });
+  ggg_federal_vote_cancel : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_federal_vote_finalize : (text) -> (variant { Ok : FederalVote; Err : GggError });
+  ggg_federation_message : (FederationMessageArgs) -> (variant { Ok : opt Value; Err : GggError });
 
   // §11
   ggg_codex_status : (ListArgs) -> (variant { Ok : CodexView; Err : GggError }) query;
   ggg_notification_list : (NotificationListArgs) -> (variant { Ok : NotificationPage; Err : GggError }) query;
   ggg_events : (ListArgs) -> (variant { Ok : EventPage; Err : GggError }) query;
+  ggg_codex_install : (CodexSource) -> (variant { Ok : Governed; Err : GggError });
+  ggg_codex_uninstall : () -> (variant { Ok : Governed; Err : GggError });
+  ggg_codex_revert : () -> (variant { Ok : Governed; Err : GggError });
+  ggg_notification_read : (NotificationReadArgs) -> (variant { Ok : NotificationsRead; Err : GggError });
+  ggg_notification_send : (NotificationSendArgs) -> (variant { Ok : Notification; Err : GggError });
 
   // §12
   ggg_realm_info : () -> (Realm) query;
+  ggg_setup_state : () -> (variant { Ok : SetupState; Err : GggError });
+  ggg_setup_step : (SetupStep) -> (variant { Ok : SetupState; Err : GggError });
+  ggg_setup_launch : () -> (variant { Ok : Realm; Err : GggError });
+  ggg_realm_configure : (RealmConfigureArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_realm_configure_branding : (BrandingArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_realm_configure_tokens : (TokensArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_realm_configure_trust_policy : (TrustPolicyArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_realm_register : (RealmRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_realm_upgrade : (RealmUpgradeArgs) -> (variant { Ok : Governed; Err : GggError });
 
   // §13
   ggg_crypto_envelope : (text) -> (variant { Ok : opt KeyEnvelope; Err : GggError }) query;
@@ -1218,4 +1690,12 @@ service : {
   ggg_crypto_access : (AccessArgs) -> (variant { Ok : PrincipalPage; Err : GggError }) query;
   ggg_document_list : (DocumentListArgs) -> (variant { Ok : DocumentPage; Err : GggError }) query;
   ggg_document_get : (text) -> (variant { Ok : opt DocumentAccess; Err : GggError }) query;
+  ggg_crypto_public_key : () -> (variant { Ok : blob; Err : GggError });
+  ggg_crypto_derive_key : (blob) -> (variant { Ok : blob; Err : GggError });
+  ggg_crypto_grant : (KeyGrantArgs) -> (variant { Ok : nat; Err : GggError });
+  ggg_crypto_revoke : (KeyRevokeArgs) -> (variant { Ok : nat; Err : GggError });
+  ggg_document_store : (DocumentStoreArgs) -> (variant { Ok : DocumentStored; Err : GggError });
+  ggg_document_share : (DocumentShareArgs) -> (variant { Ok : nat; Err : GggError });
+  ggg_document_revoke : (DocumentRevokeArgs) -> (variant { Ok : nat; Err : GggError });
+  ggg_document_delete : (DocumentDeleteArgs) -> (variant { Ok : DocumentDeleted; Err : GggError });
 };

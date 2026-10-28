@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { updateTable } from '../src/suite.js';
+import { IDL } from '@icp-sdk/core/candid';
+import { idlFactory } from '../idl/ggg.js';
+import { PUBLIC_UPDATES, updateTable } from '../src/suite.js';
 
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const model = read('model/README.md');
@@ -66,7 +68,37 @@ test('every ggg_ method binds a model operation', () => {
   }
 });
 
-test('the suite calls every update method of ggg.did anonymously', () => {
+test('the JavaScript binding has every update method of ggg.did', () => {
   const updates = [...did.matchAll(/^  (ggg_\w+) : .*\);$/gm)].filter((m) => !m[0].endsWith(') query;')).map((m) => m[1]);
-  assert.deepEqual(updateTable('x').map(([method]) => method).sort(), updates.sort());
+  assert.deepEqual(updateTable().map(([method]) => method).sort(), updates.sort());
+});
+
+test('the updates the anonymous check skips are the public ones in the model', () => {
+  const pub = rows('Operations')
+    .filter((r) => r[1].includes('(public)') && !r[2].includes('read'))
+    .flatMap((r) => names(withoutParentheses(r[0].slice(2))))
+    .map((op) => `ggg_${op}`)
+    .filter((m) => did.includes(`  ${m} :`));
+  assert.deepEqual([...PUBLIC_UPDATES].sort(), pub.sort());
+});
+
+/** The bound operations whose Flags cell includes `flag`. */
+function flagged(flag) {
+  return rows('Operations')
+    .filter((r) => r[2]?.split(', ').includes(flag))
+    .flatMap((r) => names(withoutParentheses(r[0].slice(2))))
+    .filter((op) => did.includes(`  ggg_${op} :`));
+}
+
+test('governed operations, and only they, reply Governed', () => {
+  const replies = [...did.matchAll(/^  ggg_(\w+) : .* -> \(variant \{ Ok : Governed;/gm)].map((m) => m[1]);
+  assert.deepEqual(replies.sort(), [...new Set(flagged('governed'))].sort());
+});
+
+test('delegable operations, and only they, take on_behalf_of', () => {
+  const service = idlFactory({ IDL });
+  const taking = service._fields
+    .filter(([, fn]) => fn.argTypes.length && fn.argTypes[0] instanceof IDL.RecordClass && fn.argTypes[0]._fields.some(([k]) => k === 'on_behalf_of'))
+    .map(([name]) => name.replace(/^ggg_/, ''));
+  assert.deepEqual(taking.sort(), [...new Set(flagged('delegable'))].sort());
 });
