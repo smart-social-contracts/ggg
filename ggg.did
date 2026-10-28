@@ -977,10 +977,9 @@ type MandateCreateArgs = record {
   symbol : opt text;
   executor : opt text;
   expires_at : opt Timestamp;
-  department : opt text;
 };
-type MandateRevokeArgs = record { mandate : text; department : opt text };
-type MandateExecutorArgs = record { mandate : text; executor : text; department : opt text };
+type MandateRevokeArgs = record { mandate : text };
+type MandateExecutorArgs = record { mandate : text; executor : text };
 
 type ContractCreateArgs = record {
   title : text;
@@ -998,7 +997,6 @@ type GovernanceUpdateArgs = record {
   voting_window : opt Duration;
   voting_threshold : opt nat;
   voting_quorum : opt nat;
-  department : opt text;
 };
 
 // §5

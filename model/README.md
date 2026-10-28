@@ -59,7 +59,7 @@ result. Several operations may share a permission. Flags:
 |---|---|
 | `read` | Query; changes nothing; not audited. |
 | `delegable` | May be called with `on_behalf_of`: the caller acts for a grantor whose active `Delegation` covers the permission. Both principals are audited. |
-| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. |
+| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create`, the parent) or on a record a department owns, such as a fund, budget or tender (the owner). Identity operations name it in their `department` argument (§2). |
 | `signing` | Produces an act its signer is personally accountable for: a decision, a certification, a sanction. The active codex's [signing policy](#signing-policy) says whether agents may hold the permission and whether it may be delegated. By default only non-agents sign, and nobody signs on another's behalf. |
 
 An operation either succeeds with its result or is refused with a `GggError`, and a refused
@@ -86,11 +86,10 @@ method per operation:
   `Unauthenticated` (anonymous caller), `Forbidden` (names the missing permission),
   `InvalidArgument`, `Conflict` (contradicts the current state), `Unavailable` (during setup or
   while frozen), `GenericError`. Messages are for people, not for parsing.
-- **Governed and delegable calls.** A `governed` operation takes `department : opt text`, whose
-  policy decides (the root's when absent), and replies `Governed`: `Done` with the id of any record it
-  created, or `Proposed` with the id of the proposal it filed. The proposal's action is the same call,
-  `Call { method; arg }`, and replaying it applies the change. A `delegable` operation takes
-  `on_behalf_of : opt principal`.
+- **Governed and delegable calls.** A `governed` operation replies `Governed`: `Done` with the id of
+  any record it created, or `Proposed` with the id of the proposal it filed. The proposal's action is
+  the same call, `Call { method; arg }`, and replaying it applies the change. A `delegable` operation
+  takes `on_behalf_of : opt principal`.
 - **Lists.** Arguments `cursor : opt text` and `limit : opt nat32`; replies one page of the list
   (`items`, or a named field such as a proposal's `votes`) and `next : opt text`. Pages fit the
   Internet Computer's limits, are never empty when `next` is set, and walk every record exactly once
@@ -179,8 +178,8 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `delegation_request_decide` (by the grantor) | `self.delegate` | | Alice approves only voting |
 | `delegation_list`, `delegable_operations` | `self.data_view` | read | Alice's grants; delegable operations: `[proposal.vote, proposal.create, …]` |
 
-A governed operation follows the policy of the department named in its `department` argument (it
-must hold that permission through its positions or grants); otherwise the root's.
+Governed identity operations follow the policy of the department named in their `department`
+argument (it must hold that permission through its positions or grants); otherwise the root's.
 
 ### Invariants
 

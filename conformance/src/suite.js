@@ -267,15 +267,15 @@ export function updateTable(proposal) {
     ggg_proposal_finalize: proposal,
     ggg_proposal_execute: proposal,
     ggg_mandate_create: {
-      title: UNKNOWN, scope: { Map: [] }, max_value: [], symbol: [], executor: [], expires_at: [], department: [],
+      title: UNKNOWN, scope: { Map: [] }, max_value: [], symbol: [], executor: [], expires_at: [],
     },
-    ggg_mandate_revoke: { mandate: UNKNOWN, department: [] },
-    ggg_mandate_assign_executor: { mandate: UNKNOWN, executor: UNKNOWN, department: [] },
+    ggg_mandate_revoke: { mandate: UNKNOWN },
+    ggg_mandate_assign_executor: { mandate: UNKNOWN, executor: UNKNOWN },
     ggg_contract_create: {
       title: UNKNOWN, parties: [], mandate: [], value: 0n, symbol: '', terms_ref: '', terms_hash: '', starts_at: [], ends_at: [],
     },
     ggg_contract_terminate: UNKNOWN,
-    ggg_governance_update: { voting_window: [], voting_threshold: [], voting_quorum: [], department: [] },
+    ggg_governance_update: { voting_window: [], voting_threshold: [], voting_quorum: [] },
   };
   return Object.entries(args);
 }

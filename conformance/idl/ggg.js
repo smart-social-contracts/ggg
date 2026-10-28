@@ -356,7 +356,6 @@ export const idlFactory = ({ IDL }) => {
   });
   const GovernanceUpdateArgs = IDL.Record({
     'voting_window' : IDL.Opt(Duration),
-    'department' : IDL.Opt(IDL.Text),
     'voting_quorum' : IDL.Opt(IDL.Nat),
     'voting_threshold' : IDL.Opt(IDL.Nat),
   });
@@ -545,21 +544,16 @@ export const idlFactory = ({ IDL }) => {
   const MandateExecutorArgs = IDL.Record({
     'mandate' : IDL.Text,
     'executor' : IDL.Text,
-    'department' : IDL.Opt(IDL.Text),
   });
   const MandateCreateArgs = IDL.Record({
     'title' : IDL.Text,
     'max_value' : IDL.Opt(IDL.Nat),
     'scope' : Value,
     'executor' : IDL.Opt(IDL.Text),
-    'department' : IDL.Opt(IDL.Text),
     'expires_at' : IDL.Opt(Timestamp),
     'symbol' : IDL.Opt(IDL.Text),
   });
-  const MandateRevokeArgs = IDL.Record({
-    'mandate' : IDL.Text,
-    'department' : IDL.Opt(IDL.Text),
-  });
+  const MandateRevokeArgs = IDL.Record({ 'mandate' : IDL.Text });
   const NotificationListArgs = IDL.Record({
     'cursor' : IDL.Opt(IDL.Text),
     'recipient' : IDL.Opt(Ref),

@@ -443,7 +443,6 @@ module {
   };
   public type GovernanceUpdateArgs = {
     voting_window : ?Duration;
-    department : ?Text;
     voting_quorum : ?Nat;
     voting_threshold : ?Nat;
   };
@@ -641,16 +640,11 @@ module {
     max_value : ?Nat;
     scope : Value;
     executor : ?Text;
-    department : ?Text;
     expires_at : ?Timestamp;
     symbol : ?Text;
   };
-  public type MandateExecutorArgs = {
-    mandate : Text;
-    executor : Text;
-    department : ?Text;
-  };
-  public type MandateRevokeArgs = { mandate : Text; department : ?Text };
+  public type MandateExecutorArgs = { mandate : Text; executor : Text };
+  public type MandateRevokeArgs = { mandate : Text };
   public type MandateStatus = { #Active; #Revoked; #Completed; #Expired };
   public type Member = {
     id : Text;
