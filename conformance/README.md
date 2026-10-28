@@ -11,8 +11,9 @@ npx ggg-conformance --canister <id> --writes --member-pem me.pem
 
 Without `--writes`, the suite makes queries, plus update calls that a compliant canister refuses
 without changing anything. With `--writes` and a member's key, it also files a Motion proposal
-titled "GGG conformance check …" and votes on it twice. Use a test realm, or a realm where that is
-acceptable.
+titled "GGG conformance check …", votes on it twice and withdraws it. Every update is also called
+anonymously, and every delegable update on behalf of a stranger, expecting both to be refused. Use a
+test realm, or a realm where that is acceptable.
 
 Reads run as the member when one is given, because a GOS may refuse reads that need a model
 permission to anonymous callers. Every list is walked page by page and sent a malformed cursor, and

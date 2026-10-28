@@ -86,9 +86,15 @@ method per operation:
   `Unauthenticated` (anonymous caller), `Forbidden` (names the missing permission),
   `InvalidArgument`, `Conflict` (contradicts the current state), `Unavailable` (during setup or
   while frozen), `GenericError`. Messages are for people, not for parsing.
+- **Governed and delegable calls.** A `governed` operation takes `department : opt text`, whose
+  policy decides (the root's when absent), and replies `Governed`: `Done` with the id of any record it
+  created, or `Proposed` with the id of the proposal it filed. The proposal's action is the same call,
+  `Call { method; arg }`, and replaying it applies the change. A `delegable` operation takes
+  `on_behalf_of : opt principal`.
 - **Lists.** Arguments `cursor : opt text` and `limit : opt nat32`; replies one page of the list
-  (`items`, or a named field such as a proposal's `votes`) and `next : opt text`. Pages fit the Internet Computer's limits, are never empty when `next` is set, and
-  walk every record exactly once in a stable order. A malformed cursor is `InvalidArgument`.
+  (`items`, or a named field such as a proposal's `votes`) and `next : opt text`. Pages fit the
+  Internet Computer's limits, are never empty when `next` is set, and walk every record exactly once
+  in a stable order. A malformed cursor is `InvalidArgument`.
 - **Extra fields.** A GOS may add fields to the records it returns, and `opt` fields to the arguments
   it accepts, named after itself (`realms_gos_tally_required`).
 - **Discovery.** `icrc10_supported_standards`
@@ -99,7 +105,7 @@ method per operation:
 
 Every entity is in `ggg.did`. Of the operations, it binds every `read` operation except `me`,
 `my_invoices`, `status`, `version`, `token_catalog`, `scale_status`, `join_targets`, `realm_monitor` and
-`realm_export`, and of the updates `proposal_create` and `proposal_vote`; the rest follow. The
+`realm_export`, and the updates of identity (§2) and governance (§4); the rest follow. The
 [conformance suite](../conformance/README.md) checks a canister against it.
 
 ### Versions
@@ -173,8 +179,8 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `delegation_request_decide` (by the grantor) | `self.delegate` | | Alice approves only voting |
 | `delegation_list`, `delegable_operations` | `self.data_view` | read | Alice's grants; delegable operations: `[proposal.vote, proposal.create, …]` |
 
-Governed identity operations follow the policy of the department named in their `department`
-argument (it must hold that permission through its positions or grants); otherwise the root's.
+A governed operation follows the policy of the department named in its `department` argument (it
+must hold that permission through its positions or grants); otherwise the root's.
 
 ### Invariants
 
@@ -258,8 +264,8 @@ Two kinds of body:
 |---|---|---|---|
 | `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `threshold`, `quorum` (both in basis points), `tally` (Json), `result` (Json) | | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov |
 | `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the deadline. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
-| `Mandate` | `id`, `title`, `scope` (Json), `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
-| `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. | `C-9`: Agora × BuildCo, bike lane works, Dec–Mar, terms `sha256:4be1…` |
+| `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
+| `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, terms `sha256:4be1…` |
 
 ### Lifecycles
 
@@ -282,14 +288,15 @@ Two kinds of body:
 | `mandate_assign_executor` | `mandate.assign_executor` | governed | Make Infrastructure the mandate's executor |
 | `contract_create` | `contract.create_under_mandate` | | Sign `C-9` with BuildCo under the road-works mandate |
 | `contract_terminate` | `contract.terminate` | signing | End `C-9` after BuildCo misses two milestones (court order) |
-| `governance_update` (voting windows, thresholds, quorum) | `governance.update` | governed | Voting window from 7 to 5 days |
+| `governance_update` (the realm's voting window, threshold and quorum) | `governance.update` | governed | Voting window from 7 to 5 days |
 
 ### Invariants
 
 - I-GOV-1: A replayed proposal executes exactly the `action` that was voted on, and only once.
 - I-GOV-2: Votes count only from users eligible for the proposal's scope when they vote.
 - I-GOV-3: A proposal is accepted only if quorum and threshold are met at finalization.
-- I-GOV-4: A contract created under a mandate stays within the mandate's scope and term.
+- I-GOV-4: A contract created under a mandate stays within the mandate's scope and term, and its
+  `value` within the mandate's `max_value` in the same `symbol`.
 
 ## 5. Finance
 
@@ -551,7 +558,7 @@ A realm can be one canister or a federation of quarters, one of which is the cap
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Realm` | `id` (`1`), `name`, `manifesto`, `welcome_message`, `status`, `calendar` → `Calendar`, `treasury` → `Treasury`, `accounting_currency`, `accounting_currency_decimals`; federation: `is_quarter`, `is_capital`, `federation_realm_id`, `federation_codex`, `quarter_join_mode`; trust: `trusted_principals`, `require_marketplace_approval`, `trusted_approvers`; settings: `open_registration`, `logo_url`, `background_image_url`, `installed_version`, `network` | Singleton per canister. An implementation adds its own settings next to these. | Agora: `beta`, capital, currency REALM (8 decimals), open registration off |
+| `Realm` | `id` (`1`), `name`, `manifesto`, `welcome_message`, `status`, `calendar` → `Calendar`, `treasury` → `Treasury`, `accounting_currency`, `accounting_currency_decimals`; federation: `is_quarter`, `is_capital`, `federation_realm_id`, `federation_codex`, `quarter_join_mode`; trust: `trusted_principals`, `require_marketplace_approval`, `trusted_approvers`; governance: `voting_threshold`, `voting_quorum` (basis points, for realm-wide proposals); settings: `open_registration`, `logo_url`, `background_image_url`, `installed_version`, `network` | Singleton per canister. An implementation adds its own settings next to these. | Agora: `beta`, capital, currency REALM (8 decimals), open registration off |
 | `Calendar` | `id`, `realm` → `Realm`, `epoch`, `fiscal_period`, `voting_window`, `codex_release_cycle`, `benefit_cycle`, `service_payment_cycle`, `license_review_cycle`, `custom_cycles` (Json) | The realm's governance time cycles, as durations. | Voting window 7 days, fiscal period 1 year, licence review every 2 years |
 | `Registry` | `id` (name), `description`, `principal_id` | A registry canister the realm is listed in. | `realm-registry`, `ufxgi-…` |
 | `Quarter` | `id` (canister id), `name`, `index`, `status`, `population`, `codex_id`, `codex_version`, `last_sync`, `last_activity_at` | Known on the capital. | North: population 1,240, `active`, codex agora 1.4.2 |
@@ -640,14 +647,16 @@ supervisor, and the grantor when delegated (I-ALL-7).
 | `notification_list` (one recipient a page at a time) | `self.data_view` | read, delegable | Alice's notifications, then Civil Registry's |
 | `notification_read` (mark as read) | `self.data_manage` | delegable | Alice marks "P-7 passed" as read |
 | `notification_send` | `notification.send` | | Justice notifies Mallory of her fine |
-| `events` | `realm.monitor` | read | The last 100 audited calls |
+| `events` (newest first, and where archived events are kept) | `realm.monitor` | read | The last 100 audited calls |
 
 ### Invariants
 
 - I-EXT-2: A codex can apply only the effects its manifest declares, and cannot weaken a guardrail.
 - I-EXT-3: Installing or upgrading codex code requires the realm's trust policy (marketplace
   approval or trusted approvers).
-- I-EXT-4: The `Event` log is append-only.
+- I-EXT-4: The `Event` log is append-only: no event is edited or deleted. A GOS may move old events
+  to archive canisters, as ICRC-3 ledgers do; `events` names them, and each answers `ggg_events` for
+  the events it holds.
 
 A codex reacts to what happens in the realm (it was installed, a user registered, the realm changed
 stage, a user needs a quarter) and answers with operations that the realm applies as itself, with

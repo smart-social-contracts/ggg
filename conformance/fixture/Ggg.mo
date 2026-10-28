@@ -159,10 +159,23 @@ module {
     title : Text;
     mandate : ?Text;
     starts_at : ?Timestamp;
+    value : Nat;
     ends_at : ?Timestamp;
     terms_hash : Text;
     terms_ref : Text;
     parties : [Ref];
+    symbol : Text;
+  };
+  public type ContractCreateArgs = {
+    title : Text;
+    mandate : ?Text;
+    starts_at : ?Timestamp;
+    value : Nat;
+    ends_at : ?Timestamp;
+    terms_hash : Text;
+    terms_ref : Text;
+    parties : [Ref];
+    symbol : Text;
   };
   public type ContractStatus = {
     #Disputed;
@@ -217,6 +230,21 @@ module {
     requires_acceptance : Bool;
     expires_at : Timestamp;
   };
+  /// Approving may narrow the scope or end the grant earlier.
+  public type DelegationDecideArgs = {
+    request : Text;
+    approve : Bool;
+    scope : ?[Text];
+    expires_at : ?Timestamp;
+  };
+  public type DelegationGrantArgs = {
+    starts_at : ?Timestamp;
+    delegate : Principal;
+    description : Text;
+    label_ : Text;
+    scope : [Text];
+    expires_at : Timestamp;
+  };
   public type DelegationListArgs = {
     cursor : ?Text;
     role : { #Delegate; #Grantor };
@@ -237,6 +265,14 @@ module {
     grantor : Principal;
     scope : [Text];
     request_expires_at : Timestamp;
+    expires_at : Timestamp;
+  };
+  public type DelegationRequestArgs = {
+    starts_at : ?Timestamp;
+    description : Text;
+    label_ : Text;
+    grantor : Principal;
+    scope : [Text];
     expires_at : Timestamp;
   };
   public type DelegationStatus = {
@@ -315,8 +351,17 @@ module {
     origin : Text;
     user : ?Principal;
   };
-  /// Newest first.
-  public type EventPage = { next : ?Text; items : [Event] };
+  /// Newest first. An archive holds the events from `first` to `last`, and answers ggg_events for them.
+  public type EventArchive = {
+    first : Text;
+    last : Text;
+    canister : Principal;
+  };
+  public type EventPage = {
+    next : ?Text;
+    items : [Event];
+    archives : [EventArchive];
+  };
   public type FederalVote = {
     id : Text;
     status : FederalVoteStatus;
@@ -396,6 +441,14 @@ module {
     #Unauthenticated;
     #Conflict : Text;
   };
+  public type GovernanceUpdateArgs = {
+    voting_window : ?Duration;
+    department : ?Text;
+    voting_quorum : ?Nat;
+    voting_threshold : ?Nat;
+  };
+  /// The change was applied, with the id of any record it created, or a proposal was filed to make it.
+  public type Governed = { #Done : ?Text; #Proposed : Text };
   public type GuestUser = {
     id : Principal;
     permissions : [Text];
@@ -416,7 +469,17 @@ module {
     issuer : Text;
     verified_at : ?Timestamp;
   };
+  public type IdentityReviewArgs = {
+    status : { #Rejected; #Verified };
+    identity : Text;
+  };
   public type IdentityStatus = { #Rejected; #Verified; #Pending };
+  public type IdentitySubmitArgs = {
+    ref : Text;
+    kind : Text;
+    issuer : ?Text;
+    on_behalf_of : ?Principal;
+  };
   public type Invite = {
     id : Text;
     max_uses : Nat;
@@ -429,6 +492,16 @@ module {
     expires_at : ?Timestamp;
     profile : ?Text;
   };
+  public type InviteCreateArgs = {
+    max_uses : ?Nat;
+    code : ?Text;
+    department : ?Text;
+    position : ?Text;
+    expires_at : ?Timestamp;
+    profile : ?Text;
+  };
+  /// The code is returned only this once.
+  public type InviteCreated = { code : Text; invite : Invite };
   public type InvitePage = { next : ?Text; items : [Invite] };
   public type Invoice = {
     id : Text;
@@ -442,6 +515,7 @@ module {
     reason : ?Ref;
   };
   public type InvoiceStatus = { #Paid; #Overdue; #Cancelled; #Pending };
+  public type JoinArgs = { nickname : ?Text; code : ?Text };
   public type Judge = {
     id : Text;
     appointed_at : Timestamp;
@@ -554,11 +628,29 @@ module {
     id : Text;
     status : MandateStatus;
     title : Text;
+    max_value : ?Nat;
     scope : Value;
     proposal : ?Text;
     executor : ?Text;
     expires_at : ?Timestamp;
+    symbol : ?Text;
   };
+  /// A replayed proposal records itself as the mandate's proposal.
+  public type MandateCreateArgs = {
+    title : Text;
+    max_value : ?Nat;
+    scope : Value;
+    executor : ?Text;
+    department : ?Text;
+    expires_at : ?Timestamp;
+    symbol : ?Text;
+  };
+  public type MandateExecutorArgs = {
+    mandate : Text;
+    executor : Text;
+    department : ?Text;
+  };
+  public type MandateRevokeArgs = { mandate : Text; department : ?Text };
   public type MandateStatus = { #Active; #Revoked; #Completed; #Expired };
   public type Member = {
     id : Text;
@@ -577,6 +669,7 @@ module {
     required_license : ?Text;
     total_supply : Nat;
   };
+  public type NewUser = { nickname : ?Text; user : Principal };
   public type Notification = {
     at : Timestamp;
     id : Text;
@@ -673,6 +766,23 @@ module {
   };
   public type PositionStatus = { #Open; #Closed; #Frozen };
   public type PrincipalPage = { next : ?Text; items : [Principal] };
+  public type ProfileCreateArgs = {
+    allowed_to : [Text];
+    description : Text;
+    department : ?Text;
+    profile : Text;
+  };
+  public type ProfileEditArgs = {
+    allowed_to : ?[Text];
+    description : ?Text;
+    department : ?Text;
+    profile : Text;
+  };
+  public type ProfileUpdateArgs = {
+    nickname : ?Text;
+    on_behalf_of : ?Principal;
+    avatar : ?Text;
+  };
   public type Proposal = {
     id : Text;
     opens_at : ?Timestamp;
@@ -737,6 +847,10 @@ module {
     proposal : Text;
     choice : VoteChoice;
   };
+  public type ProposalWithdrawArgs = {
+    on_behalf_of : ?Principal;
+    proposal : Text;
+  };
   public type Quarter = {
     id : Text;
     status : QuarterStatus;
@@ -779,7 +893,9 @@ module {
     accounting_currency_decimals : ?Nat8;
     welcome_message : Text;
     trusted_approvers : [Text];
+    voting_quorum : Nat;
     background_image_url : ?Text;
+    voting_threshold : Nat;
     installed_version : Text;
     treasury : ?Text;
     accounting_currency : ?Text;
@@ -811,6 +927,11 @@ module {
     search : ?Text;
     limit : ?Nat32;
     since : ?Timestamp;
+  };
+  public type RoleArgs = {
+    user : Principal;
+    department : ?Text;
+    profile : Text;
   };
   public type ScopePage = { next : ?Text; items : [Text] };
   /// Encrypted content: where it lives and its hash.
@@ -923,13 +1044,32 @@ module {
     profiles : [Text];
     avatar : ?Text;
   };
+  public type UserAddArgs = {
+    nickname : ?Text;
+    user : Principal;
+    department : ?Text;
+  };
+  public type UserEditArgs = {
+    nickname : ?Text;
+    home_quarter : ?Text;
+    user : Principal;
+    avatar : ?Text;
+  };
   public type UserEntry = { member : ?Member; user : User };
+  /// At most 500 users per call. Nobody is added if one is already known or listed twice.
+  public type UserImportArgs = { users : [NewUser]; department : ?Text };
   public type UserPage = { next : ?Text; items : [UserEntry] };
   public type UserProfile = {
     id : Text;
     allowed_to : [Text];
     permissions : [Text];
     description : Text;
+  };
+  public type UserRemoveArgs = { user : Principal; department : ?Text };
+  public type UserSetStatusArgs = {
+    status : MemberStatus;
+    user : Principal;
+    department : ?Text;
   };
   /// The ICRC-3 generic value, for structured data whose shape the model leaves open.
   public type Value = {
@@ -974,6 +1114,14 @@ module {
         #Ok : CodexView;
         #Err : GggError;
       };
+    ggg_contract_create : shared ContractCreateArgs -> async {
+        #Ok : Contract;
+        #Err : GggError;
+      };
+    ggg_contract_terminate : shared Text -> async {
+        #Ok : Contract;
+        #Err : GggError;
+      };
     ggg_credential_verify : shared query CredentialVerifyArgs -> async {
         #Ok : CredentialCheck;
         #Err : GggError;
@@ -995,8 +1143,28 @@ module {
         #Ok : [DelegableOperation];
         #Err : GggError;
       };
+    ggg_delegation_accept : shared Text -> async {
+        #Ok : Delegation;
+        #Err : GggError;
+      };
+    ggg_delegation_grant : shared DelegationGrantArgs -> async {
+        #Ok : Delegation;
+        #Err : GggError;
+      };
     ggg_delegation_list : shared query DelegationListArgs -> async {
         #Ok : DelegationPage;
+        #Err : GggError;
+      };
+    ggg_delegation_request : shared DelegationRequestArgs -> async {
+        #Ok : DelegationRequest;
+        #Err : GggError;
+      };
+    ggg_delegation_request_decide : shared DelegationDecideArgs -> async {
+        #Ok : ?Delegation;
+        #Err : GggError;
+      };
+    ggg_delegation_revoke : shared Text -> async {
+        #Ok : Delegation;
         #Err : GggError;
       };
     ggg_department_chart : shared query ChartArgs -> async {
@@ -1033,10 +1201,27 @@ module {
         #Ok : EventPage;
         #Err : GggError;
       };
+    ggg_governance_update : shared GovernanceUpdateArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_identity_review : shared IdentityReviewArgs -> async {
+        #Ok : Identity;
+        #Err : GggError;
+      };
+    ggg_identity_submit : shared IdentitySubmitArgs -> async {
+        #Ok : Identity;
+        #Err : GggError;
+      };
+    ggg_invite_create : shared InviteCreateArgs -> async {
+        #Ok : InviteCreated;
+        #Err : GggError;
+      };
     ggg_invite_list : shared query ListArgs -> async {
         #Ok : InvitePage;
         #Err : GggError;
       };
+    ggg_invite_revoke : shared Text -> async { #Ok : Invite; #Err : GggError };
     /// §6
     ggg_land_list : shared query LandListArgs -> async {
         #Ok : LandPage;
@@ -1059,6 +1244,18 @@ module {
         #Ok : LicenseCheck;
         #Err : GggError;
       };
+    ggg_mandate_assign_executor : shared MandateExecutorArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_mandate_create : shared MandateCreateArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_mandate_revoke : shared MandateRevokeArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
     ggg_notification_list : shared query NotificationListArgs -> async {
         #Ok : NotificationPage;
         #Err : GggError;
@@ -1071,8 +1268,32 @@ module {
         #Ok : OrganizationPage;
         #Err : GggError;
       };
+    ggg_private_data_update : shared Blob -> async {
+        #Ok : User;
+        #Err : GggError;
+      };
+    ggg_profile_create : shared ProfileCreateArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_profile_edit : shared ProfileEditArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_profile_update : shared ProfileUpdateArgs -> async {
+        #Ok : User;
+        #Err : GggError;
+      };
     ggg_proposal_create : shared ProposalCreateArgs -> async {
         #Ok : Text;
+        #Err : GggError;
+      };
+    ggg_proposal_execute : shared Text -> async {
+        #Ok : Proposal;
+        #Err : GggError;
+      };
+    ggg_proposal_finalize : shared Text -> async {
+        #Ok : Proposal;
         #Err : GggError;
       };
     /// §4
@@ -1084,8 +1305,16 @@ module {
         #Ok : ProposalPage;
         #Err : GggError;
       };
+    ggg_proposal_open : shared Text -> async {
+        #Ok : Proposal;
+        #Err : GggError;
+      };
     ggg_proposal_vote : shared ProposalVoteArgs -> async {
         #Ok : Vote;
+        #Err : GggError;
+      };
+    ggg_proposal_withdraw : shared ProposalWithdrawArgs -> async {
+        #Ok : Proposal;
         #Err : GggError;
       };
     /// §10
@@ -1095,12 +1324,24 @@ module {
       };
     /// §12
     ggg_realm_info : shared query () -> async Realm;
+    ggg_realm_join : shared JoinArgs -> async {
+        #Ok : UserEntry;
+        #Err : GggError;
+      };
     ggg_report_view : shared query ReportArgs -> async {
         #Ok : ReportPage;
         #Err : GggError;
       };
     ggg_resolution_query : shared query ResolutionQueryArgs -> async {
         #Ok : ResolutionPage;
+        #Err : GggError;
+      };
+    ggg_role_assign : shared RoleArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_role_revoke : shared RoleArgs -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     ggg_tender_get : shared query GetArgs -> async {
@@ -1117,13 +1358,33 @@ module {
         #Ok : TreasuryView;
         #Err : GggError;
       };
+    ggg_user_add : shared UserAddArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_user_edit : shared UserEditArgs -> async {
+        #Ok : User;
+        #Err : GggError;
+      };
     /// §2
     ggg_user_get : shared query Principal -> async {
         #Ok : ?UserEntry;
         #Err : GggError;
       };
+    ggg_user_import : shared UserImportArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
     ggg_user_list : shared query ListArgs -> async {
         #Ok : UserPage;
+        #Err : GggError;
+      };
+    ggg_user_remove : shared UserRemoveArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_user_set_status : shared UserSetStatusArgs -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     icrc10_supported_standards : shared query () -> async [

@@ -259,6 +259,8 @@ type Mandate = record {
   id : text;
   title : text;
   scope : Value;
+  max_value : opt nat;
+  symbol : opt text;
   executor : opt text;
   proposal : opt text;
   status : MandateStatus;
@@ -272,6 +274,8 @@ type Contract = record {
   title : text;
   parties : vec Ref;
   mandate : opt text;
+  value : nat;
+  symbol : text;
   terms_ref : text;
   terms_hash : text;
   status : ContractStatus;
@@ -685,6 +689,8 @@ type Realm = record {
   trusted_principals : vec principal;
   require_marketplace_approval : bool;
   trusted_approvers : vec text;
+  voting_threshold : nat;
+  voting_quorum : nat;
   open_registration : bool;
   logo_url : opt text;
   background_image_url : opt text;
@@ -839,6 +845,9 @@ type ListArgs = record { cursor : opt text; limit : opt nat32 };
 // One record by id, with its children a page at a time.
 type GetArgs = record { id : text; cursor : opt text; limit : opt nat32 };
 
+// The change was applied, with the id of any record it created, or a proposal was filed to make it.
+type Governed = variant { Done : opt text; Proposed : text };
+
 // §2
 
 type UserEntry = record { user : User; member : opt Member };
@@ -854,6 +863,64 @@ type DelegationListArgs = record {
 type DelegationPage = record { items : vec Delegation; requests : vec DelegationRequest; next : opt text };
 
 type DelegableOperation = record { operation : text; permission : text };
+
+type JoinArgs = record { code : opt text; nickname : opt text };
+type ProfileUpdateArgs = record { nickname : opt text; avatar : opt text; on_behalf_of : opt principal };
+
+type NewUser = record { user : principal; nickname : opt text };
+type UserAddArgs = record { user : principal; nickname : opt text; department : opt text };
+// At most 500 users per call. Nobody is added if one is already known or listed twice.
+type UserImportArgs = record { users : vec NewUser; department : opt text };
+type UserEditArgs = record { user : principal; nickname : opt text; avatar : opt text; home_quarter : opt text };
+type UserSetStatusArgs = record { user : principal; status : MemberStatus; department : opt text };
+type UserRemoveArgs = record { user : principal; department : opt text };
+
+type IdentitySubmitArgs = record { kind : text; issuer : opt text; ref : text; on_behalf_of : opt principal };
+type IdentityReviewArgs = record { identity : text; status : variant { Verified; Rejected } };
+
+type InviteCreateArgs = record {
+  profile : opt text;
+  department : opt text;
+  position : opt text;
+  code : opt text;
+  max_uses : opt nat;
+  expires_at : opt Timestamp;
+};
+// The code is returned only this once.
+type InviteCreated = record { invite : Invite; code : text };
+
+type ProfileCreateArgs = record { profile : text; description : text; allowed_to : vec text; department : opt text };
+type ProfileEditArgs = record {
+  profile : text;
+  description : opt text;
+  allowed_to : opt vec text;
+  department : opt text;
+};
+type RoleArgs = record { user : principal; profile : text; department : opt text };
+
+type DelegationGrantArgs = record {
+  delegate : principal;
+  scope : vec text;
+  starts_at : opt Timestamp;
+  expires_at : Timestamp;
+  label : text;
+  description : text;
+};
+type DelegationRequestArgs = record {
+  grantor : principal;
+  scope : vec text;
+  starts_at : opt Timestamp;
+  expires_at : Timestamp;
+  label : text;
+  description : text;
+};
+// Approving may narrow the scope or end the grant earlier.
+type DelegationDecideArgs = record {
+  request : text;
+  approve : bool;
+  scope : opt vec text;
+  expires_at : opt Timestamp;
+};
 
 // §3
 
@@ -898,6 +965,40 @@ type ProposalVoteArgs = record {
   proposal : text;
   choice : VoteChoice;
   on_behalf_of : opt principal;
+};
+
+type ProposalWithdrawArgs = record { proposal : text; on_behalf_of : opt principal };
+
+// A replayed proposal records itself as the mandate's proposal.
+type MandateCreateArgs = record {
+  title : text;
+  scope : Value;
+  max_value : opt nat;
+  symbol : opt text;
+  executor : opt text;
+  expires_at : opt Timestamp;
+  department : opt text;
+};
+type MandateRevokeArgs = record { mandate : text; department : opt text };
+type MandateExecutorArgs = record { mandate : text; executor : text; department : opt text };
+
+type ContractCreateArgs = record {
+  title : text;
+  parties : vec Ref;
+  mandate : opt text;
+  value : nat;
+  symbol : text;
+  terms_ref : text;
+  terms_hash : text;
+  starts_at : opt Timestamp;
+  ends_at : opt Timestamp;
+};
+
+type GovernanceUpdateArgs = record {
+  voting_window : opt Duration;
+  voting_threshold : opt nat;
+  voting_quorum : opt nat;
+  department : opt text;
 };
 
 // §5
@@ -1008,8 +1109,9 @@ type NotificationListArgs = record {
 };
 type NotificationPage = record { items : vec Notification; next : opt text };
 
-// Newest first.
-type EventPage = record { items : vec Event; next : opt text };
+// Newest first. An archive holds the events from `first` to `last`, and answers ggg_events for them.
+type EventArchive = record { canister : principal; first : text; last : text };
+type EventPage = record { items : vec Event; next : opt text; archives : vec EventArchive };
 
 // §13
 
@@ -1033,6 +1135,27 @@ service : {
   ggg_invite_list : (ListArgs) -> (variant { Ok : InvitePage; Err : GggError }) query;
   ggg_delegation_list : (DelegationListArgs) -> (variant { Ok : DelegationPage; Err : GggError }) query;
   ggg_delegable_operations : () -> (variant { Ok : vec DelegableOperation; Err : GggError }) query;
+  ggg_realm_join : (JoinArgs) -> (variant { Ok : UserEntry; Err : GggError });
+  ggg_profile_update : (ProfileUpdateArgs) -> (variant { Ok : User; Err : GggError });
+  ggg_private_data_update : (blob) -> (variant { Ok : User; Err : GggError });
+  ggg_user_add : (UserAddArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_user_import : (UserImportArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_user_edit : (UserEditArgs) -> (variant { Ok : User; Err : GggError });
+  ggg_user_set_status : (UserSetStatusArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_user_remove : (UserRemoveArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_identity_submit : (IdentitySubmitArgs) -> (variant { Ok : Identity; Err : GggError });
+  ggg_identity_review : (IdentityReviewArgs) -> (variant { Ok : Identity; Err : GggError });
+  ggg_invite_create : (InviteCreateArgs) -> (variant { Ok : InviteCreated; Err : GggError });
+  ggg_invite_revoke : (text) -> (variant { Ok : Invite; Err : GggError });
+  ggg_profile_create : (ProfileCreateArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_profile_edit : (ProfileEditArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_role_assign : (RoleArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_role_revoke : (RoleArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_delegation_grant : (DelegationGrantArgs) -> (variant { Ok : Delegation; Err : GggError });
+  ggg_delegation_accept : (text) -> (variant { Ok : Delegation; Err : GggError });
+  ggg_delegation_revoke : (text) -> (variant { Ok : Delegation; Err : GggError });
+  ggg_delegation_request : (DelegationRequestArgs) -> (variant { Ok : DelegationRequest; Err : GggError });
+  ggg_delegation_request_decide : (DelegationDecideArgs) -> (variant { Ok : opt Delegation; Err : GggError });
 
   // §3
   ggg_department_get : (GetArgs) -> (variant { Ok : opt DepartmentDetail; Err : GggError }) query;
@@ -1046,6 +1169,16 @@ service : {
   ggg_proposal_list : (ProposalListArgs) -> (variant { Ok : ProposalPage; Err : GggError }) query;
   ggg_proposal_create : (ProposalCreateArgs) -> (variant { Ok : text; Err : GggError });
   ggg_proposal_vote : (ProposalVoteArgs) -> (variant { Ok : Vote; Err : GggError });
+  ggg_proposal_withdraw : (ProposalWithdrawArgs) -> (variant { Ok : Proposal; Err : GggError });
+  ggg_proposal_open : (text) -> (variant { Ok : Proposal; Err : GggError });
+  ggg_proposal_finalize : (text) -> (variant { Ok : Proposal; Err : GggError });
+  ggg_proposal_execute : (text) -> (variant { Ok : Proposal; Err : GggError });
+  ggg_mandate_create : (MandateCreateArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_mandate_revoke : (MandateRevokeArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_mandate_assign_executor : (MandateExecutorArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_contract_create : (ContractCreateArgs) -> (variant { Ok : Contract; Err : GggError });
+  ggg_contract_terminate : (text) -> (variant { Ok : Contract; Err : GggError });
+  ggg_governance_update : (GovernanceUpdateArgs) -> (variant { Ok : Governed; Err : GggError });
 
   // §5
   ggg_treasury_view : (ListArgs) -> (variant { Ok : TreasuryView; Err : GggError }) query;

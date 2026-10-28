@@ -49,7 +49,9 @@ test('the fixture passes every check with a member identity', async () => {
   const results = await run({ writes: true, member });
   assert.deepEqual(failures(results), []);
   const o = outcomes(results);
-  for (const id of ['M1', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9']) assert.equal(o[id], 'pass', id);
+  for (const id of ['M1', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12']) {
+    assert.equal(o[id], 'pass', id);
+  }
 });
 
 test('once a proposal exists, it is listed, found and its votes paginate', async () => {

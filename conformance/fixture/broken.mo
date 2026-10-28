@@ -26,6 +26,8 @@ persistent actor {
       trusted_principals = [];
       require_marketplace_approval = false;
       trusted_approvers = [];
+      voting_threshold = 5_000;
+      voting_quorum = 0;
       open_registration = false;
       logo_url = null;
       background_image_url = null;

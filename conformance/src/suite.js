@@ -234,6 +234,52 @@ const getTable = (actor) => [
   ['ggg_document_get', (id) => actor.ggg_document_get(id)],
 ];
 
+/** Arguments for every update method, which a compliant canister refuses to an anonymous caller. */
+export function updateTable(proposal) {
+  const nobody = Principal.anonymous();
+  const span = { starts_at: [], expires_at: 0n, label: '', description: '' };
+  const args = {
+    ggg_realm_join: { code: [], nickname: [] },
+    ggg_profile_update: { nickname: [], avatar: [], on_behalf_of: [] },
+    ggg_private_data_update: new Uint8Array(),
+    ggg_user_add: { user: nobody, nickname: [], department: [] },
+    ggg_user_import: { users: [], department: [] },
+    ggg_user_edit: { user: nobody, nickname: [], avatar: [], home_quarter: [] },
+    ggg_user_set_status: { user: nobody, status: { Active: null }, department: [] },
+    ggg_user_remove: { user: nobody, department: [] },
+    ggg_identity_submit: { kind: 'email', issuer: [], ref: UNKNOWN, on_behalf_of: [] },
+    ggg_identity_review: { identity: UNKNOWN, status: { Rejected: null } },
+    ggg_invite_create: { profile: [], department: [], position: [], code: [], max_uses: [], expires_at: [] },
+    ggg_invite_revoke: UNKNOWN,
+    ggg_profile_create: { profile: UNKNOWN, description: '', allowed_to: [], department: [] },
+    ggg_profile_edit: { profile: UNKNOWN, description: [], allowed_to: [], department: [] },
+    ggg_role_assign: { user: nobody, profile: UNKNOWN, department: [] },
+    ggg_role_revoke: { user: nobody, profile: UNKNOWN, department: [] },
+    ggg_delegation_grant: { delegate: nobody, scope: [], ...span },
+    ggg_delegation_accept: UNKNOWN,
+    ggg_delegation_revoke: UNKNOWN,
+    ggg_delegation_request: { grantor: nobody, scope: [], ...span },
+    ggg_delegation_request_decide: { request: UNKNOWN, approve: false, scope: [], expires_at: [] },
+    ggg_proposal_create: { title: 'anonymous', description: '', department: [], action: { Motion: null }, on_behalf_of: [] },
+    ggg_proposal_vote: { proposal, choice: { Yes: null }, on_behalf_of: [] },
+    ggg_proposal_withdraw: { proposal, on_behalf_of: [] },
+    ggg_proposal_open: proposal,
+    ggg_proposal_finalize: proposal,
+    ggg_proposal_execute: proposal,
+    ggg_mandate_create: {
+      title: UNKNOWN, scope: { Map: [] }, max_value: [], symbol: [], executor: [], expires_at: [], department: [],
+    },
+    ggg_mandate_revoke: { mandate: UNKNOWN, department: [] },
+    ggg_mandate_assign_executor: { mandate: UNKNOWN, executor: UNKNOWN, department: [] },
+    ggg_contract_create: {
+      title: UNKNOWN, parties: [], mandate: [], value: 0n, symbol: '', terms_ref: '', terms_hash: '', starts_at: [], ends_at: [],
+    },
+    ggg_contract_terminate: UNKNOWN,
+    ggg_governance_update: { voting_window: [], voting_threshold: [], voting_quorum: [], department: [] },
+  };
+  return Object.entries(args);
+}
+
 /**
  * Runs the conformance checks against one canister.
  *
@@ -434,11 +480,11 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     return err(result, ['InvalidArgument'], what);
   };
 
-  await check('GGG', 'W1', 'an anonymous caller cannot file a proposal or vote', async () => {
+  await check('GGG', 'W1', 'every update refuses an anonymous caller', async () => {
     needWrites();
-    err(await anon.ggg_proposal_create(motion('anonymous')), ['Unauthenticated'], 'ggg_proposal_create');
-    const id = proposals[0]?.id ?? NO_PROPOSAL;
-    err(await anon.ggg_proposal_vote(vote(id, 'Yes')), ['Unauthenticated'], 'ggg_proposal_vote');
+    const updates = updateTable(proposals[0]?.id ?? NO_PROPOSAL);
+    for (const [method, args] of updates) err(await anon[method](args), ['Unauthenticated'], method);
+    return `${updates.length} updates`;
   });
 
   let created = null;
@@ -519,9 +565,52 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
 
   await check('GGG', 'W9', 'acting on behalf of someone without their delegation returns Forbidden', async () => {
     needMember();
-    const stranger = Ed25519KeyIdentity.generate().getPrincipal();
-    const result = await mine.ggg_proposal_create(motion('no delegation', { on_behalf_of: [stranger] }));
-    err(result, ['Forbidden'], 'ggg_proposal_create(on_behalf_of a principal who granted nothing)');
+    const forStranger = [Ed25519KeyIdentity.generate().getPrincipal()];
+    const delegable = [
+      ['ggg_proposal_create', motion('no delegation', { on_behalf_of: forStranger })],
+      ['ggg_profile_update', { nickname: ['GGG conformance'], avatar: [], on_behalf_of: forStranger }],
+      ['ggg_identity_submit', { kind: 'email', issuer: [], ref: UNKNOWN, on_behalf_of: forStranger }],
+    ];
+    if (created) {
+      delegable.push(['ggg_proposal_vote', { ...vote(created.id, 'Yes'), on_behalf_of: forStranger }]);
+      delegable.push(['ggg_proposal_withdraw', { proposal: created.id, on_behalf_of: forStranger }]);
+    }
+    for (const [method, args] of delegable) err(await mine[method](args), ['Forbidden'], `${method}(on_behalf_of a stranger)`);
+    return `${delegable.length} delegable updates`;
+  });
+
+  await check('GGG', 'W10', "the member's proposal is in the audit log", async () => {
+    needMember();
+    if (!created) throw new Skip('no proposal was filed');
+    const me = member.getPrincipal().toText();
+    const result = await mine.ggg_events({ cursor: [], limit: [PAGE * 5] });
+    refused(result.Err, 'ggg_events');
+    const recent = ok(result, 'ggg_events').items;
+    const filed = recent.find((e) => e.op === 'proposal_create' && opt(e.user)?.toText() === me);
+    assert(filed, `no proposal_create by ${me} among the ${recent.length} newest events`);
+    for (let i = 1; i < recent.length; i++) {
+      assert(recent[i - 1].at >= recent[i].at, `events ${recent[i - 1].id} and ${recent[i].id} are not newest first`);
+    }
+  });
+
+  let withdrawn = false;
+  await check('GGG', 'W11', 'a member withdraws their own proposal', async () => {
+    needMember();
+    if (!created) throw new Skip('no proposal was filed');
+    const result = await mine.ggg_proposal_withdraw({ proposal: created.id, on_behalf_of: [] });
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not withdraw proposals');
+    const p = ok(result, 'ggg_proposal_withdraw');
+    assert(tag(p.status) === 'Withdrawn', `after withdrawing, the proposal is ${tag(p.status)}`);
+    const read = (await getProposal(mine, created.id))?.proposal;
+    assert(read && tag(read.status) === 'Withdrawn', `ggg_proposal_get shows ${read && tag(read.status)}`);
+    withdrawn = true;
+  });
+
+  await check('GGG', 'W12', 'a withdrawn proposal takes no votes and cannot be withdrawn again', async () => {
+    needMember();
+    if (!withdrawn) throw new Skip('no proposal was withdrawn');
+    err(await mine.ggg_proposal_vote(vote(created.id, 'Yes')), ['Conflict'], 'ggg_proposal_vote(withdrawn)');
+    err(await mine.ggg_proposal_withdraw({ proposal: created.id, on_behalf_of: [] }), ['Conflict'], 'a second ggg_proposal_withdraw');
   });
 
   return results;

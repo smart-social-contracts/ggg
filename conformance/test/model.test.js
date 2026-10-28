@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { updateTable } from '../src/suite.js';
 
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const model = read('model/README.md');
@@ -63,4 +64,9 @@ test('every ggg_ method binds a model operation', () => {
     const op = method.slice('ggg_'.length);
     assert.ok(operations.has(op), `${method}: the model has no operation ${op}`);
   }
+});
+
+test('the suite calls every update method of ggg.did anonymously', () => {
+  const updates = [...did.matchAll(/^  (ggg_\w+) : .*\);$/gm)].filter((m) => !m[0].endsWith(') query;')).map((m) => m[1]);
+  assert.deepEqual(updateTable('x').map(([method]) => method).sort(), updates.sort());
 });

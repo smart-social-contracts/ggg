@@ -1,7 +1,8 @@
 /// A minimal GGG GOS, used to test the conformance suite. It implements every method of ggg.did.
-/// Members are fixed at install time. Anyone listed may propose and vote. The only department is
-/// the root, so every proposal is realm-wide. Nobody has granted a delegation, so nobody acts on
-/// another's behalf. Every other domain is empty, which the model allows.
+/// Members are fixed at install time. They may propose, vote, read the realm and manage their own
+/// profile; every other permission is held by nobody, so those operations are refused. The only
+/// department is the root, so every proposal is realm-wide. Nobody has granted a delegation, so
+/// nobody acts on another's behalf. Every other domain is empty, which the model allows.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
@@ -23,6 +24,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let MAX_LIMIT = 100;
   let MAP_VIEW = 32;
   let VOTING_WINDOW_NS : Nat64 = 7 * 24 * 3600 * 1_000_000_000;
+  let VOTING_THRESHOLD = 5_000;
+  let VOTING_QUORUM = 0;
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
 
@@ -87,6 +90,12 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
   };
 
+  /// Refuses an operation whose permission no member holds.
+  func nobody<A>(caller : Principal, permission : Text) : Result<A> {
+    switch (requireMember(caller, permission)) { case (?e) return #Err(e); case null {} };
+    #Err(#Forbidden({ permission = ?permission; message = "No member of this realm holds " # permission # "." }));
+  };
+
   func noDelegation(permission : Text) : T.GggError {
     #Forbidden({ permission = ?permission; message = "No active delegation from that principal covers this." });
   };
@@ -96,12 +105,14 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     let decodes = switch (method) {
       case "ggg_proposal_create" { let a : ?T.ProposalCreateArgs = from_candid (arg); a != null };
       case "ggg_proposal_vote" { let a : ?T.ProposalVoteArgs = from_candid (arg); a != null };
+      case "ggg_proposal_withdraw" { let a : ?T.ProposalWithdrawArgs = from_candid (arg); a != null };
+      case "ggg_profile_update" { let a : ?T.ProfileUpdateArgs = from_candid (arg); a != null };
       case _ return ?#InvalidArgument(method # " is not an update method of this canister");
     };
     if (decodes) null else ?#InvalidArgument("arg does not decode as the arguments of " # method);
   };
 
-  func audit(op : Text, user : Principal) {
+  func audit(op : Text, user : Principal, args : T.Value, result : T.Value) {
     let id = Map.size(events) + 1;
     let event = {
       id = Nat.toText(id);
@@ -111,11 +122,15 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       agent = false;
       supervisor = null;
       origin = "user";
-      args = #Map([]);
-      result = #Text("ok");
+      args;
+      result;
       at = now();
     };
     Map.add(events, Nat.compare, id, event);
+  };
+
+  func given(key : Text, value : ?Text) : [(Text, T.Value)] {
+    switch (value) { case (?v) [(key, #Text(v))]; case null [] };
   };
 
   func findProposal(id : Text) : ?(Nat, T.Proposal) {
@@ -180,6 +195,91 @@ persistent actor class GggFixture(initMembers : [Principal]) {
 
   public query func ggg_delegable_operations() : async Result<[T.DelegableOperation]> {
     #Ok([]);
+  };
+
+  public shared ({ caller }) func ggg_realm_join(args : T.JoinArgs) : async Result<T.UserEntry> {
+    if (Principal.isAnonymous(caller)) return #Err(#Unauthenticated);
+    switch (args.code) {
+      case null #Err(#Forbidden({ permission = null; message = "Registration is closed: joining needs an invite code." }));
+      case (?_) #Err(#InvalidArgument("no invite has this code"));
+    };
+  };
+
+  func self(caller : Principal, permission : Text, on_behalf_of : ?Principal) : Result<T.UserEntry> {
+    switch (requireMember(caller, permission)) { case (?e) return #Err(e); case null {} };
+    if (on_behalf_of != null) return #Err(noDelegation(permission));
+    switch (Map.get(members, Principal.compare, caller)) {
+      case (?entry) #Ok(entry);
+      case null #Err(#NotFound);
+    };
+  };
+
+  public shared ({ caller }) func ggg_profile_update(args : T.ProfileUpdateArgs) : async Result<T.User> {
+    let entry = switch (self(caller, "self.update_public_profile", args.on_behalf_of)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(entry)) entry;
+    };
+    let user = {
+      entry.user with
+      nickname = if (args.nickname != null) args.nickname else entry.user.nickname;
+      avatar = if (args.avatar != null) args.avatar else entry.user.avatar;
+    };
+    Map.add(members, Principal.compare, caller, { entry with user });
+    audit("profile_update", caller, #Map(Array.flatten([given("nickname", args.nickname), given("avatar", args.avatar)])), #Text(Principal.toText(caller)));
+    #Ok(user);
+  };
+
+  public shared ({ caller }) func ggg_private_data_update(data : Blob) : async Result<T.User> {
+    let entry = switch (self(caller, "self.update_private_data", null)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(entry)) entry;
+    };
+    let user = { entry.user with private_data = ?data };
+    Map.add(members, Principal.compare, caller, { entry with user });
+    audit("private_data_update", caller, #Map([]), #Text(Principal.toText(caller)));
+    #Ok(user);
+  };
+
+  public shared ({ caller }) func ggg_user_add(_ : T.UserAddArgs) : async Result<T.Governed> { nobody(caller, "user.add") };
+  public shared ({ caller }) func ggg_user_import(_ : T.UserImportArgs) : async Result<T.Governed> { nobody(caller, "user.add") };
+  public shared ({ caller }) func ggg_user_edit(_ : T.UserEditArgs) : async Result<T.User> { nobody(caller, "user.edit") };
+  public shared ({ caller }) func ggg_user_set_status(_ : T.UserSetStatusArgs) : async Result<T.Governed> {
+    nobody(caller, "user.update_status");
+  };
+  public shared ({ caller }) func ggg_user_remove(_ : T.UserRemoveArgs) : async Result<T.Governed> { nobody(caller, "user.delete") };
+
+  public shared ({ caller }) func ggg_identity_submit(_ : T.IdentitySubmitArgs) : async Result<T.Identity> {
+    nobody(caller, "identity.submit");
+  };
+  public shared ({ caller }) func ggg_identity_review(_ : T.IdentityReviewArgs) : async Result<T.Identity> {
+    nobody(caller, "identity.review");
+  };
+
+  public shared ({ caller }) func ggg_invite_create(_ : T.InviteCreateArgs) : async Result<T.InviteCreated> {
+    nobody(caller, "invite.manage");
+  };
+  public shared ({ caller }) func ggg_invite_revoke(_ : Text) : async Result<T.Invite> { nobody(caller, "invite.manage") };
+
+  public shared ({ caller }) func ggg_profile_create(_ : T.ProfileCreateArgs) : async Result<T.Governed> {
+    nobody(caller, "permission.grant");
+  };
+  public shared ({ caller }) func ggg_profile_edit(_ : T.ProfileEditArgs) : async Result<T.Governed> {
+    nobody(caller, "permission.grant");
+  };
+  public shared ({ caller }) func ggg_role_assign(_ : T.RoleArgs) : async Result<T.Governed> { nobody(caller, "role.assign") };
+  public shared ({ caller }) func ggg_role_revoke(_ : T.RoleArgs) : async Result<T.Governed> { nobody(caller, "role.revoke") };
+
+  public shared ({ caller }) func ggg_delegation_grant(_ : T.DelegationGrantArgs) : async Result<T.Delegation> {
+    nobody(caller, "self.delegate");
+  };
+  public shared ({ caller }) func ggg_delegation_accept(_ : Text) : async Result<T.Delegation> { nobody(caller, "self.delegate") };
+  public shared ({ caller }) func ggg_delegation_revoke(_ : Text) : async Result<T.Delegation> { nobody(caller, "self.delegate") };
+  public shared ({ caller }) func ggg_delegation_request(_ : T.DelegationRequestArgs) : async Result<T.DelegationRequest> {
+    if (Principal.isAnonymous(caller)) return #Err(#Unauthenticated);
+    #Err(#Forbidden({ permission = ?"self.delegate"; message = "No member of this realm can grant a delegation." }));
+  };
+  public shared ({ caller }) func ggg_delegation_request_decide(_ : T.DelegationDecideArgs) : async Result<?T.Delegation> {
+    nobody(caller, "self.delegate");
   };
 
   // §3
@@ -266,13 +366,13 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       status = #Voting;
       opens_at = ?t;
       deadline = ?(t + VOTING_WINDOW_NS);
-      threshold = 5_000;
-      quorum = 0;
+      threshold = VOTING_THRESHOLD;
+      quorum = VOTING_QUORUM;
       tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members) };
       result = null;
     };
     Map.add(proposals, Nat.compare, n, p);
-    audit("proposal_create", caller);
+    audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
     #Ok(p.id);
   };
 
@@ -300,8 +400,45 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
     Map.add(b, Principal.compare, caller, v);
     Map.add(proposals, Nat.compare, n, { p with tally });
-    audit("proposal_vote", caller);
+    audit("proposal_vote", caller, #Map([("proposal", #Text(p.id)), ("choice", #Text(debug_show (args.choice)))]), #Text(v.id));
     #Ok(v);
+  };
+
+  public shared ({ caller }) func ggg_proposal_withdraw(args : T.ProposalWithdrawArgs) : async Result<T.Proposal> {
+    switch (requireMember(caller, "proposal.create")) { case (?e) return #Err(e); case null {} };
+    if (args.on_behalf_of != null) return #Err(noDelegation("proposal.create"));
+    let (n, p) = switch (findProposal(args.proposal)) { case null return #Err(#NotFound); case (?found) found };
+    if (p.proposer != caller) {
+      return #Err(#Forbidden({ permission = ?"proposal.create"; message = "Only the proposer may withdraw a proposal." }));
+    };
+    if (p.status != #Draft and p.status != #Voting) return #Err(#Conflict("only a draft or a proposal being voted on can be withdrawn"));
+    let withdrawn = { p with status = #Withdrawn };
+    Map.add(proposals, Nat.compare, n, withdrawn);
+    audit("proposal_withdraw", caller, #Map([("proposal", #Text(p.id))]), #Text(p.id));
+    #Ok(withdrawn);
+  };
+
+  public shared ({ caller }) func ggg_proposal_open(_ : Text) : async Result<T.Proposal> { nobody(caller, "proposal.manage") };
+  public shared ({ caller }) func ggg_proposal_finalize(_ : Text) : async Result<T.Proposal> { nobody(caller, "proposal.manage") };
+  public shared ({ caller }) func ggg_proposal_execute(_ : Text) : async Result<T.Proposal> { nobody(caller, "proposal.manage") };
+
+  public shared ({ caller }) func ggg_mandate_create(_ : T.MandateCreateArgs) : async Result<T.Governed> {
+    nobody(caller, "mandate.create");
+  };
+  public shared ({ caller }) func ggg_mandate_revoke(_ : T.MandateRevokeArgs) : async Result<T.Governed> {
+    nobody(caller, "mandate.create");
+  };
+  public shared ({ caller }) func ggg_mandate_assign_executor(_ : T.MandateExecutorArgs) : async Result<T.Governed> {
+    nobody(caller, "mandate.assign_executor");
+  };
+  public shared ({ caller }) func ggg_contract_create(_ : T.ContractCreateArgs) : async Result<T.Contract> {
+    nobody(caller, "contract.create_under_mandate");
+  };
+  public shared ({ caller }) func ggg_contract_terminate(_ : Text) : async Result<T.Contract> {
+    nobody(caller, "contract.terminate");
+  };
+  public shared ({ caller }) func ggg_governance_update(_ : T.GovernanceUpdateArgs) : async Result<T.Governed> {
+    nobody(caller, "governance.update");
   };
 
   // §5
@@ -400,8 +537,13 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     none(args.cursor, args.limit);
   };
 
-  public query func ggg_events(args : T.ListArgs) : async Result<T.EventPage> {
-    page(Iter.map<(Nat, T.Event), T.Event>(Map.reverseEntries(events), func((_, e)) { e }), args.cursor, args.limit);
+  public query ({ caller }) func ggg_events(args : T.ListArgs) : async Result<T.EventPage> {
+    switch (requireMember(caller, "realm.monitor")) { case (?e) return #Err(e); case null {} };
+    let newest = Iter.map<(Nat, T.Event), T.Event>(Map.reverseEntries(events), func((_, e)) { e });
+    switch (page(newest, args.cursor, args.limit)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok({ items; next })) #Ok({ items; next; archives = [] });
+    };
   };
 
   // §12
@@ -425,6 +567,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       trusted_principals = [];
       require_marketplace_approval = false;
       trusted_approvers = [];
+      voting_threshold = VOTING_THRESHOLD;
+      voting_quorum = VOTING_QUORUM;
       open_registration = false;
       logo_url = null;
       background_image_url = null;
