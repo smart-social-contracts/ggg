@@ -213,7 +213,6 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         "proposal.vote",
         "realm.data_view",
         "realm.monitor",
-        "db.export",
       ];
       delegations = [];
       requests = [];
@@ -592,14 +591,6 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     });
   };
 
-  public query ({ caller }) func ggg_realm_export(args : T.ExportArgs) : async Result<T.ExportPage> {
-    switch (requireMember(caller, "db.export")) { case (?e) return #Err(e); case null {} };
-    if (Text.size(args.entity) == 0) return #Err(#InvalidArgument("entity is empty"));
-    switch (none<T.Value>(args.cursor, args.limit)) {
-      case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok({ entity = args.entity; items; next });
-    };
-  };
 
   public query func ggg_realm_info() : async T.Realm {
     {

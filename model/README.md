@@ -685,7 +685,6 @@ trusted approver.
 | `realm_register` | `realm.register` | governed | List Agora in the realm registry |
 | `realm_upgrade` | `realm.upgrade` | governed | Upgrade to release 0.9.1 |
 | `realm_monitor` | `realm.monitor` | read | Cycles 4.2T, memory 310 MB |
-| `realm_export` | `db.export` | read | Export a snapshot for backup |
 
 A realm is installed by its **host**: the platform that creates its canisters, such as an installer
 or a registry. The host is a controller of the canister, or the principal the canister was installed
@@ -782,7 +781,7 @@ outside the model.
 - Private content: `document.manage`.
 - Administration: `all`, `realm.host` (the host's alone: `all` does not include it), `realm.upgrade`, `realm.configure`, `realm.configure.branding`,
   `realm.configure.infrastructure`, `realm.configure.tokens`,
-  `realm.configure.trust_policy`, `realm.data_view`, `realm.monitor`, `db.export`.
+  `realm.configure.trust_policy`, `realm.data_view`, `realm.monitor`.
 
 There is no permission for raw database writes: everything is an operation.
 

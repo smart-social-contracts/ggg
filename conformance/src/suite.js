@@ -222,7 +222,6 @@ function listTable(actor) {
     list('ggg_notification_list', () => (a) =>
       actor.ggg_notification_list({ ...a, recipient: [], unread: [], on_behalf_of: [] })),
     list('ggg_events', () => (a) => actor.ggg_events(a)),
-    list('ggg_realm_export', () => (a) => actor.ggg_realm_export({ ...a, entity: 'User' })),
     list('ggg_crypto_scopes', () => (a) => actor.ggg_crypto_scopes(a), 'items', (items) => {
       scope = items[0] ?? null;
     }),

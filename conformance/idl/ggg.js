@@ -1355,16 +1355,6 @@ export const idlFactory = ({ IDL }) => {
     'trusted_principals' : IDL.Opt(IDL.Vec(IDL.Principal)),
     'trusted_approvers' : IDL.Opt(IDL.Vec(IDL.Text)),
   });
-  const ExportArgs = IDL.Record({
-    'entity' : IDL.Text,
-    'cursor' : IDL.Opt(IDL.Text),
-    'limit' : IDL.Opt(IDL.Nat32),
-  });
-  const ExportPage = IDL.Record({
-    'entity' : IDL.Text,
-    'next' : IDL.Opt(IDL.Text),
-    'items' : IDL.Vec(Value),
-  });
   const Realm = IDL.Record({
     'id' : IDL.Text,
     'status' : RealmStatus,
@@ -2468,11 +2458,6 @@ export const idlFactory = ({ IDL }) => {
         [TrustPolicyArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
-      ),
-    'ggg_realm_export' : IDL.Func(
-        [ExportArgs],
-        [IDL.Variant({ 'Ok' : ExportPage, 'Err' : GggError })],
-        ['query'],
       ),
     'ggg_realm_info' : IDL.Func([], [Realm], ['query']),
     'ggg_realm_join' : IDL.Func(

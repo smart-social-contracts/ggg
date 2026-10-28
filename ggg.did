@@ -1502,9 +1502,6 @@ type Monitor = record {
   memory : nat;
   events : nat;
 };
-// One page of an entity's records as ICRC-3 maps, for backup. `entity` is the model's type name.
-type ExportArgs = record { entity : text; cursor : opt text; limit : opt nat32 };
-type ExportPage = record { entity : text; items : vec Value; next : opt text };
 
 // §13
 
@@ -1735,7 +1732,6 @@ service : {
   // §12
   ggg_realm_info : () -> (Realm) query;
   ggg_realm_monitor : () -> (variant { Ok : Monitor; Err : GggError }) query;
-  ggg_realm_export : (ExportArgs) -> (variant { Ok : ExportPage; Err : GggError }) query;
   ggg_setup_state : () -> (variant { Ok : SetupState; Err : GggError });
   ggg_setup_step : (SetupStep) -> (variant { Ok : SetupState; Err : GggError });
   ggg_setup_launch : () -> (variant { Ok : Realm; Err : GggError });

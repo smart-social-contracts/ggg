@@ -516,9 +516,6 @@ module {
     on_behalf_of : ?Principal;
   };
   public type ExpelArgs = { user : Principal; department : Text };
-  /// One page of an entity's records as ICRC-3 maps, for backup. `entity` is the model's type name.
-  public type ExportArgs = { entity : Text; cursor : ?Text; limit : ?Nat32 };
-  public type ExportPage = { entity : Text; next : ?Text; items : [Value] };
   public type FederalVote = {
     id : Text;
     status : FederalVoteStatus;
@@ -2216,10 +2213,6 @@ module {
       };
     ggg_realm_configure_trust_policy : shared TrustPolicyArgs -> async {
         #Ok : Governed;
-        #Err : GggError;
-      };
-    ggg_realm_export : shared query ExportArgs -> async {
-        #Ok : ExportPage;
         #Err : GggError;
       };
     /// §12
