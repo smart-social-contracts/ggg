@@ -1,4 +1,4 @@
-// GGG: the GGG model in Candid. Status: draft.
+// GGG 0.1.0: the GGG model in Candid.
 // Model: https://github.com/smart-social-contracts/ggg/blob/main/model/README.md
 //
 // One record per model entity, with the model's fields, and one method per model operation.

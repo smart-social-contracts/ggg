@@ -27,8 +27,9 @@ What a GOS adds beyond the model, such as Realms GOS's extensions, stays outside
 
 ## Status
 
-Draft. Every entity is in `ggg.did`; the methods cover the operations bound so far. Versions that
-implementations build against are tagged `ggg-draft.N`.
+Version 0.1.0, the first. Every entity is in `ggg.did`; the methods cover the operations bound so
+far. Releases are tags (`v0.1.0`) with [semantic versioning](model/README.md#versions): until 1.0,
+anything may change.
 
 The documents in [`docs/`](docs) are the 2025 concept notes, replaced by the model.
 

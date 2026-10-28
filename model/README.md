@@ -1,6 +1,6 @@
 # The GGG model
 
-**Status:** draft for review.
+**Version:** 0.1.0 (see [Versions](#versions)).
 
 GGG (Generalized Global Governance) is the architecture a Governance Operating System (GOS) is built
 for. This model says what a GGG realm is made of:
@@ -43,13 +43,12 @@ These rules apply to the model's data as `ggg.did` exposes it.
 | Money | `nat` amounts in the token's smallest unit, with the token's `symbol`. No floats. Ratios are basis points: 10 000 = 100 %. |
 | Status | One of the values listed in the entity's lifecycle. Terminal states are final. In Candid a status is a variant, and a value `in_progress` is the tag `InProgress`. |
 | Structured data | Typed records where the model fixes the shape. Where it doesn't, the ICRC-3 `Value` type, never JSON encoded into text. |
-| Behaviour | Entities hold data only: no hooks, no methods beyond trivial reads. Behaviour lives in operations. |
 | Audit | Every update operation writes one `Event`. |
 | Privacy | Personal or sensitive content is stored encrypted; entities hold only a reference and a hash. Keys are shared through key envelopes ([§13](#13-private-content)). |
-| Collections | No call reads a whole collection. Lists take a `cursor` and a `limit` and return `next`; work over many rows runs in batches the same way; lookups go through indexed fields; totals are kept as running totals. |
+| Collections | Every call stays within the Internet Computer's limits however large the realm grows: lists are paginated, and work over many records runs in batches. |
 
-In the entity tables, `→ X` is a reference to an `X`, `→ X*` to several, `(Json)` marks structured
-data, and `(indexed)` a field that records are looked up by.
+In the entity tables, `→ X` is a reference to an `X`, `→ X*` to several, and `(Json)` marks structured
+data.
 
 ### Operations
 
@@ -71,7 +70,7 @@ operation changes nothing.
 A call comes from a **user** (possibly acting `on_behalf_of` a grantor), an **agent** (a user holding
 an agent appointment), a **codex** (limited to its declared capabilities), or a **replayed proposal**
 (realm authority). An implementation may add callers of its own, each limited to what it declares.
-One authorization decision covers every call; there is no second path around it.
+Every caller is held to the same permissions and invariants; there is no path around them.
 
 ### Candid interface
 
@@ -94,16 +93,28 @@ method per operation:
   it accepts, named after itself (`realms_gos_tally_required`).
 - **Discovery.** `icrc10_supported_standards`
   ([ICRC-10](https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md)) lists `GGG` with the
-  URL of the version implemented, and should list
+  URL of the `ggg.did` it implements (`…/ggg/blob/v0.1.0/ggg.did`), and should list
   [ICRC-21](https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md),
   so wallets can show what a member signs.
-- **Versions.** While GGG is a draft, the versions implementations build against are tagged
-  `ggg-draft.N`. Once final, it only changes in ways Candid subtyping accepts (new methods, new
-  `opt` arguments, new reply fields); anything else is a new major version, listed as `GGG2`.
 
 Every entity is in `ggg.did`. Of the operations, it binds `realm_info`, `user_get`, `user_list`,
 `proposal_get`, `proposal_list`, `proposal_create` and `proposal_vote` so far; the rest follow. The
 [conformance suite](../conformance/README.md) checks a canister against it.
+
+### Versions
+
+GGG uses [semantic versioning](https://semver.org). The model, `ggg.did` and the conformance suite
+share one version, released as a tag of this repository (`v0.1.0`).
+
+- **0.x:** anything may change from one minor version to the next.
+- **Minor (from 1.0):** only additions that Candid subtyping accepts: new methods, new `opt`
+  arguments, new fields in replies, new entities. Callers built for an earlier minor keep working; a
+  GOS claims the new minor once it implements the additions.
+- **Patch:** wording and examples only; nothing an implementation or caller would notice.
+- **Variants** (statuses, kinds, errors) are fixed within a major version, because Candid callers
+  reject a tag they don't know.
+- **Major:** any other change. Its methods take a new prefix (`ggg2_x`) and it is listed as `GGG2`,
+  so a canister can serve both while callers move.
 
 ## Running example
 
@@ -294,7 +305,7 @@ Two kinds of body:
 | `AllocationRule` | `id`, `source_fund`, `rules` (Json), `status`, `proposal` → `Proposal` | How revenue is split between funds. | From `ROOT`: 30% `WELFARE`, 20% `ROADS`, 50% `GENERAL` |
 | `LedgerEntry` | `id`, `transaction`, `kind` (asset, liability, equity, revenue, expense), `category`, `debit`, `credit`, `symbol`, `fund` → `Fund`, `period` → `FiscalPeriod`, `transfer` → `Transfer`, `invoice` → `Invoice`, `user` → `User`, `organization` → `Organization`, `contract` → `Contract`, `case` → `Case`, `penalty` → `Penalty`, `appeal` → `Appeal`, `at`, `description` | Double entry. At most one of the source references is set. | Tx `T-88`: debit `ROADS` capital expense 50,000, credit cash 50,000, contract `C-9` |
 | `Invoice` | `id`, `payer` (`Entity:id`), `amount`, `symbol`, `due_at`, `status`, `reason` (`Entity:id`), `paid_at`, `payment` (Json) | Paid into the subaccount derived from its `id`. | `INV-301`: Alice owes 120 REALM property tax, due 2026-12-31, `pending` |
-| `Transfer` | `id`, `sender`, `to`, `symbol`, `amount`, `ledger_tx`, `invoice` → `Invoice`, `status`, `at`, `payroll` (the payroll run, indexed) | | 50,000 REALM from `ROADS` to BuildCo, ledger tx 18234, `completed` |
+| `Transfer` | `id`, `sender`, `to`, `symbol`, `amount`, `ledger_tx`, `invoice` → `Invoice`, `status`, `at`, `payroll` (the payroll run) | | 50,000 REALM from `ROADS` to BuildCo, ledger tx 18234, `completed` |
 | `Trade` | `id`, `contract` → `Contract`, `leg_a` → `Transfer`, `leg_b` → `Transfer`, `status` | An exchange of two transfers. | `C-9` milestone: realm pays 10,000 REALM, BuildCo hands over the road deed NFT |
 | `PaymentAccount` | `id`, `owner` (`Entity:id`), `network`, `address`, `symbol`, `label`, `verified` | External accounts for payouts. | Bob's ckBTC payout address, verified |
 | `FinancialReport` | `id`, `kind`, `period` → `FiscalPeriod`, `as_of`, `statements` (Json), `source_hash`, `issued_by`, `supersedes` → `FinancialReport` | Frozen statements. | FY2025 closing statements issued by Finance, `sha256:77d0…` |
@@ -693,7 +704,7 @@ for that principal. No canister ever sees a data key or the content.
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `KeyEnvelope` | `id` (`scope\|principal`), `scope` (indexed), `principal` (indexed), `wrapped_dek`, `granted_by`, `at` | One scope's data key, wrapped for one principal. | `dept:Health:doc:DOC-1` for `dr-ana`, granted by Health's head |
+| `KeyEnvelope` | `id`, `scope`, `principal`, `wrapped_dek`, `granted_by`, `at` | One scope's data key, wrapped for one principal. | `dept:Health:doc:DOC-1` for `dr-ana`, granted by Health's head |
 | `Document` | `id`, `department` → `Department`, `title`, `ref` (where the ciphertext lives), `hash`, `author`, `at` | A department document. Its key scope is `dept:<department>:doc:<id>`. | Health's inspection report `DOC-1`, shared with Dr. Ana |
 
 ### Operations
@@ -764,7 +775,8 @@ There is no permission for raw database writes: everything is an operation.
 
 ## 15. Cross-cutting invariants
 
-- I-ALL-1: Every call goes through one authorization decision; there is no other authorization path.
+- I-ALL-1: Every operation enforces its permission and invariants the same way whoever calls it: a
+  user, a delegate, an agent, a codex or a replayed proposal.
 - I-ALL-2: Guardrails, the rules behind the invariants marked "Guardrail", cannot be weakened by
   governance, codices or anything an implementation adds.
 - I-ALL-3: Nobody decides a matter they filed, that was filed on their behalf, or in which a

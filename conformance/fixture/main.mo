@@ -239,7 +239,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public query func icrc10_supported_standards() : async [{ name : Text; url : Text }] {
     [
       { name = "ICRC-10"; url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md" },
-      { name = "GGG"; url = "https://github.com/smart-social-contracts/ggg/blob/main/ggg.did" },
+      { name = "GGG"; url = "https://github.com/smart-social-contracts/ggg/blob/v0.1.0/ggg.did" },
     ];
   };
 
