@@ -40,6 +40,10 @@ npm run idl     # regenerate idl/ggg.js and fixture/Ggg.mo from ggg.did; needs d
 npm test        # check ggg.did against the model, and run the suite against the fixture on PocketIC
 ```
 
+The test files run one at a time. `@dfinity/pic` names a server's port file after the parent process,
+which every test file shares, so servers started together overwrite each other's port file and tests
+fail with "fetch failed" or "Instance was deleted".
+
 `MOC` and `MOTOKO_CORE` default to the copies that ship with dfx, and `DIDC` to a `didc` on the
 path.
 

@@ -18,7 +18,7 @@
   "scripts": {
     "idl": "sh scripts/idl.sh",
     "build:fixture": "sh fixture/build.sh",
-    "test": "npm run build:fixture && node --test test/*.test.js"
+    "test": "npm run build:fixture && node --test --test-concurrency=1 test/*.test.js"
   },
   "dependencies": {
     "@icp-sdk/core": "^6.1.1"
