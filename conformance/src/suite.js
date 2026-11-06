@@ -116,6 +116,9 @@ function checkProposal(p) {
   }
   assert(tag(p.status) !== 'ExecutionScheduled' || opt(p.effective_at) !== null, `proposal ${p.id} is scheduled but has no effective_at`);
   assert(tag(p.status) !== 'ExecutionScheduled' || tag(p.action) !== 'Motion', `proposal ${p.id}: a motion has nothing to schedule`);
+  const linked = p.links.map((l) => l.proposal);
+  assert(new Set(linked).size === linked.length, `proposal ${p.id}: its links name a proposal twice`);
+  assert(!linked.includes(p.id), `proposal ${p.id} links to itself`);
   const opens = opt(p.opens_at);
   const deadline = opt(p.deadline);
   assert(opens === null || deadline === null || opens <= deadline, `proposal ${p.id}: the deadline is before voting opens`);
@@ -496,6 +499,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     department: [],
     action: { Motion: null },
     effective_at: [],
+    links: [],
     on_behalf_of: [],
     ...extra,
   });
@@ -670,6 +674,58 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
   await check('GGG', 'W14', 'an effective_at in the past returns InvalidArgument', async () => {
     needMember();
     await proposeAs(motion('effective in the past', { effective_at: [1n] }), 'ggg_proposal_create(effective_at in the past)');
+  });
+
+  const link = (kind, proposal) => ({ kind: { [kind]: null }, proposal });
+  /** Files a Motion with the given links, and withdraws it when `then` is done. */
+  const fileLinked = async (title, links, then) => {
+    const result = await mine.ggg_proposal_create(motion(`GGG conformance check ${new Date().toISOString()} (${title})`, { links }));
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not propose');
+    const id = ok(result, `ggg_proposal_create(${title})`);
+    try {
+      return await then(id);
+    } finally {
+      await mine.ggg_proposal_withdraw({ proposal: id, on_behalf_of: [] });
+    }
+  };
+  const linkedFrom = async (id) => (await getProposal(mine, id)).linked_from.map((l) => `${tag(l.kind)}:${l.proposal}`);
+
+  await check('GGG', 'W15', 'a proposal replaces a withdrawn one, and the replaced one shows it is replaced', async () => {
+    needMember();
+    await fileLinked('to be replaced', [], async (old) => {
+      ok(await mine.ggg_proposal_withdraw({ proposal: old, on_behalf_of: [] }), 'ggg_proposal_withdraw');
+      await fileLinked('replacement', [link('Replaces', old)], async (next) => {
+        const p = (await getProposal(mine, next)).proposal;
+        checkProposal(p);
+        assert(show(p.links) === show([link('Replaces', old)]), `links are ${show(p.links)}`);
+        assert((await linkedFrom(old)).includes(`Replaces:${next}`), `${old} does not show it is replaced by ${next}`);
+      });
+    });
+  });
+
+  await check('GGG', 'W16', 'a proposal relates to another, and both show it', async () => {
+    needMember();
+    await fileLinked('referenced', [], async (a) => {
+      await fileLinked('relates to', [link('RelatesTo', a)], async (b) => {
+        const p = (await getProposal(mine, b)).proposal;
+        assert(show(p.links) === show([link('RelatesTo', a)]), `links are ${show(p.links)}`);
+        assert((await linkedFrom(a)).includes(`RelatesTo:${b}`), `${a} does not show that ${b} relates to it`);
+      });
+    });
+  });
+
+  await check('GGG', 'W17', 'a link to an unknown proposal, to an open one it replaces, or the same one twice is refused', async () => {
+    needMember();
+    await fileLinked('open', [], async (open) => {
+      const attempt = async (links, tags, what) => {
+        const result = await mine.ggg_proposal_create(motion(what, { links }));
+        if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not propose');
+        err(result, tags, `ggg_proposal_create(${what})`);
+      };
+      await attempt([link('RelatesTo', UNKNOWN)], ['NotFound'], 'link to an unknown proposal');
+      await attempt([link('Replaces', open)], ['Conflict'], 'replaces a proposal that is not withdrawn');
+      await attempt([link('RelatesTo', open), link('RelatesTo', open)], ['InvalidArgument'], 'links the same proposal twice');
+    });
   });
 
   return results;

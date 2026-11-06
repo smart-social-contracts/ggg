@@ -1189,11 +1189,20 @@ export const idlFactory = ({ IDL }) => {
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'avatar' : IDL.Opt(IDL.Text),
   });
+  const ProposalLinkKind = IDL.Variant({
+    'RelatesTo' : IDL.Null,
+    'Replaces' : IDL.Null,
+  });
+  const ProposalLink = IDL.Record({
+    'kind' : ProposalLinkKind,
+    'proposal' : IDL.Text,
+  });
   const ProposalCreateArgs = IDL.Record({
     'title' : IDL.Text,
     'action' : ProposalAction,
     'effective_at' : IDL.Opt(Timestamp),
     'description' : IDL.Text,
+    'links' : IDL.Vec(ProposalLink),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'department' : IDL.Opt(IDL.Text),
   });
@@ -1230,6 +1239,7 @@ export const idlFactory = ({ IDL }) => {
     'effective_at' : IDL.Opt(Timestamp),
     'description' : IDL.Text,
     'deadline' : IDL.Opt(Timestamp),
+    'links' : IDL.Vec(ProposalLink),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'proposer' : IDL.Principal,
     'department' : IDL.Opt(IDL.Text),
@@ -1249,6 +1259,7 @@ export const idlFactory = ({ IDL }) => {
     'choice' : VoteChoice,
   });
   const ProposalDetail = IDL.Record({
+    'linked_from' : IDL.Vec(ProposalLink),
     'votes' : IDL.Vec(Vote),
     'next' : IDL.Opt(IDL.Text),
     'proposal' : Proposal,

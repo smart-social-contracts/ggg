@@ -1175,6 +1175,7 @@ module {
     effective_at : ?Timestamp;
     description : Text;
     deadline : ?Timestamp;
+    links : [ProposalLink];
     on_behalf_of : ?Principal;
     proposer : Principal;
     department : ?Text;
@@ -1188,21 +1189,30 @@ module {
     /// The decision itself is the outcome.
     #Motion;
   };
+  /// At most 16 links, each naming an existing proposal once. A Replaces target must be a withdrawn
+  /// proposal of the same proposer.
   public type ProposalCreateArgs = {
     title : Text;
     action : ProposalAction;
     /// Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
     effective_at : ?Timestamp;
     description : Text;
+    links : [ProposalLink];
     on_behalf_of : ?Principal;
     department : ?Text;
   };
-  /// The proposal, and its votes a page at a time.
+  /// The proposal, its votes a page at a time, and the links of other proposals to it, oldest first.
   public type ProposalDetail = {
+    linked_from : [ProposalLink];
     votes : [Vote];
     next : ?Text;
     proposal : Proposal;
   };
+  public type ProposalLink = { kind : ProposalLinkKind; proposal : Text };
+  /// A link to another proposal. In Proposal.links it is the proposal's own link, fixed at creation. In
+  /// ProposalDetail.linked_from it is another proposal's link to this one, so Replaces there reads
+  /// "replaced by" and RelatesTo "related to". The target is the other proposal's id.
+  public type ProposalLinkKind = { #RelatesTo; #Replaces };
   public type ProposalListArgs = {
     status : ?ProposalStatus;
     cursor : ?Text;
