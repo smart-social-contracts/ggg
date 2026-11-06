@@ -86,15 +86,15 @@ model lacks. Each is added at the scope below; some are narrowed, and some stay 
 - an identity's **kind, category and expiry**;
 - a document's **kind and languages**; the **languages of a realm and of a user**;
 - a **district without a canister**: `Zone`, and `User.home_zone`;
-- a procedure's **deadline and silence**. A deadline is a `Period` (§3.3), not a `Duration`;
+- a procedure's **deadline and silence**. A deadline is a `Period` (§3.3), not a `Duration`.
+
+**Narrowed:**
+
 - an **assessed value**, with an area beside it;
 - **borrowing** (lower priority);
 - the **basis and facts of a share** of personal data: `basis {legal_basis, purpose, legislation,
   special_category}`, `recipient` (a reference to any entity) and `facts`. Legal bases are documented
-  text, not an enumeration of the model.
-
-**Narrowed:**
-
+  text, not an enumeration of the model;
 - **budget totals and years**: totals, `years`, `budget_extend` and `ReportIssueArgs.adjustments` are
   added; the stability report and `net_lending` stay codex conventions.
 
@@ -106,8 +106,7 @@ model lacks. Each is added at the scope below; some are narrowed, and some stay 
   addition (§4), and the world facts stay in the codex as settings of the realm's own layer. GGG is
   not a general data store.
 
-No layer of legislation names a department of a lower layer; a chapter asks for an approval by
-department name only within its own realm.
+No layer of legislation names a department of a lower layer.
 
 ### 3.2 Four mechanisms
 
@@ -128,9 +127,11 @@ department name only within its own realm.
 
 - **A fact's unit is declared by its schema entry,** never by a suffix in its name: `rate`, not
   `rate_bp`.
-- **A rate is an integer in hundred-millionths:** 0.123456 % is 123456, and 1 % is 1 000 000. The
-  model's [conventions](../model/README.md#1-conventions) state ratios in basis points today; the fact
-  schema's rates are on this scale, and ggg#2 aligns the two.
+- **A rate is an integer in hundred-millionths:** 0.123456 % is 123456, and 1 % is 1 000 000. Rates in
+  the fact schema are hundred-millionths, because basis points cannot express 0.123456 %. The model's
+  other ratios (quorum, shares, weights) are basis points today
+  ([conventions](../model/README.md#1-conventions)); whether they move to the same scale is open in
+  ggg#2.
 - **Money is rounded by one rule:** wherever money is computed from a rate, the result is rounded to
   the nearest cent, and an exact half is rounded away from zero (2.345 becomes 2.35, and −2.345
   becomes −2.35), as euro legislation requires (Regulation (EC) 1103/97 Art. 5). GGG states it with
@@ -155,7 +156,7 @@ of ggg#2.
 | `Follower` | on a sync source: a realm that syncs from it, with its link status and its last report |
 | `sync_source_add`, `sync_source_remove` | the follower's side: ask to sync from a realm, stop syncing from it. `sync_source_remove` is reserved (§1) |
 | `follower_accept`, `follower_remove` | the sync source's side: accept a follower, end a link |
-| `link_notify` | the event of a link that a sync source's legislation hooks: a realm asked to sync, or left |
+| `link_notify` | an operation of ggg#3 between the two sides of a link. The event a sync source's legislation hooks when a follower leaves is named in ggg#3 |
 | `follower_report`, `follower_list` | a follower reports what it runs; a sync source lists its followers |
 | `ReportedLayer { version; checksum }` | what a follower reports per layer it runs, with its compliance against that source and its population. It does not send the layer's source: the sync source finds the layer by its checksum in its own record |
 | `Quarter.compliance` | the same flag on a realm's own quarters |
@@ -208,8 +209,9 @@ time the proposal takes effect. The rules:
   proposer submits a new one.
 - When several proposals are scheduled for the same moment, no order is specified.
 - Codex guards see it as a fact of `proposal_create`, so legislation can require a minimum delay. This
-  is how a statutory wait is expressed: an ordinance that may only take effect fifteen working days
-  after the vote closes is a proposal whose `effective_at` a guard checks. The time comes from the
+  is how a statutory wait is expressed: for an ordinance, a guard requires `effective_at` to lie at
+  least fifteen working days after the vote can close, and the proposer leaves a margin, because the
+  statute counts from the authorities' receipt of the communication (§7). The time comes from the
   proposal, never from a publication in a journal or gazette.
 
 ---
