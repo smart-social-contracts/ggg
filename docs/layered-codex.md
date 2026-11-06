@@ -79,7 +79,6 @@ model lacks. Each is added at the scope below; some are narrowed, and some stay 
   `tax_policy_draft`;
 - **invoice items**;
 - a contract's and a tender's **kind**;
-- **sessions of a collegiate organ**, with operations to open and close one;
 - **requests**, and the **access-to-information request**;
 - **publication in an outside journal**: a dispatch, which gates nothing;
 - **reports from outside**;
@@ -101,6 +100,8 @@ model lacks. Each is added at the scope below; some are narrowed, and some stay 
 **Not added:**
 
 - an **incident** entity: folded into requests and outside bodies;
+- **sessions of a collegiate organ**, with operations to open and close one: a proposal's `opens_at`
+  and `deadline` already are the session;
 - **holidays**: they stay in the codex, as a `calendar.json` beside the chapters;
 - **record facts** (population, capital status and the like): the links between realms are their own
   addition (§4), and the world facts stay in the codex as settings of the realm's own layer. GGG is
