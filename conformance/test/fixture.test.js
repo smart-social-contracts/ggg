@@ -51,7 +51,7 @@ test('the fixture passes every check with a member identity', async () => {
   const results = await run({ writes: true, member });
   assert.deepEqual(failures(results), []);
   const o = outcomes(results);
-  for (const id of ['M1', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12']) {
+  for (const id of ['M1', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12', 'W13', 'W14']) {
     assert.equal(o[id], 'pass', id);
   }
 });
@@ -89,5 +89,5 @@ test('a non-member is refused, which the suite reports as a skip', async () => {
   const o = outcomes(results);
   assert.equal(o.W1, 'pass');
   assert.equal(o.W9, 'pass');
-  for (const id of ['W2', 'W5', 'W6', 'W7', 'W8']) assert.equal(o[id], 'skip', id);
+  for (const id of ['W2', 'W5', 'W6', 'W7', 'W8', 'W13', 'W14']) assert.equal(o[id], 'skip', id);
 });
