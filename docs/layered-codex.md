@@ -128,11 +128,14 @@ No layer of legislation names a department of a lower layer.
 
 - **A fact's unit is declared by its schema entry,** never by a suffix in its name: `rate`, not
   `rate_bp`.
-- **A rate is an integer in hundred-millionths:** 0.123456 % is 123456, and 1 % is 1 000 000. Rates in
-  the fact schema are hundred-millionths, because basis points cannot express 0.123456 %. The model's
-  other ratios (quorum, shares, weights) are basis points today
-  ([conventions](../model/README.md#1-conventions)); whether they move to the same scale is open in
-  ggg#2.
+- **Every ratio is an integer in hundred-millionths:** 100 % is 100 000 000, 1 % is 1 000 000 and
+  0.123456 % is 123 456. One scale covers tax rates, quorum, thresholds, shares and weights alike.
+  Integers inside, decimals for people: a GOS shows `0.123456 %`, and a chapter writes a rate as the
+  legislation does. Integers because there is one form for every value, so checksums are stable;
+  nothing is parsed; and Cedar compares integers natively, while its decimal type has only four digits
+  after the point. The model's basis-point fields ([conventions](../model/README.md#1-conventions))
+  move to this scale in [ggg#9](https://github.com/smart-social-contracts/ggg/issues/9), a breaking
+  change.
 - **Money is rounded by one rule:** wherever money is computed from a rate, the result is rounded to
   the nearest cent, and an exact half is rounded away from zero (2.345 becomes 2.35, and −2.345
   becomes −2.35), as euro legislation requires (Regulation (EC) 1103/97 Art. 5). GGG states it with
@@ -140,8 +143,10 @@ No layer of legislation names a department of a lower layer.
   added only when a piece of legislation needs it.
 - **A `Period` is a count and a unit:** `PeriodUnit = variant { Day; WorkingDay; Month; Year }`
   (§7 for `WorkingDay`). A deadline is a `Period`, not a `Duration` in nanoseconds: three months is
-  three months, whatever the days. A codex's settings are the GOS's, but their values use GGG's
-  Period units and no others, and no setting shares a name with a GGG fact.
+  three months, whatever the days. Periods compare only within one unit: comparing two units, such as
+  45 days against 30 working days, fails closed, with no conversion through the calendar. A codex's
+  settings are the GOS's, but their values use GGG's Period units and no others, and no setting shares
+  a name with a GGG fact.
 
 ---
 
@@ -232,6 +237,8 @@ working days after the higher authorities receive it (Ley 7/1985 Art. 65.2).
 - A realm whose legislation does not use working days never uses the unit.
 - A GOS that counts working days fails closed when its calendar has no entries for a year the count
   reaches: a wrong legal deadline is worse than a clear error.
+- A Period in working days compares only with another in working days (§3.3). It is never converted
+  to calendar days, or the other way round.
 
 ---
 
