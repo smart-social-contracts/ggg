@@ -11,6 +11,8 @@ const NO_PROPOSAL = 'ggg-conformance-no-such-proposal';
 const NO_DEPARTMENT = 'ggg-conformance-no-such-department';
 const NO_METHOD = 'ggg_conformance_no_such_method';
 const UNKNOWN = 'ggg-conformance-no-such-record';
+// Every ratio is in hundred-millionths: 100 % is 100 000 000.
+const WHOLE = 100_000_000n;
 
 export class Skip extends Error {}
 
@@ -103,7 +105,7 @@ function checkProposal(p) {
     assert(p.action.Call.method.length > 0, `proposal ${p.id}: the method name is empty`);
   }
   for (const field of ['threshold', 'quorum']) {
-    assert(p[field] <= 10_000n, `proposal ${p.id}: ${field} is ${p[field]}, above 10000`);
+    assert(p[field] <= WHOLE, `proposal ${p.id}: ${field} is ${p[field]}, above ${WHOLE} (100 %)`);
   }
   const opens = opt(p.opens_at);
   const deadline = opt(p.deadline);
@@ -329,6 +331,14 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     const currency = opt(realm.accounting_currency);
     assert(currency === null || currency.length > 0, 'accounting_currency is empty');
     return `${realm.name}: ${realm.installed_version}, ${tag(realm.status)}`;
+  });
+
+  await check('GGG', 'R2', 'the realm states its voting threshold and quorum in hundred-millionths', async () => {
+    const realm = await anon.ggg_realm_info();
+    for (const field of ['voting_threshold', 'voting_quorum']) {
+      assert(realm[field] <= WHOLE, `${field} is ${realm[field]}, above ${WHOLE} (100 %)`);
+    }
+    return `threshold ${realm.voting_threshold}, quorum ${realm.voting_quorum}`;
   });
 
   await check('GGG', 'M1', 'ggg_user_get answers a caller about itself', async () => {

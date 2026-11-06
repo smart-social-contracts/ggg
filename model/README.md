@@ -40,7 +40,8 @@ These rules apply to the model's data as `ggg.did` exposes it.
 | References | Relations name both ends. A reference to "any entity" names the entity type and its id: `Organization:clinic-b` in text, `record { kind; id }` in Candid. |
 | Principals | Candid `principal`. A user's `id` is their principal. |
 | Time | `nat64` nanoseconds since 1970-01-01 UTC, as returned by `ic0.time`. Durations are `nat64` nanoseconds too. An unset time is absent (`opt`), never `0`. |
-| Money | `nat` amounts in the token's smallest unit, with the token's `symbol`. No floats. Ratios are basis points: 10 000 = 100 %. |
+| Money | `nat` amounts in the token's smallest unit, with the token's `symbol`. No floats. |
+| Ratios | One scale for every ratio (quorum, threshold, share, weight, tax rate): `nat` hundred-millionths, so 100 % = 100 000 000, 1 % = 1 000 000 and 0.123456 % = 123 456. Values are stored and compared as integers, which have one form; people and chapters read and write decimals (`0.1 %`). |
 | Status | One of the values listed in the entity's lifecycle. Terminal states are final. In Candid a status is a variant, and a value `in_progress` is the tag `InProgress`. |
 | Structured data | Typed records where the model fixes the shape. Where it doesn't, the ICRC-3 `Value` type, never JSON encoded into text. |
 | Audit | Every update operation writes one `Event`. |
@@ -211,7 +212,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Department` | `id` (name), `description`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals]}`, quorum in basis points. Exactly one root department per realm. | Civil Registry: under Administration, 2-of-3 policy, head `dana` |
+| `Department` | `id` (name), `description`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals]}`, quorum in hundred-millionths (50 % = 50 000 000). Exactly one root department per realm. | Civil Registry: under Administration, 2-of-3 policy, head `dana` |
 | `Organization` | `id` (name), `description`, `status`, `admins` → `User`* | An external party. Its admins manage its representatives. | Clinic B: `active`, admin `dr-ana` |
 | `Position` | `id` (key), `department` → `Department` or `organization` → `Organization`, `title`, `profile` → `UserProfile`, `headcount`, `salary` (int), `salary_period`, `status`, `inherit_from_capital` | A seat in a department, or a representative seat in an organization. | `civil-registry.clerk`: 4 seats, 2,000 REALM/month, profile `clerk`; `clinic-b.physician`: 3 seats |
 | `Appointment` | `id`, `position` → `Position`, `user` → `User`, `kind` (`substantive`, `acting`), `agent` (bool), `supervisor` → `User`, `started_at`, `ended_at`, `status`, `source_quarter` | One user holding one seat. Agents are users with `agent = true`. | Bob holds a clerk seat since 2026-05-01; `records-bot` holds `records_agent` at Clinic B, agent, supervisor `dr-ana` |
@@ -262,7 +263,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `threshold`, `quorum` (both in basis points), `tally` (Json), `result` (Json) | | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov |
+| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `threshold`, `quorum` (both in hundred-millionths), `tally` (Json), `result` (Json) | | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov |
 | `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the deadline. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
 | `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, terms `sha256:4be1…` |
@@ -310,7 +311,7 @@ Two kinds of body:
 | `Fund` | `id` (code), `name`, `kind` (general, special revenue, …), `department` → `Department`, `balances` (Json: running balance per token), `allocation_rule` → `AllocationRule` | | `ROADS`: special revenue, owned by Infrastructure |
 | `FiscalPeriod` | `id`, `name`, `starts_at`, `ends_at`, `status`, `statements` (Json: running totals), `source_hash` (chained over its entries) | | `FY2026`: 2026-01-01 to 2026-12-31, `open` |
 | `Budget` | `id`, `fund` → `Fund`, `period` → `FiscalPeriod`, `category`, `kind`, `planned`, `actual`, `status`, `proposal` → `Proposal` | | Roads FY2026, capital: planned 300,000, actual 120,500, `adopted` |
-| `AllocationRule` | `id`, `source_fund`, `rules` (Json), `status`, `proposal` → `Proposal` | How revenue is split between funds. | From `ROOT`: 30% `WELFARE`, 20% `ROADS`, 50% `GENERAL` |
+| `AllocationRule` | `id`, `source_fund`, `rules` (Json: fund and `share`), `status`, `proposal` → `Proposal` | How revenue is split between funds. Shares are in hundred-millionths and add up to at most 100 000 000. | From `ROOT`: 30% `WELFARE`, 20% `ROADS`, 50% `GENERAL` |
 | `LedgerEntry` | `id`, `transaction`, `kind` (asset, liability, equity, revenue, expense), `category`, `debit`, `credit`, `symbol`, `fund` → `Fund`, `period` → `FiscalPeriod`, `transfer` → `Transfer`, `invoice` → `Invoice`, `user` → `User`, `organization` → `Organization`, `contract` → `Contract`, `case` → `Case`, `penalty` → `Penalty`, `appeal` → `Appeal`, `at`, `description` | Double entry. At most one of the source references is set. | Tx `T-88`: debit `ROADS` capital expense 50,000, credit cash 50,000, contract `C-9` |
 | `Invoice` | `id`, `payer` (`Entity:id`), `amount`, `symbol`, `due_at`, `status`, `reason` (`Entity:id`), `paid_at`, `payment` (Json) | Paid into the subaccount derived from its `id`. | `INV-301`: Alice owes 120 REALM property tax, due 2026-12-31, `pending` |
 | `Transfer` | `id`, `sender`, `to`, `symbol`, `amount`, `ledger_tx`, `invoice` → `Invoice`, `status`, `at`, `payroll` (the payroll run) | | 50,000 REALM from `ROADS` to BuildCo, ledger tx 18234, `completed` |
@@ -518,7 +519,7 @@ codex-defined credential NFTs; GGG has no report entity.
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Tender` | `id`, `title`, `description`, `requester` → `Department`, `status`, `opens_at`, `closes_at`, `rubric` (Json), `winner` → `Bid`, `contract` → `Contract` | | `T-5` Bike lane works, by Infrastructure, open 1–30 Nov, rubric: price 60%, quality 40% |
+| `Tender` | `id`, `title`, `description`, `requester` → `Department`, `status`, `opens_at`, `closes_at`, `rubric` (Json: criterion and `weight`), `winner` → `Bid`, `contract` → `Contract` | Weights are in hundred-millionths and add up to 100 000 000. | `T-5` Bike lane works, by Infrastructure, open 1–30 Nov, rubric: price 60%, quality 40% |
 | `Bid` | `id`, `tender` → `Tender`, `vendor` → `Organization`, `submitted_at`, `sealed`, `payload_ref`, `payload_hash` (`sha256:` of `price:nonce`), `price` (set at the reveal), `score` | Content is encrypted until the reveal. | BuildCo's bid on `T-5`, sealed until 30 Nov |
 | `BidScore` | `id`, `bid` → `Bid`, `evaluator` → `User`, `criterion`, `score`, `scored_at` | | Carla scores BuildCo's quality 8/10 |
 
@@ -558,7 +559,7 @@ A realm can be one canister or a federation of quarters, one of which is the cap
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Realm` | `id` (`1`), `name`, `manifesto`, `welcome_message`, `status`, `calendar` → `Calendar`, `treasury` → `Treasury`, `accounting_currency`, `accounting_currency_decimals`; federation: `is_quarter`, `is_capital`, `federation_realm_id`, `federation_codex`, `quarter_join_mode`; trust: `trusted_principals`, `require_marketplace_approval`, `trusted_approvers`; governance: `voting_threshold`, `voting_quorum` (basis points, for realm-wide proposals); settings: `open_registration`, `logo_url`, `background_image_url`, `installed_version`, `network`; `member_count` (its members, and on a capital its quarters' as they last reported) | Singleton per canister. An implementation adds its own settings next to these. | Agora: `beta`, capital, currency REALM (8 decimals), open registration off |
+| `Realm` | `id` (`1`), `name`, `manifesto`, `welcome_message`, `status`, `calendar` → `Calendar`, `treasury` → `Treasury`, `accounting_currency`, `accounting_currency_decimals`; federation: `is_quarter`, `is_capital`, `federation_realm_id`, `federation_codex`, `quarter_join_mode`; trust: `trusted_principals`, `require_marketplace_approval`, `trusted_approvers`; governance: `voting_threshold`, `voting_quorum` (hundred-millionths, for realm-wide proposals); settings: `open_registration`, `logo_url`, `background_image_url`, `installed_version`, `network`; `member_count` (its members, and on a capital its quarters' as they last reported) | Singleton per canister. An implementation adds its own settings next to these. | Agora: `beta`, capital, currency REALM (8 decimals), open registration off |
 | `Calendar` | `id`, `realm` → `Realm`, `epoch`, `fiscal_period`, `voting_window`, `codex_release_cycle`, `benefit_cycle`, `service_payment_cycle`, `license_review_cycle`, `custom_cycles` (Json) | The realm's governance time cycles, as durations. | Voting window 7 days, fiscal period 1 year, licence review every 2 years |
 | `Registry` | `id` (name), `description`, `principal_id` | A registry canister the realm is listed in. | `realm-registry`, `ufxgi-…` |
 | `Quarter` | `id` (canister id), `name`, `index`, `status`, `population`, `codex_id`, `codex_version`, `last_sync`, `last_activity_at` | Known on the capital. | North: population 1,240, `active`, codex agora 1.4.2 |

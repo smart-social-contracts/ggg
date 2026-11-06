@@ -7,7 +7,7 @@ module {
   public type Account = { owner : Principal; subaccount : ?Blob };
   /// AllocationRule and TaxPolicy.
   public type AdoptionStatus = { #Superseded; #Draft; #Proposed; #Adopted };
-  /// share in basis points.
+  /// share in hundred-millionths.
   public type Allocation = { fund : Text; share : Nat };
   public type AllocationRule = {
     id : Text;
@@ -16,7 +16,7 @@ module {
     proposal : ?Text;
     rules : [Allocation];
   };
-  /// Shares in basis points, adding up to at most 10 000.
+  /// Shares in hundred-millionths, adding up to at most 100 000 000.
   public type AllocationRuleDraftArgs = {
     source_fund : Text;
     rules : [Allocation];
@@ -302,7 +302,7 @@ module {
   };
   /// The token's ggg: header as read from the ledger, and its frozen flag.
   public type CredentialVerifyArgs = { frozen : Bool; header : [(Text, Text)] };
-  /// weight in basis points.
+  /// weight in hundred-millionths.
   public type Criterion = { weight : Nat; criterion : Text };
   public type Cycle = { name : Text; every : Duration };
   public type DelegableOperation = { permission : Text; operation : Text };
@@ -1110,7 +1110,7 @@ module {
     category : Text;
     profiles : [Text];
   };
-  /// m of n approvals; quorum in basis points.
+  /// m of n approvals; quorum in hundred-millionths (100 000 000 = 100 %).
   public type Policy = { m : Nat; n : Nat; veto : [Principal]; quorum : Nat };
   public type Position = {
     id : Text;
@@ -1441,7 +1441,7 @@ module {
     justification : ?Text;
     tender : Text;
   };
-  /// Weights in basis points, adding up to 10 000.
+  /// Weights in hundred-millionths, adding up to 100 000 000.
   public type TenderCreateArgs = {
     opens_at : ?Timestamp;
     title : Text;

@@ -1,5 +1,6 @@
 /// Breaks GGG on purpose, to test that the conformance suite reports failures.
-/// It doesn't declare GGG, its realm has no name, and it has no member or proposal methods.
+/// It doesn't declare GGG, its realm has no name and a quorum above 100 %, and it has no member or
+/// proposal methods.
 import T "Ggg";
 
 persistent actor {
@@ -26,8 +27,8 @@ persistent actor {
       trusted_principals = [];
       require_marketplace_approval = false;
       trusted_approvers = [];
-      voting_threshold = 5_000;
-      voting_quorum = 0;
+      voting_threshold = 50_000_000;
+      voting_quorum = 100_000_001; // above 100 %
       open_registration = false;
       logo_url = null;
       background_image_url = null;
