@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory } from '../idl/ggg.js';
-import { PUBLIC_UPDATES, updateTable } from '../src/suite.js';
+import { PUBLIC_UPDATES, isTimezoneName, updateTable } from '../src/suite.js';
 
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const model = read('model/README.md');
@@ -101,4 +101,11 @@ test('delegable operations, and only they, take on_behalf_of', () => {
     .filter(([, fn]) => fn.argTypes.length && fn.argTypes[0] instanceof IDL.RecordClass && fn.argTypes[0]._fields.some(([k]) => k === 'on_behalf_of'))
     .map(([name]) => name.replace(/^ggg_/, ''));
   assert.deepEqual(taking.sort(), [...new Set(flagged('delegable'))].sort());
+});
+
+test('a time zone name is Area/Location or UTC', () => {
+  const valid = ['Europe/Madrid', 'America/Argentina/Buenos_Aires', 'America/Port-au-Prince', 'Etc/GMT+5', 'UTC'];
+  const invalid = ['', 'CET', 'Madrid', 'europe/madrid', '+01:00', 'Europe/', 'Europe/Madrid/', 'Mars/Olympus', 'Europe/Mad rid'];
+  for (const name of valid) assert.ok(isTimezoneName(name), `${name} is valid`);
+  for (const name of invalid) assert.ok(!isTimezoneName(name), `"${name}" is not valid`);
 });

@@ -14,6 +14,13 @@ const UNKNOWN = 'ggg-conformance-no-such-record';
 // Every ratio is in hundred-millionths: 100 % is 100 000 000.
 const WHOLE = 100_000_000n;
 
+// A time zone name has the shape of the IANA database's: `Area/Location`, up to three parts, with
+// one of its areas, or `UTC`. The shape is checked, not each city, so no zone list ships here.
+const TIMEZONE_AREAS = 'Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific|Etc';
+const TIMEZONE = new RegExp(`^(UTC|(${TIMEZONE_AREAS})/[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)?)$`);
+
+export const isTimezoneName = (name) => TIMEZONE.test(name);
+
 export class Skip extends Error {}
 
 const tag = (variant) => Object.keys(variant)[0];
@@ -339,6 +346,12 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
       assert(realm[field] <= WHOLE, `${field} is ${realm[field]}, above ${WHOLE} (100 %)`);
     }
     return `threshold ${realm.voting_threshold}, quorum ${realm.voting_quorum}`;
+  });
+
+  await check('GGG', 'R3', 'the realm names its time zone with an IANA name', async () => {
+    const { timezone } = await anon.ggg_realm_info();
+    assert(isTimezoneName(timezone), `timezone "${timezone}" is not an IANA name such as Europe/Madrid, or UTC`);
+    return timezone;
   });
 
   await check('GGG', 'M1', 'ggg_user_get answers a caller about itself', async () => {
