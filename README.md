@@ -31,7 +31,9 @@ Version 0.1.0, the first. Every entity is in `ggg.did`; the methods cover the op
 far. Releases are tags (`v0.1.0`) with [semantic versioning](model/README.md#versions): until 1.0,
 anything may change.
 
-The documents in [`docs/`](docs) are the 2025 concept notes, replaced by the model.
+The documents in [`docs/`](docs) are the 2025 concept notes, replaced by the model, except
+[What GGG provides for a layered codex](docs/layered-codex.md): the operations, fields and units a
+GOS implements so a realm can run legislation from several sources.
 
 ## License
 
