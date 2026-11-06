@@ -46,6 +46,8 @@ path.
 - `idl/ggg.js` is the JavaScript binding generated from `ggg.did`.
 - `test/model.test.js` fails when an entity's fields in `ggg.did` differ from the model, or a `ggg_`
   method is not a model operation.
+- `test/domains.test.js` fails when `domains.json` is malformed or differs from the table in
+  `docs/layered-codex.md`.
 - `fixture/Ggg.mo` holds the Motoko types generated from `ggg.did`.
 - `fixture/main.mo` is a minimal Motoko GOS: members and proposals, and every other domain empty. The build checks its interface against `ggg.did` with
   `didc check`, and the tests expect it to pass every check.
