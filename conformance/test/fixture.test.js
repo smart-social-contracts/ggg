@@ -43,6 +43,7 @@ test('the fixture passes the read-only checks', async () => {
   assert.equal(o.D2, 'warn');
   assert.equal(o.R1, 'pass');
   assert.equal(o.R2, 'pass');
+  assert.equal(o.R3, 'pass');
   assert.equal(o.R4, 'pass');
   assert.equal(o.O1, 'pass');
   assert.equal(o.W1, 'skip');
@@ -79,7 +80,7 @@ test('every list paginates, rejects a malformed cursor, and lookups of unknown i
 test('a canister that breaks GGG fails', async () => {
   const results = await run({ canisterId: brokenId });
   const o = outcomes(results);
-  for (const id of ['D1', 'R1', 'R2', 'O1', 'M1', 'M2', 'P1', 'P3', 'P5', 'L1', 'C1', 'G1']) assert.equal(o[id], 'fail', id);
+  for (const id of ['D1', 'R1', 'R2', 'R3', 'O1', 'M1', 'M2', 'P1', 'P3', 'P5', 'L1', 'C1', 'G1']) assert.equal(o[id], 'fail', id);
   assert.equal(o.R4, 'warn');
   assert.match(results.find((r) => r.id === 'D1').detail, /GGG missing/);
   assert.match(results.find((r) => r.id === 'R1').detail, /name is empty/);

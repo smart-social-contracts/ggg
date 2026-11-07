@@ -618,6 +618,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       background_image_url = null;
       installed_version = "ggg-fixture 0.5.0";
       network = "local";
+      timezone = "Europe/Madrid";
       member_count = Map.size(members);
     };
   };

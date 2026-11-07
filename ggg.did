@@ -698,6 +698,8 @@ type Realm = record {
   background_image_url : opt text;
   installed_version : text;
   network : text;
+  // An IANA time zone name such as "Europe/Madrid"; "UTC" until the realm sets one.
+  timezone : text;
   // Its members; on a capital, with its quarters' as they last reported.
   member_count : nat;
 };
@@ -1460,6 +1462,8 @@ type RealmConfigureArgs = record {
   welcome_message : opt text;
   open_registration : opt bool;
   quarter_join_mode : opt text;
+  // An IANA name; any other text is InvalidArgument.
+  timezone : opt text;
 };
 type BrandingArgs = record { logo_url : opt text; background_image_url : opt text };
 type TokensArgs = record { accounting_currency : opt text; accounting_currency_decimals : opt nat8 };

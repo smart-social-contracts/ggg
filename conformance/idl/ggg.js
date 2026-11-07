@@ -1336,6 +1336,7 @@ export const idlFactory = ({ IDL }) => {
     'drifting' : IDL.Bool,
   });
   const RealmConfigureArgs = IDL.Record({
+    'timezone' : IDL.Opt(IDL.Text),
     'name' : IDL.Opt(IDL.Text),
     'manifesto' : IDL.Opt(IDL.Text),
     'quarter_join_mode' : IDL.Opt(IDL.Text),
@@ -1358,6 +1359,7 @@ export const idlFactory = ({ IDL }) => {
   const Realm = IDL.Record({
     'id' : IDL.Text,
     'status' : RealmStatus,
+    'timezone' : IDL.Text,
     'require_marketplace_approval' : IDL.Bool,
     'is_quarter' : IDL.Bool,
     'name' : IDL.Text,
