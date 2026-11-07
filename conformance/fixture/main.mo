@@ -29,6 +29,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let WHOLE = 100_000_000; // 100 %, in hundred-millionths
   let VOTING_THRESHOLD = 50_000_000; // 50 %
   let VOTING_QUORUM = 0;
+  let MAX_LINKS = 16; // a proposal's own links
+  let MAX_LINKS_TO = 32; // links to a proposal from others
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
 
@@ -149,6 +151,46 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         };
       };
     };
+  };
+
+  /// The links of other proposals to this one, oldest first.
+  func linksTo(id : Text) : [T.ProposalLink] {
+    let found = Iter.filterMap<T.Proposal, T.ProposalLink>(
+      Map.values(proposals),
+      func(q) {
+        for (link in q.links.vals()) {
+          if (link.proposal == id) return ?{ kind = link.kind; proposal = q.id };
+        };
+        null;
+      },
+    );
+    Iter.toArray(found);
+  };
+
+  /// The member a proposal was filed for: the grantor when it was filed on their behalf.
+  func filedFor(p : T.Proposal) : Principal {
+    switch (p.on_behalf_of) { case (?grantor) grantor; case null p.proposer };
+  };
+
+  /// Refuses links that break I-GOV-10. `filer` is the member the new proposal is filed for.
+  func checkLinks(filer : Principal, links : [T.ProposalLink]) : ?T.GggError {
+    if (links.size() > MAX_LINKS) return ?#InvalidArgument("a proposal has at most 16 links");
+    let named = Map.empty<Text, ()>();
+    for (link in links.vals()) {
+      if (Map.containsKey(named, Text.compare, link.proposal)) {
+        return ?#InvalidArgument("the links name proposal " # link.proposal # " twice");
+      };
+      Map.add(named, Text.compare, link.proposal, ());
+      let (_, target) = switch (findProposal(link.proposal)) { case null return ?#NotFound; case (?found) found };
+      if (link.kind == #Replaces) {
+        if (filedFor(target) != filer) {
+          return ?#Forbidden({ permission = ?"proposal.create"; message = "Only the member it was filed for may replace a withdrawn proposal." });
+        };
+        if (target.status != #Withdrawn) return ?#Conflict("a replaced proposal must be withdrawn first");
+      };
+      if (linksTo(target.id).size() >= MAX_LINKS_TO) return ?#Conflict("too many proposals link to " # target.id);
+    };
+    null;
   };
 
   func ballots(n : Nat) : Map.Map<Principal, T.Vote> {
@@ -349,7 +391,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     let (n, p) = switch (findProposal(args.id)) { case null return #Ok(null); case (?found) found };
     switch (page(Map.values(ballots(n)), args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok(?{ proposal = p; votes = items; next });
+      case (#Ok({ items; next })) #Ok(?{ proposal = p; votes = items; next; linked_from = linksTo(p.id) });
     };
   };
 
@@ -380,6 +422,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         switch (checkCall(method, arg)) { case (?e) return #Err(e); case null {} };
       };
     };
+    let links = switch (args.links) { case (?l) l; case null [] };
+    switch (checkLinks(caller, links)) { case (?e) return #Err(e); case null {} };
     let t = now();
     switch (args.effective_at) {
       case (?e) { if (e <= t) return #Err(#InvalidArgument("effective_at must lie in the future")) };
@@ -403,6 +447,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       quorum = VOTING_QUORUM;
       tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members) };
       result = null;
+      links;
     };
     Map.add(proposals, Nat.compare, n, p);
     audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));

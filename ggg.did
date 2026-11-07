@@ -224,6 +224,12 @@ type ProposalResult = variant {
   Error : text;
 };
 
+// A link to another proposal. In Proposal.links it is the proposal's own link, fixed at creation. In
+// ProposalDetail.linked_from it is another proposal's link to this one, so Replaces there reads
+// "replaced by" and RelatesTo "related to". The target is the other proposal's id.
+type ProposalLinkKind = variant { Replaces; RelatesTo };
+type ProposalLink = record { kind : ProposalLinkKind; proposal : text };
+
 type Tally = record { yes : nat; no : nat; abstain : nat; eligible : opt nat };
 
 type Proposal = record {
@@ -244,6 +250,7 @@ type Proposal = record {
   quorum : nat;
   tally : Tally;
   result : opt ProposalResult;
+  links : vec ProposalLink;
 };
 
 type VoteChoice = variant { Yes; No; Abstain };
@@ -1017,12 +1024,15 @@ type OrganizationStatusArgs = record { organization : text; status : Organizatio
 
 // §4
 
-// The proposal, and its votes a page at a time.
-type ProposalDetail = record { proposal : Proposal; votes : vec Vote; next : opt text };
+// The proposal, its votes a page at a time, and the links of other proposals to it, oldest first.
+type ProposalDetail = record { proposal : Proposal; votes : vec Vote; next : opt text; linked_from : vec ProposalLink };
 
 type ProposalListArgs = record { cursor : opt text; limit : opt nat32; status : opt ProposalStatus };
 type ProposalPage = record { items : vec Proposal; next : opt text };
 
+// links is optional, and absent means none, so callers built before links existed keep working. At
+// most 16 links, each naming an existing proposal once. A Replaces target must be a withdrawn
+// proposal filed for the same member (on_behalf_of when set, else the proposer).
 type ProposalCreateArgs = record {
   title : text;
   description : text;
@@ -1030,6 +1040,7 @@ type ProposalCreateArgs = record {
   action : ProposalAction;
   // Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
   effective_at : opt Timestamp;
+  links : opt vec ProposalLink;
   on_behalf_of : opt principal;
 };
 
