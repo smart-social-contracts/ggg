@@ -251,3 +251,41 @@ test('proposal_stop follows the policy of the department that owns the proposal'
   const open = await file({ department: 'council' });
   refusedWith(await as(bob).ggg_proposal_stop(open), 'Conflict');
 });
+
+test('a stop proposal that runs after its target executed, or was withdrawn, ends Failed', async () => {
+  const stopProposal = async (target) => ok(await as(bob).ggg_proposal_stop(target)).Proposed;
+  const carry = async (id) => {
+    for (const voter of [alice, bob]) ok(await as(voter).ggg_proposal_vote({ proposal: id, choice: { Yes: null }, on_behalf_of: [] }));
+    assert.equal(await finalize(id), 'Accepted');
+  };
+  const failed = async (id) => {
+    const executed = ok(await execute(id));
+    assert.equal(tag(executed.status), 'Failed');
+    assert.deepEqual(executed.result.map(tag), ['Error']);
+  };
+
+  // The target takes effect before the stop proposal is carried out.
+  const far = await file({ action: stopping('0'), days: 60, everyone: true });
+  const executing = await file({ action: stopping(far), days: 3, everyone: true, department: 'council' });
+  await wait(1);
+  await finalize(far);
+  assert.equal(await finalize(executing), 'ExecutionScheduled');
+  const lateStop = await stopProposal(executing);
+  await carry(lateStop);
+  await wait(2.5);
+  assert.equal(tag(ok(await execute(executing)).status), 'Executed');
+  await failed(lateStop);
+  assert.equal(await status(executing), 'Executed');
+
+  // Another stop proposal ended the target first.
+  const target = await file({ action: stopping('0'), days: 40, everyone: true, department: 'council' });
+  assert.equal(await finalize(target), 'ExecutionScheduled');
+  const first = await stopProposal(target);
+  const second = await stopProposal(target);
+  await carry(first);
+  await carry(second);
+  assert.equal(tag(ok(await execute(first)).status), 'Executed');
+  assert.equal(await status(target), 'Withdrawn');
+  await failed(second);
+  assert.equal(await status(target), 'Withdrawn');
+});

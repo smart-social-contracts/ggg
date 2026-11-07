@@ -217,10 +217,11 @@ or the call is refused with `InvalidArgument`. The rules:
   stays `Accepted`, and `proposal_execute` refuses it before and after `effective_at`.
 - Another proposal can stop a scheduled one before its time with `proposal_stop`. It is governed by the
   department that owns the scheduled proposal (its scope; the root for a realm-wide one), under that
-  department's policy, not the realm's. Under a policy that is not direct, calling it files a proposal
-  of that department, so its vote stops the scheduled one; under a direct policy the call applies at
-  once. It ends the scheduled proposal as `Withdrawn`, without executing it, and is refused with
-  `Conflict` for a proposal in any other status.
+  department's policy. Under a policy that is not direct, calling it files a proposal of that
+  department, so its vote stops the scheduled one; under a direct policy the call applies at once. It
+  ends the scheduled proposal as `Withdrawn`, without executing it, and is refused with `Conflict` for
+  a proposal in any other status. A stop proposal that runs after its target has already executed or
+  been withdrawn ends `Failed`.
 - A vote that ends after `effective_at` does not execute: the proposal ends `Expired`, whatever was
   decided, and the proposer submits a new one. A vote ends at its deadline, or earlier at the moment
   every eligible member has voted. When it is finalized doesn't matter: a vote that ended before

@@ -319,10 +319,11 @@ Two kinds of body:
 - I-GOV-8: `proposal_stop` ends a proposal that is `execution_scheduled`, without executing it, as
   `withdrawn`; for any other status it is refused with `Conflict`. It is governed by the department
   that owns the stopped proposal, the department it is scoped to (the root for a realm-wide one), and
-  by that department's policy, not the realm's: under a policy that is not direct, calling it files a
-  proposal, scoped to the same department, whose action is the call, so a vote of that department
-  stops the scheduled proposal; under a direct policy the call applies at once. It replies `Done` with
-  no id, because it creates no record.
+  by that department's policy: under a policy that is not direct, calling it files a proposal, scoped
+  to the same department, whose action is the call, so a vote of that department stops the scheduled
+  proposal; under a direct policy the call applies at once. A stop proposal that runs after its target
+  has already executed or been withdrawn ends `failed`. It replies `Done` with no id, because it
+  creates no record.
 
 ## 5. Finance
 
