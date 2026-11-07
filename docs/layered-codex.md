@@ -56,7 +56,7 @@ domain ids are the chapter file names.
 
 | Domain | What its legislation covers |
 |---|---|
-| `realm` | The realm's own entry points and settings: joining, activating a codex, its districts. |
+| `realm` | The realm's own entry points and settings: joining, activating a codex, its quarters. |
 | `tax` | Taxes, their rates, exemptions and assessment. |
 | `procedure` | Administrative procedure: deadlines, silence, notices and working days. |
 | `register` | Registers of residents and others that the realm keeps, and who is told of an entry. |

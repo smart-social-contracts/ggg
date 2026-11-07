@@ -1,7 +1,7 @@
 {
   "version": 1,
   "domains": [
-    { "id": "realm", "description": "The realm's own entry points and settings: joining, activating a codex, its districts." },
+    { "id": "realm", "description": "The realm's own entry points and settings: joining, activating a codex, its quarters." },
     { "id": "tax", "description": "Taxes, their rates, exemptions and assessment." },
     { "id": "procedure", "description": "Administrative procedure: deadlines, silence, notices and working days." },
     { "id": "register", "description": "Registers of residents and others that the realm keeps, and who is told of an entry." },
