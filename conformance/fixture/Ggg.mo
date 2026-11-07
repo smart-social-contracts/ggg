@@ -2185,7 +2185,8 @@ module {
         #Ok : Proposal;
         #Err : GggError;
       };
-    /// Ends a proposal whose execution is scheduled, as Withdrawn. Done carries no id.
+    /// Ends a proposal whose execution is scheduled, as Withdrawn. Governed by the department the
+    /// proposal is scoped to, the root for a realm-wide one. Done carries no id.
     ggg_proposal_stop : shared Text -> async {
         #Ok : Governed;
         #Err : GggError;
