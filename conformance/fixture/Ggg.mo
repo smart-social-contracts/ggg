@@ -1191,15 +1191,16 @@ module {
     /// The decision itself is the outcome.
     #Motion;
   };
-  /// At most 16 links, each naming an existing proposal once. A Replaces target must be a withdrawn
-  /// proposal of the same proposer.
+  /// links is optional, and absent means none, so callers built before links exist keep working. At most
+  /// 16 links, each naming an existing proposal once. A Replaces target must be a withdrawn proposal
+  /// filed for the same member (on_behalf_of when set, else the proposer).
   public type ProposalCreateArgs = {
     title : Text;
     action : ProposalAction;
     /// Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
     effective_at : ?Timestamp;
     description : Text;
-    links : [ProposalLink];
+    links : ?[ProposalLink];
     on_behalf_of : ?Principal;
     department : ?Text;
   };

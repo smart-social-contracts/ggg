@@ -11,9 +11,17 @@ import { idlFactory } from '../idl/ggg.js';
 const alice = Ed25519KeyIdentity.generate();
 const bob = Ed25519KeyIdentity.generate();
 
+/** The interface of a caller built before links existed: ProposalCreateArgs without a links field. */
+const callerWithoutLinks = ({ IDL: idl }) => {
+  const [, create] = idlFactory({ IDL: idl })._fields.find(([name]) => name === 'ggg_proposal_create');
+  const args = idl.Record(Object.fromEntries(create.argTypes[0]._fields.filter(([key]) => key !== 'links')));
+  return idl.Service({ ggg_proposal_create: idl.Func([args], create.retTypes, []) });
+};
+
 let server;
 let pic;
 let as;
+let asOldCaller;
 
 before(async () => {
   server = await PocketIcServer.start();
@@ -23,6 +31,7 @@ before(async () => {
   const arg = IDL.encode([IDL.Vec(IDL.Principal)], [[alice.getPrincipal(), bob.getPrincipal()]]);
   await pic.installCode({ canisterId, wasm, arg });
   as = (identity) => pic.createActor({ idlFactory, canisterId, sender: identity.getPrincipal() });
+  asOldCaller = (identity) => pic.createActor({ idlFactory: callerWithoutLinks, canisterId, sender: identity.getPrincipal() });
 });
 
 after(async () => {
@@ -41,19 +50,31 @@ const refusedWith = (result, error) => {
 };
 
 const link = (kind, proposal) => ({ kind: { [kind]: null }, proposal });
-const create = (identity, links = []) =>
+const create = (identity, links) =>
   as(identity).ggg_proposal_create({
     title: 'A proposal',
     description: '',
     department: [],
     action: { Motion: null },
     effective_at: [],
-    links,
+    links: links ? [links] : [],
     on_behalf_of: [],
   });
-const file = async (identity, links = []) => ok(await create(identity, links));
+const file = async (identity, links) => ok(await create(identity, links));
 const withdraw = async (identity, id) => ok(await as(identity).ggg_proposal_withdraw({ proposal: id, on_behalf_of: [] }));
 const detail = async (id) => ok(await as(alice).ggg_proposal_get({ id, cursor: [], limit: [] }))[0];
+
+test('a caller that sends no links field files a proposal with no links', async () => {
+  const id = ok(await asOldCaller(alice).ggg_proposal_create({
+    title: 'From an older caller',
+    description: '',
+    department: [],
+    action: { Motion: null },
+    effective_at: [],
+    on_behalf_of: [],
+  }));
+  assert.deepEqual((await detail(id)).proposal.links, []);
+});
 
 test('a replacement is listed with its links, and the replaced proposal points forward to it', async () => {
   const old = await file(alice);

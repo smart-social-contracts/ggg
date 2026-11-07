@@ -716,7 +716,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
   const link = (kind, proposal) => ({ kind: { [kind]: null }, proposal });
   /** Files a Motion with the given links, and withdraws it when `then` is done. */
   const fileLinked = async (title, links, then) => {
-    const result = await mine.ggg_proposal_create(motion(`GGG conformance check ${new Date().toISOString()} (${title})`, { links }));
+    const result = await mine.ggg_proposal_create(motion(`GGG conformance check ${new Date().toISOString()} (${title})`, { links: [links] }));
     if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not propose');
     const id = ok(result, `ggg_proposal_create(${title})`);
     try {
@@ -755,7 +755,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     needMember();
     await fileLinked('open', [], async (open) => {
       const attempt = async (links, tags, what) => {
-        const result = await mine.ggg_proposal_create(motion(what, { links }));
+        const result = await mine.ggg_proposal_create(motion(what, { links: [links] }));
         if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not propose');
         err(result, tags, `ggg_proposal_create(${what})`);
       };

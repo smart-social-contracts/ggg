@@ -165,8 +165,13 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     Iter.toArray(found);
   };
 
-  /// Refuses links that break I-GOV-10.
-  func checkLinks(caller : Principal, links : [T.ProposalLink]) : ?T.GggError {
+  /// The member a proposal was filed for: the grantor when it was filed on their behalf.
+  func filedFor(p : T.Proposal) : Principal {
+    switch (p.on_behalf_of) { case (?grantor) grantor; case null p.proposer };
+  };
+
+  /// Refuses links that break I-GOV-10. `filer` is the member the new proposal is filed for.
+  func checkLinks(filer : Principal, links : [T.ProposalLink]) : ?T.GggError {
     if (links.size() > MAX_LINKS) return ?#InvalidArgument("a proposal has at most 16 links");
     let named = Map.empty<Text, ()>();
     for (link in links.vals()) {
@@ -176,8 +181,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       Map.add(named, Text.compare, link.proposal, ());
       let (_, target) = switch (findProposal(link.proposal)) { case null return ?#NotFound; case (?found) found };
       if (link.kind == #Replaces) {
-        if (target.proposer != caller) {
-          return ?#Forbidden({ permission = ?"proposal.create"; message = "Only the proposer may replace their withdrawn proposal." });
+        if (filedFor(target) != filer) {
+          return ?#Forbidden({ permission = ?"proposal.create"; message = "Only the member it was filed for may replace a withdrawn proposal." });
         };
         if (target.status != #Withdrawn) return ?#Conflict("a replaced proposal must be withdrawn first");
       };
@@ -415,7 +420,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         switch (checkCall(method, arg)) { case (?e) return #Err(e); case null {} };
       };
     };
-    switch (checkLinks(caller, args.links)) { case (?e) return #Err(e); case null {} };
+    let links = switch (args.links) { case (?l) l; case null [] };
+    switch (checkLinks(caller, links)) { case (?e) return #Err(e); case null {} };
     let t = now();
     switch (args.effective_at) {
       case (?e) { if (e <= t) return #Err(#InvalidArgument("effective_at must lie in the future")) };
@@ -439,7 +445,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       quorum = VOTING_QUORUM;
       tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members) };
       result = null;
-      links = args.links;
+      links;
     };
     Map.add(proposals, Nat.compare, n, p);
     audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
