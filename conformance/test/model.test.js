@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory } from '../idl/ggg.js';
-import { PUBLIC_UPDATES, isTimezoneName, updateTable } from '../src/suite.js';
+import { PUBLIC_UPDATES, isTimezoneName, looksLikeBasisPoints, updateTable } from '../src/suite.js';
 
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const model = read('model/README.md');
@@ -108,4 +108,9 @@ test('a time zone name is Area/Location or UTC', () => {
   const invalid = ['', 'CET', 'Madrid', 'europe/madrid', '+01:00', 'Europe/', 'Europe/Madrid/', 'Mars/Olympus', 'Europe/Mad rid'];
   for (const name of valid) assert.ok(isTimezoneName(name), `${name} is valid`);
   for (const name of invalid) assert.ok(!isTimezoneName(name), `"${name}" is not valid`);
+});
+
+test('a nonzero ratio under 1 % looks like an unconverted basis-point value', () => {
+  for (const ratio of [1n, 5_000n, 999_999n]) assert.ok(looksLikeBasisPoints(ratio), `${ratio} looks like basis points`);
+  for (const ratio of [0n, 1_000_000n, 50_000_000n, 100_000_000n]) assert.ok(!looksLikeBasisPoints(ratio), `${ratio} is a ratio`);
 });
