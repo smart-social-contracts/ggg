@@ -49,10 +49,34 @@ The two entry points of a realm's own legislation are ordinary members of these 
 
 ## 2. The domain list ([ggg#1](https://github.com/smart-social-contracts/ggg/issues/1))
 
-A versioned list of domain ids with a one-line description each. A chapter is one source's
-legislation in one domain, so the domain ids are the chapter file names. To start with: `realm`,
-`tax`, `procedure`, `register`, `local_regime`, `water`, `data_protection`, `language`, `treasury` and
-`federation`. Later: `immigration`, `education`, `social_security`, `defense`, and so on.
+A **domain** is a subject of legislation, such as `tax` or `water`. (It is not one of the sections of
+the model.) The list of domains is [`domains.json`](../domains.json): for each domain, its `id` and a
+one-line `description`. A chapter is one source's legislation in one domain, so the domain ids are the
+chapter file names.
+
+| Domain | What its legislation covers |
+|---|---|
+| `realm` | The realm's own entry points and settings: joining, activating a codex, its quarters. |
+| `tax` | Taxes, their rates, exemptions and assessment. |
+| `procedure` | Administrative procedure: deadlines, silence, notices and working days. |
+| `register` | Registers of residents and others that the realm keeps, and who is told of an entry. |
+| `local_regime` | How local government works: its organs, ordinances and public comment. |
+| `water` | Water supply, sanitation and their tariffs. |
+| `data_protection` | Personal data: the legal bases for sharing it and the duties that follow. |
+| `language` | Official languages, and the languages of documents and services. |
+| `treasury` | Budgets, funds, the allocation of revenue and payments. |
+| `federation` | Relations with other realms: sync sources, followers and quarters. |
+
+Later: `immigration`, `education`, `social_security`, `defense`, and so on.
+
+- **An id** is lowercase letters and underscores, starting with a letter (`data_protection`), so it is
+  a file name and, in CamelCase, a class name (`DataProtection`).
+- **The list has GGG's version, none of its own.** One GGG, one version: `domains.json` is released
+  with the model, `ggg.did` and the conformance suite as a tag of this repository (`v0.1.0`). A tool
+  that reads the list names the GGG version it read it from.
+- **The list only grows.** An id is never renamed, reused or removed, because chapters are named after
+  it. Adding a domain is a minor release; rewording a description is a patch.
+- **A chapter's domain must be in the list.** The tools that read a codex refuse a chapter in any other.
 
 ---
 

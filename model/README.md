@@ -111,13 +111,14 @@ Every entity and operation is in `ggg.did`. The
 
 ### Versions
 
-GGG uses [semantic versioning](https://semver.org). The model, `ggg.did` and the conformance suite
-share one version, released as a tag of this repository (`v0.1.0`).
+GGG uses [semantic versioning](https://semver.org). The model, `ggg.did`, the conformance suite and
+the [domain list](../domains.json) share one version, released as a tag of this repository (`v0.1.0`),
+so the GGG version a canister lists in `icrc10_supported_standards` also names its domain list.
 
 - **0.x:** anything may change from one minor version to the next.
 - **Minor (from 1.0):** only additions that Candid subtyping accepts: new methods, new `opt`
-  arguments, new fields in replies, new entities. Callers built for an earlier minor keep working; a
-  GOS claims the new minor once it implements the additions.
+  arguments, new fields in replies, new entities, new domains in the domain list. Callers built for
+  an earlier minor keep working; a GOS claims the new minor once it implements the additions.
 - **Patch:** wording and examples only; nothing an implementation or caller would notice.
 - **Variants** (statuses, kinds, errors) are fixed within a major version, because Candid callers
   reject a tag they don't know.
