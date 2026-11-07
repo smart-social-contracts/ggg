@@ -116,7 +116,7 @@ the [domain list](../domains.json) share one version, released as a tag of this 
 so the GGG version a canister lists in `icrc10_supported_standards` also names its domain list.
 
 - **0.x:** anything may change from one minor version to the next, except the domain list, which only
-  grows in every version ([layered-codex §2](../docs/layered-codex.md)).
+  grows in every version ([layered-codex §2](../docs/layered-codex.md#2-the-domain-list-ggg1)).
 - **Minor (from 1.0):** only additions that Candid subtyping accepts: new methods, new `opt`
   arguments, new fields in replies, new entities, new domains in the domain list. Callers built for
   an earlier minor keep working; a GOS claims the new minor once it implements the additions.
@@ -326,8 +326,9 @@ Two kinds of body:
   by that department's policy: under a policy that is not direct, calling it files a proposal, scoped
   to the same department, whose action is the call, so a vote of that department stops the scheduled
   proposal; under a direct policy the call applies at once. A stop proposal that runs after its target
-  is no longer scheduled ends `failed`. `proposal_stop` replies `Done` with no id, because it creates
-  no record.
+  is no longer scheduled ends `failed`. When it applies at once, `proposal_stop` replies `Done` with no
+  id, because it creates no record; under a policy that is not direct it replies `Proposed` with the
+  new proposal's id.
 - I-GOV-9: A proposal's links are fixed at creation, like its action: no operation edits a proposal's
   links or its action. To change a proposal, its proposer withdraws it and creates a new one that
   `replaces` it.
