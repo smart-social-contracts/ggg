@@ -74,9 +74,8 @@ Later: `immigration`, `education`, `social_security`, `defense`, and so on.
 - **The list has GGG's version, none of its own.** One GGG, one version: `domains.json` is released
   with the model, `ggg.did` and the conformance suite as a tag of this repository (`v0.1.0`). A tool
   that reads the list names the GGG version it read it from.
-- **Within a major version the list only grows.** An id is never renamed, reused or removed, because
-  chapters are named after it. Adding a domain is a minor release, and wording a description better is
-  a patch. Until 1.0, anything may change, as in the rest of GGG.
+- **The list only grows.** An id is never renamed, reused or removed, because chapters are named after
+  it. Adding a domain is a minor release; rewording a description is a patch.
 - **A chapter's domain must be in the list.** The tools that read a codex refuse a chapter in any other.
 
 ---

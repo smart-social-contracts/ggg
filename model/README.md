@@ -112,7 +112,8 @@ Every entity and operation is in `ggg.did`. The
 ### Versions
 
 GGG uses [semantic versioning](https://semver.org). The model, `ggg.did`, the conformance suite and
-the [domain list](../domains.json) share one version, released as a tag of this repository (`v0.1.0`).
+the [domain list](../domains.json) share one version, released as a tag of this repository (`v0.1.0`),
+so the GGG version a canister lists in `icrc10_supported_standards` also names its domain list.
 
 - **0.x:** anything may change from one minor version to the next.
 - **Minor (from 1.0):** only additions that Candid subtyping accepts: new methods, new `opt`
