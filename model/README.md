@@ -704,7 +704,8 @@ with the founder, the network, the registry and whether test features are allowe
   the registry's release wasm has exactly that hash and its namespace is approved by a trusted approver.
 - I-ADM-4: `Realm.timezone` is an IANA time zone name, `Area/Location` (up to three parts, such as
   `Europe/Madrid` or `America/Argentina/Buenos_Aires`) or `UTC`. A realm sets its own with
-  `realm_configure` and is `UTC` until it does; a name of any other shape is refused with
+  `realm_configure` and is `UTC` until it does, so `UTC` is the value of a realm that has not yet
+  chosen. A realm's setup should ask for a zone. A name of any other shape is refused with
   `InvalidArgument`. It is never taken from a layer of legislation or a sync source.
 
 ## 13. Private content
