@@ -199,10 +199,12 @@ working. A `ProposalLink` is a `kind` (`Replaces` or `RelatesTo`) and a proposal
   the same member (the grantor when `on_behalf_of` is set, else the proposer), so withdrawing first
   and replacing second keeps the history honest and nobody can claim another's withdrawn proposal.
   `RelatesTo` has no condition.
-- A proposal has at most 16 links of its own, and at most 32 links from other proposals, so a reply
-  never outgrows the Internet Computer's limits.
-- `ggg_proposal_get` also lists the links of other proposals to this one (`linked_from`, oldest first):
-  `Replaces` reads "replaced by", and `RelatesTo` is a reference both ways.
+- A withdrawn proposal is replaced once: a second `Replaces` of it is refused with `Conflict`.
+- A proposal has at most 16 links of its own, so a reply never outgrows the Internet Computer's limits.
+  The links to it from other proposals are not limited, and are read a page at a time.
+- The other side of a link is readable: `ggg_proposal_get` gives the one proposal that replaces this
+  one (`replaced_by`), and `ggg_proposal_linked_from` pages every proposal that links to it, oldest
+  first. `Replaces` there reads "replaced by", and `RelatesTo` is a reference both ways.
 - Codex guards see `links` as a fact of `proposal_create`, like every argument.
 
 ---

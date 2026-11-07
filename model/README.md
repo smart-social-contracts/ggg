@@ -288,6 +288,7 @@ Two kinds of body:
 | `proposal_open`, `proposal_finalize`, `proposal_execute` | `proposal.manage` | | After the deadline: 412 yes, 120 no, quorum met → `accepted`; execute pays BuildCo |
 | `proposal_stop` | `proposal.manage` | governed | `P-12`, scoped to Infrastructure, is scheduled for 1 Dec; under Infrastructure's policy a vote (`P-15`) calls `proposal_stop` on it and it ends `withdrawn` |
 | `proposal_get`, `proposal_list` | `realm.data_view` | read | Open proposals in quarter North |
+| `proposal_linked_from` | `realm.data_view` | read | The proposals that link to `P-7`: `P-9` replaces it, `P-11` and `P-12` relate to it |
 | `mandate_create`, `mandate_revoke` | `mandate.create` | governed | Grant Infrastructure the road-works mandate (via `P-4`) |
 | `mandate_assign_executor` | `mandate.assign_executor` | governed | Make Infrastructure the mandate's executor |
 | `contract_create` | `contract.create_under_mandate` | | Sign `C-9` with BuildCo under the road-works mandate |
@@ -327,12 +328,15 @@ Two kinds of body:
   links or its action. To change a proposal, its proposer withdraws it and creates a new one that
   `replaces` it.
 - I-GOV-10: A link names an existing proposal (`NotFound` otherwise), once (`InvalidArgument`
-  otherwise). A proposal has at most 16 links of its own (`InvalidArgument`) and at most 32 links from
-  others (`Conflict`). A `replaces` link names a `withdrawn` proposal filed for the same member (the
+  otherwise). A proposal has at most 16 links of its own (`InvalidArgument`); the links to it from
+  others are not limited. A `replaces` link names a `withdrawn` proposal filed for the same member (the
   grantor when `on_behalf_of` is set, else the proposer), else `Conflict`, or `Forbidden` when it was
-  filed for another. `relates to` has no such condition.
-- I-GOV-11: `proposal_get` shows the other side of every link: the links of other proposals to this one,
-  oldest first. A `replaces` there means "replaced by", and `relates to` is a reference both ways.
+  filed for another. A withdrawn proposal is replaced once: a second `replaces` of it is a `Conflict`.
+  `relates to` has no such conditions.
+- I-GOV-11: The other side of every link is readable. `proposal_get` shows the one proposal that
+  replaces this one (`replaced_by`), and `proposal_linked_from` lists, a page at a time and oldest
+  first, every proposal that links to it. A `replaces` there means "replaced by", and `relates to` is a
+  reference both ways.
 
 ## 5. Finance
 

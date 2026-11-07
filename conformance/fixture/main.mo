@@ -31,7 +31,6 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let VOTING_THRESHOLD = 50_000_000; // 50 %
   let VOTING_QUORUM = 0;
   let MAX_LINKS = 16; // a proposal's own links
-  let MAX_LINKS_TO = 32; // links to a proposal from others
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
@@ -184,6 +183,14 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     Iter.toArray(found);
   };
 
+  /// The proposal that replaces this one, if any.
+  func replacedBy(id : Text) : ?Text {
+    for (link in linksTo(id).vals()) {
+      if (link.kind == #Replaces) return ?link.proposal;
+    };
+    null;
+  };
+
   /// The member a proposal was filed for: the grantor when it was filed on their behalf.
   func filedFor(p : T.Proposal) : Principal {
     switch (p.on_behalf_of) { case (?grantor) grantor; case null p.proposer };
@@ -204,8 +211,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
           return ?#Forbidden({ permission = ?"proposal.create"; message = "Only the member it was filed for may replace a withdrawn proposal." });
         };
         if (target.status != #Withdrawn) return ?#Conflict("a replaced proposal must be withdrawn first");
+        if (replacedBy(target.id) != null) return ?#Conflict("proposal " # target.id # " is already replaced");
       };
-      if (linksTo(target.id).size() >= MAX_LINKS_TO) return ?#Conflict("too many proposals link to " # target.id);
     };
     null;
   };
@@ -409,7 +416,15 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     let (n, p) = switch (findProposal(args.id)) { case null return #Ok(null); case (?found) found };
     switch (page(Map.values(ballots(n)), args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok(?{ proposal = p; votes = items; next; linked_from = linksTo(p.id) });
+      case (#Ok({ items; next })) #Ok(?{ proposal = p; votes = items; next; replaced_by = replacedBy(p.id) });
+    };
+  };
+
+  public query func ggg_proposal_linked_from(args : T.GetArgs) : async Result<?T.ProposalLinkPage> {
+    let (_, p) = switch (findProposal(args.id)) { case null return #Ok(null); case (?found) found };
+    switch (page(linksTo(p.id).vals(), args.cursor, args.limit)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(links)) #Ok(?links);
     };
   };
 
