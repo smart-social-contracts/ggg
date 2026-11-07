@@ -24,7 +24,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let MAX_LIMIT = 100;
   let MAP_VIEW = 32;
   let VOTING_WINDOW_NS : Nat64 = 7 * 24 * 3600 * 1_000_000_000;
-  let VOTING_THRESHOLD = 5_000;
+  let VOTING_THRESHOLD = 50_000_000; // 50 %, in hundred-millionths
   let VOTING_QUORUM = 0;
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));

@@ -11,6 +11,13 @@ const NO_PROPOSAL = 'ggg-conformance-no-such-proposal';
 const NO_DEPARTMENT = 'ggg-conformance-no-such-department';
 const NO_METHOD = 'ggg_conformance_no_such_method';
 const UNKNOWN = 'ggg-conformance-no-such-record';
+// Every ratio is in hundred-millionths: 100 % is 100 000 000.
+const WHOLE = 100_000_000n;
+// A nonzero ratio under 1 % is more likely a basis-point value nobody converted (50 % was 5 000) than
+// a real quorum, so the suite warns about it.
+const SUSPICIOUSLY_SMALL = 1_000_000n;
+
+export const looksLikeBasisPoints = (ratio) => ratio > 0n && ratio < SUSPICIOUSLY_SMALL;
 
 export class Skip extends Error {}
 
@@ -103,7 +110,7 @@ function checkProposal(p) {
     assert(p.action.Call.method.length > 0, `proposal ${p.id}: the method name is empty`);
   }
   for (const field of ['threshold', 'quorum']) {
-    assert(p[field] <= 10_000n, `proposal ${p.id}: ${field} is ${p[field]}, above 10000`);
+    assert(p[field] <= WHOLE, `proposal ${p.id}: ${field} is ${p[field]}, above ${WHOLE} (100 %)`);
   }
   const opens = opt(p.opens_at);
   const deadline = opt(p.deadline);
@@ -331,6 +338,25 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     return `${realm.name}: ${realm.installed_version}, ${tag(realm.status)}`;
   });
 
+  await check('GGG', 'R2', 'the realm states its voting threshold and quorum in hundred-millionths', async () => {
+    const realm = await anon.ggg_realm_info();
+    for (const field of ['voting_threshold', 'voting_quorum']) {
+      assert(realm[field] <= WHOLE, `${field} is ${realm[field]}, above ${WHOLE} (100 %)`);
+    }
+    return `threshold ${realm.voting_threshold}, quorum ${realm.voting_quorum}`;
+  });
+
+  await check('GGG', 'O1', 'department policies state their quorum in hundred-millionths', async () => {
+    const walked = await walk((a) => reader.ggg_department_list(a), (d) => d.id);
+    const detail = checkWalk(walked, 'ggg_department_list');
+    for (const d of walked.items) {
+      for (const [name, policy] of [['policy', d.policy], ['target_policy', opt(d.target_policy)]]) {
+        if (policy) assert(policy.quorum <= WHOLE, `department ${d.id}: ${name}.quorum is ${policy.quorum}, above ${WHOLE} (100 %)`);
+      }
+    }
+    return detail;
+  });
+
   await check('GGG', 'M1', 'ggg_user_get answers a caller about itself', async () => {
     const m = ok(await anon.ggg_user_get(Principal.anonymous()), 'ggg_user_get(anonymous, as anonymous)');
     assert(m.length === 0, `the anonymous principal is a member: ${show(m)}`);
@@ -375,6 +401,27 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     proposals = walked.items;
     return detail;
   });
+
+  await check('GGG', 'R4', 'no ratio looks like an unconverted basis-point value', async () => {
+    const realm = await anon.ggg_realm_info();
+    const walked = await walk((a) => reader.ggg_department_list(a), (d) => d.id);
+    checkWalk(walked, 'ggg_department_list');
+    const ratios = [
+      ['realm voting_threshold', realm.voting_threshold],
+      ['realm voting_quorum', realm.voting_quorum],
+    ];
+    for (const d of walked.items) {
+      ratios.push([`department ${d.id} policy.quorum`, d.policy.quorum]);
+      const target = opt(d.target_policy);
+      if (target) ratios.push([`department ${d.id} target_policy.quorum`, target.quorum]);
+    }
+    for (const p of proposals) {
+      ratios.push([`proposal ${p.id} threshold`, p.threshold], [`proposal ${p.id} quorum`, p.quorum]);
+    }
+    const small = ratios.filter(([, value]) => looksLikeBasisPoints(value)).map(([what, value]) => `${what} is ${value}`);
+    assert(!small.length, `under 1 % (${SUSPICIOUSLY_SMALL}), so basis points? ${small.join('; ')}`);
+    return `${ratios.length} ratios`;
+  }, 'should');
 
   await check('GGG', 'P2', 'ggg_proposal_get finds each listed proposal', async () => {
     if (!proposals.length) throw new Skip('the realm has no proposals, or they could not be listed');

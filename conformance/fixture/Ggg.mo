@@ -7,7 +7,7 @@ module {
   public type Account = { owner : Principal; subaccount : ?Blob };
   /// AllocationRule and TaxPolicy.
   public type AdoptionStatus = { #Superseded; #Draft; #Proposed; #Adopted };
-  /// share in basis points.
+  /// share in hundred-millionths.
   public type Allocation = { fund : Text; share : Nat };
   public type AllocationRule = {
     id : Text;
@@ -16,7 +16,7 @@ module {
     proposal : ?Text;
     rules : [Allocation];
   };
-  /// Shares in basis points, adding up to at most 10 000.
+  /// Shares in hundred-millionths, adding up to at most 100 000 000.
   public type AllocationRuleDraftArgs = {
     source_fund : Text;
     rules : [Allocation];
@@ -302,7 +302,7 @@ module {
   };
   /// The token's ggg: header as read from the ledger, and its frozen flag.
   public type CredentialVerifyArgs = { frozen : Bool; header : [(Text, Text)] };
-  /// weight in basis points.
+  /// weight in hundred-millionths.
   public type Criterion = { weight : Nat; criterion : Text };
   public type Cycle = { name : Text; every : Duration };
   public type DelegableOperation = { permission : Text; operation : Text };
@@ -628,6 +628,7 @@ module {
     #Unauthenticated;
     #Conflict : Text;
   };
+  /// Threshold and quorum in hundred-millionths.
   public type GovernanceUpdateArgs = {
     voting_window : ?Duration;
     voting_quorum : ?Nat;
@@ -1110,7 +1111,7 @@ module {
     category : Text;
     profiles : [Text];
   };
-  /// m of n approvals; quorum in basis points.
+  /// m of n approvals; quorum in hundred-millionths (100 000 000 = 100 %).
   public type Policy = { m : Nat; n : Nat; veto : [Principal]; quorum : Nat };
   public type Position = {
     id : Text;
@@ -1170,6 +1171,7 @@ module {
     tally : Tally;
     title : Text;
     action : ProposalAction;
+    /// Both in hundred-millionths (100 000 000 = 100 %).
     threshold : Nat;
     description : Text;
     deadline : ?Timestamp;
@@ -1293,6 +1295,7 @@ module {
     member_count : Nat;
     voting_quorum : Nat;
     background_image_url : ?Text;
+    /// In hundred-millionths, for realm-wide proposals.
     voting_threshold : Nat;
     installed_version : Text;
     treasury : ?Text;
@@ -1441,7 +1444,7 @@ module {
     justification : ?Text;
     tender : Text;
   };
-  /// Weights in basis points, adding up to 10 000.
+  /// Weights in hundred-millionths, adding up to 100 000 000.
   public type TenderCreateArgs = {
     opens_at : ?Timestamp;
     title : Text;
