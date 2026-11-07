@@ -119,6 +119,8 @@ function checkProposal(p) {
   for (const field of ['threshold', 'quorum']) {
     assert(p[field] <= WHOLE, `proposal ${p.id}: ${field} is ${p[field]}, above ${WHOLE} (100 %)`);
   }
+  assert(tag(p.status) !== 'ExecutionScheduled' || opt(p.effective_at) !== null, `proposal ${p.id} is scheduled but has no effective_at`);
+  assert(tag(p.status) !== 'ExecutionScheduled' || tag(p.action) !== 'Motion', `proposal ${p.id}: a motion has nothing to schedule`);
   const opens = opt(p.opens_at);
   const deadline = opt(p.deadline);
   assert(opens === null || deadline === null || opens <= deadline, `proposal ${p.id}: the deadline is before voting opens`);
@@ -129,6 +131,12 @@ function checkProposal(p) {
   if (result) {
     assert(['Executed', 'Failed'].includes(tag(p.status)), `proposal ${p.id} is ${tag(p.status)} but has a result`);
   }
+}
+
+/** The vote has ended early: every eligible member has voted, so no vote can be replaced. */
+function everyoneVoted(p) {
+  const eligible = opt(p.tally.eligible);
+  return eligible !== null && p.tally.yes + p.tally.no + p.tally.abstain >= eligible;
 }
 
 function sameProposal(listed, p) {
@@ -530,6 +538,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     description: 'Created by the GGG conformance suite. It can be withdrawn or ignored.',
     department: [],
     action: { Motion: null },
+    effective_at: [],
     on_behalf_of: [],
     ...extra,
   });
@@ -571,6 +580,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     return `proposal ${id}, ${tag(p.status)}`;
   });
 
+  let replaced = false;
   await check('GGG', 'W3', 'a member votes, and a second vote replaces the first', async () => {
     needMember();
     if (!created) throw new Skip('no proposal was filed');
@@ -587,14 +597,18 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     const recorded = await votesOf(created.id);
     assert(recorded.length === 1 && tag(recorded[0].choice) === 'Yes', `the recorded votes are ${show(recorded)}`);
 
+    const voted = (await getProposal(mine, created.id)).proposal;
+    if (everyoneVoted(voted)) throw new Skip('the vote ended with this vote, as every eligible member has voted, so it cannot be replaced');
     ok(await mine.ggg_proposal_vote(vote(created.id, 'No')), 'a second ggg_proposal_vote');
     const changed = await votesOf(created.id);
     assert(changed.length === 1 && tag(changed[0].choice) === 'No', `after voting again, the votes are ${show(changed)}`);
+    replaced = true;
   });
 
   await check('GGG', 'W4', 'the tally counts the vote once', async () => {
     needMember();
     if (!created || tag(created.status) !== 'Voting') throw new Skip('no proposal open for voting was filed');
+    if (!replaced) throw new Skip('no vote was replaced');
     const { tally } = (await getProposal(mine, created.id)).proposal;
     const { yes, no, abstain } = tally;
     assert(yes + no + abstain > 0n, 'the tally is still zero (allowed only with secret ballots)');
@@ -681,6 +695,29 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     if (!withdrawn) throw new Skip('no proposal was withdrawn');
     err(await mine.ggg_proposal_vote(vote(created.id, 'Yes')), ['Conflict'], 'ggg_proposal_vote(withdrawn)');
     err(await mine.ggg_proposal_withdraw({ proposal: created.id, on_behalf_of: [] }), ['Conflict'], 'a second ggg_proposal_withdraw');
+  });
+
+  await check('GGG', 'W13', 'a proposal states an effective_at, and it is read back unchanged', async () => {
+    needMember();
+    const effective = BigInt(Date.now() + 365 * 24 * 3600 * 1000) * 1_000_000n;
+    const title = `GGG conformance check ${new Date().toISOString()} (effective_at)`;
+    const result = await mine.ggg_proposal_create(motion(title, { effective_at: [effective] }));
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not propose');
+    const id = ok(result, 'ggg_proposal_create(effective_at)');
+    try {
+      const p = (await getProposal(mine, id))?.proposal;
+      assert(p, `ggg_proposal_get(${id}) does not find the new proposal`);
+      checkProposal(p);
+      assert(opt(p.effective_at) === effective, `effective_at is ${show(p.effective_at)}, not ${effective}`);
+      return `proposal ${id}, effective_at ${effective}`;
+    } finally {
+      await mine.ggg_proposal_withdraw({ proposal: id, on_behalf_of: [] });
+    }
+  });
+
+  await check('GGG', 'W14', 'an effective_at in the past returns InvalidArgument', async () => {
+    needMember();
+    await proposeAs(motion('effective in the past', { effective_at: [1n] }), 'ggg_proposal_create(effective_at in the past)');
   });
 
   return results;

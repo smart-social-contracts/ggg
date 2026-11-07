@@ -202,7 +202,8 @@ holds the name only. Converting to the realm's local day (for a daily journal is
 count) is the GOS's job.
 
 **`effective_at`** is an optional UTC timestamp on `ProposalCreateArgs` and `Proposal`: the exact
-time the proposal takes effect. The rules:
+time the proposal takes effect. It must lie after the time of the call that creates the proposal,
+or the call is refused with `InvalidArgument`. The rules:
 
 - Once accepted, the proposal's action executes at that time, not when the vote closes. This holds
   for every kind of proposal: a treasury transfer, a codex install or update, a setting, any call.
@@ -210,11 +211,21 @@ time the proposal takes effect. The rules:
 - It is part of what voters approve, so it is fixed at creation like the action. **It never moves
   after acceptance.** If the time proves too early, another proposal stops the scheduled one, and a
   new proposal sets the right date; proposers leave a margin.
-- While it waits, the proposal's status is `ExecutionScheduled`, between `Accepted` and `Executed`.
-- Another proposal can stop a scheduled one before its time: GGG provides an operation a proposal's
-  action can call, which ends the scheduled proposal without executing it.
-- A vote that ends after `effective_at` does not execute: the proposal ends `Expired`, and the
-  proposer submits a new one.
+- While it waits, the proposal's status is `ExecutionScheduled`, between `Accepted` and `Executed`: a
+  proposal with an action, accepted with an `effective_at` still ahead, goes straight on to it, and
+  `proposal_execute` is refused with `Conflict` until that time. A motion has nothing to execute: it
+  stays `Accepted`, and `proposal_execute` refuses it before and after `effective_at`.
+- Another proposal can stop a scheduled one before its time with `proposal_stop`. It is governed by the
+  department that owns the scheduled proposal (its scope; the root for a realm-wide one), under that
+  department's policy, not the realm's. Under a policy that is not direct, calling it files a proposal
+  of that department, so its vote stops the scheduled one; under a direct policy the call applies at
+  once. It ends the scheduled proposal as `Withdrawn`, without executing it, and is refused with
+  `Conflict` for a proposal in any other status.
+- A vote that ends after `effective_at` does not execute: the proposal ends `Expired`, whatever was
+  decided, and the proposer submits a new one. A vote ends at its deadline, or earlier at the moment
+  every eligible member has voted. When it is finalized doesn't matter: a vote that ended before
+  `effective_at` does not expire. Finalized before `effective_at` the proposal is scheduled, even if its
+  `deadline` is later, and finalized after it the proposal is accepted and its action executes at once.
 - When several proposals are scheduled for the same moment, no order is specified.
 - Codex guards see it as a fact of `proposal_create`, so legislation can require a minimum delay. This
   is how a statutory wait is expressed: for an ordinance, a guard requires `effective_at` to lie at
