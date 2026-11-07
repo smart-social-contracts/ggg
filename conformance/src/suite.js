@@ -136,6 +136,12 @@ function checkProposal(p) {
   }
 }
 
+/** The vote has ended early: every eligible member has voted, so no vote can be replaced. */
+function everyoneVoted(p) {
+  const eligible = opt(p.tally.eligible);
+  return eligible !== null && p.tally.yes + p.tally.no + p.tally.abstain >= eligible;
+}
+
 function sameProposal(listed, p) {
   for (const field of ['title', 'proposer', 'department', 'status', 'action']) {
     assert(show(p[field]) === show(listed[field]), `proposal ${p.id}: ${field} differs between list and get`);
@@ -578,6 +584,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     return `proposal ${id}, ${tag(p.status)}`;
   });
 
+  let replaced = false;
   await check('GGG', 'W3', 'a member votes, and a second vote replaces the first', async () => {
     needMember();
     if (!created) throw new Skip('no proposal was filed');
@@ -594,14 +601,18 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     const recorded = await votesOf(created.id);
     assert(recorded.length === 1 && tag(recorded[0].choice) === 'Yes', `the recorded votes are ${show(recorded)}`);
 
+    const voted = (await getProposal(mine, created.id)).proposal;
+    if (everyoneVoted(voted)) throw new Skip('the vote ended with this vote, as every eligible member has voted, so it cannot be replaced');
     ok(await mine.ggg_proposal_vote(vote(created.id, 'No')), 'a second ggg_proposal_vote');
     const changed = await votesOf(created.id);
     assert(changed.length === 1 && tag(changed[0].choice) === 'No', `after voting again, the votes are ${show(changed)}`);
+    replaced = true;
   });
 
   await check('GGG', 'W4', 'the tally counts the vote once', async () => {
     needMember();
     if (!created || tag(created.status) !== 'Voting') throw new Skip('no proposal open for voting was filed');
+    if (!replaced) throw new Skip('no vote was replaced');
     const { tally } = (await getProposal(mine, created.id)).proposal;
     const { yes, no, abstain } = tally;
     assert(yes + no + abstain > 0n, 'the tally is still zero (allowed only with secret ballots)');

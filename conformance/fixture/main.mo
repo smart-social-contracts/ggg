@@ -54,6 +54,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   };
   let proposals = Map.empty<Nat, T.Proposal>();
   let votes = Map.empty<Nat, Map.Map<Principal, T.Vote>>();
+  /// When the last eligible member voted. A vote ends then, if its deadline has not come first.
+  let everyoneVotedAt = Map.empty<Nat, T.Timestamp>();
   let events = Map.empty<Nat, T.Event>();
   var nextProposal = 1;
 
@@ -457,7 +459,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     if (args.on_behalf_of != null) return #Err(noDelegation("proposal.vote"));
     let (n, p) = switch (findProposal(args.proposal)) { case null return #Err(#NotFound); case (?found) found };
     let t = now();
-    let open = p.status == #Voting and (switch (p.deadline) { case (?d) t <= d; case null true });
+    let beforeDeadline = switch (p.deadline) { case (?d) t <= d; case null true };
+    let open = p.status == #Voting and beforeDeadline and not Map.containsKey(everyoneVotedAt, Nat.compare, n);
     if (not open) return #Err(#Conflict("voting is not open"));
     let b = ballots(n);
     var tally = p.tally;
@@ -476,6 +479,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
     Map.add(b, Principal.compare, caller, v);
     Map.add(proposals, Nat.compare, n, { p with tally });
+    switch (tally.eligible) {
+      case (?eligible) { if (tally.yes + tally.no + tally.abstain >= eligible) Map.add(everyoneVotedAt, Nat.compare, n, t) };
+      case null {};
+    };
     audit("proposal_vote", caller, #Map([("proposal", #Text(p.id)), ("choice", #Text(debug_show (args.choice)))]), #Text(v.id));
     #Ok(v);
   };
@@ -529,12 +536,15 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     let (n, p) = switch (findProposal(id)) { case null return #Err(#NotFound); case (?found) found };
     if (p.status != #Voting) return #Err(#Conflict("only a proposal being voted on can be finalized"));
     let t = now();
-    let deadline = switch (p.deadline) { case (?d) d; case null t };
-    // A vote ends at its deadline, or earlier once every eligible member has voted. Finalizing later
-    // does not change when it ended.
-    let everyoneVoted = switch (p.tally.eligible) { case (?n) p.tally.yes + p.tally.no + p.tally.abstain >= n; case null false };
-    if (t <= deadline and not everyoneVoted) return #Err(#Conflict("voting is still open"));
-    let finalized = { p with status = outcome(p, Nat64.min(t, deadline), t) };
+    // A vote ends at its deadline, or earlier at the moment every eligible member has voted. When
+    // proposal_finalize runs does not change when it ended; it only records the outcome.
+    let ended = switch (Map.get(everyoneVotedAt, Nat.compare, n), p.deadline) {
+      case (?voted, ?d) Nat64.min(voted, d);
+      case (?voted, null) voted;
+      case (null, ?d) { if (t <= d) return #Err(#Conflict("voting is still open")); d };
+      case (null, null) t; // no deadline: it may be finalized at any time, and ends then
+    };
+    let finalized = { p with status = outcome(p, ended, t) };
     Map.add(proposals, Nat.compare, n, finalized);
     audit("proposal_finalize", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (finalized.status)));
     #Ok(finalized);
