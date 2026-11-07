@@ -225,8 +225,8 @@ type ProposalResult = variant {
 };
 
 // A link to another proposal. In Proposal.links it is the proposal's own link, fixed at creation. In
-// ProposalDetail.linked_from it is another proposal's link to this one, so Replaces there reads
-// "replaced by" and RelatesTo "related to". The target is the other proposal's id.
+// ggg_proposal_linked_from it is another proposal's link to this one, so Replaces there reads
+// "replaced by" and RelatesTo "related to". The proposal is the other proposal's id.
 type ProposalLinkKind = variant { Replaces; RelatesTo };
 type ProposalLink = record { kind : ProposalLinkKind; proposal : text };
 
@@ -1024,15 +1024,20 @@ type OrganizationStatusArgs = record { organization : text; status : Organizatio
 
 // §4
 
-// The proposal, its votes a page at a time, and the links of other proposals to it, oldest first.
-type ProposalDetail = record { proposal : Proposal; votes : vec Vote; next : opt text; linked_from : vec ProposalLink };
+// The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
+// links to it are in ggg_proposal_linked_from.
+type ProposalDetail = record { proposal : Proposal; votes : vec Vote; next : opt text; replaced_by : opt text };
+
+// The links of other proposals to one proposal, oldest first.
+type ProposalLinkPage = record { items : vec ProposalLink; next : opt text };
 
 type ProposalListArgs = record { cursor : opt text; limit : opt nat32; status : opt ProposalStatus };
 type ProposalPage = record { items : vec Proposal; next : opt text };
 
 // links is optional, and absent means none, so callers built before links existed keep working. At
 // most 16 links, each naming an existing proposal once. A Replaces target must be a withdrawn
-// proposal filed for the same member (on_behalf_of when set, else the proposer).
+// proposal filed for the same member (on_behalf_of when set, else the proposer), and one that no
+// other proposal replaces yet.
 type ProposalCreateArgs = record {
   title : text;
   description : text;
@@ -1618,6 +1623,7 @@ service : {
 
   // §4
   ggg_proposal_get : (GetArgs) -> (variant { Ok : opt ProposalDetail; Err : GggError }) query;
+  ggg_proposal_linked_from : (GetArgs) -> (variant { Ok : opt ProposalLinkPage; Err : GggError }) query;
   ggg_proposal_list : (ProposalListArgs) -> (variant { Ok : ProposalPage; Err : GggError }) query;
   ggg_proposal_create : (ProposalCreateArgs) -> (variant { Ok : text; Err : GggError });
   ggg_proposal_vote : (ProposalVoteArgs) -> (variant { Ok : Vote; Err : GggError });
@@ -1625,7 +1631,8 @@ service : {
   ggg_proposal_open : (text) -> (variant { Ok : Proposal; Err : GggError });
   ggg_proposal_finalize : (text) -> (variant { Ok : Proposal; Err : GggError });
   ggg_proposal_execute : (text) -> (variant { Ok : Proposal; Err : GggError });
-  // Ends a proposal whose execution is scheduled, as Withdrawn. Done carries no id.
+  // Ends a proposal whose execution is scheduled, as Withdrawn. Governed by the department the
+  // proposal is scoped to, the root for a realm-wide one. Done carries no id.
   ggg_proposal_stop : (text) -> (variant { Ok : Governed; Err : GggError });
   ggg_mandate_create : (MandateCreateArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_mandate_revoke : (MandateRevokeArgs) -> (variant { Ok : Governed; Err : GggError });

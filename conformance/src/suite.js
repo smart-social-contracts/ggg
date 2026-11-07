@@ -163,6 +163,14 @@ const votePages = (actor, id) => async ({ cursor, limit }) => {
   return { Ok: { items: detail.votes, next: detail.next } };
 };
 
+/** ggg_proposal_linked_from, as pages for walk(). */
+const linkPages = (actor, id) => async ({ cursor, limit }) => {
+  const result = await actor.ggg_proposal_linked_from({ id, cursor, limit });
+  if ('Err' in result) return result;
+  const page = opt(result.Ok);
+  return page ? { Ok: page } : { Err: { NotFound: null } };
+};
+
 const idText = (id) => (id instanceof Principal ? id.toText() : id);
 
 function itemKey(x) {
@@ -189,6 +197,7 @@ const none = { cursor: [], limit: [] };
  */
 function listTable(actor) {
   let department = null;
+  let proposal = null;
   let scope = null;
   const list = (what, call, field = 'items', seen) => ({
     what,
@@ -203,11 +212,22 @@ function listTable(actor) {
     if (!department) throw new Skip('the realm lists no department');
     return department;
   };
+  const needProposal = () => {
+    if (!proposal) throw new Skip('the realm lists no proposal');
+    return proposal;
+  };
   const needScope = () => {
     if (!scope) throw new Skip('the caller can open no key scope');
     return scope;
   };
   return [
+    list('ggg_proposal_list', () => (a) => actor.ggg_proposal_list({ ...a, status: [] }), 'items', (items) => {
+      proposal = items[0]?.id ?? null;
+    }),
+    list('ggg_proposal_linked_from', () => {
+      const id = needProposal();
+      return (a) => actor.ggg_proposal_linked_from({ ...a, id });
+    }),
     list('ggg_invite_list', () => (a) => actor.ggg_invite_list(a)),
     list('ggg_delegation_list (as grantor)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Grantor: null } })),
     list('ggg_delegation_list (as delegate)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Delegate: null } })),
@@ -264,6 +284,7 @@ function listTable(actor) {
 /** Every bound lookup by id. */
 const getTable = (actor) => [
   ['ggg_department_get', (id) => actor.ggg_department_get({ id, ...none })],
+  ['ggg_proposal_linked_from', (id) => actor.ggg_proposal_linked_from({ id, ...none })],
   ['ggg_organization_get', (id) => actor.ggg_organization_get({ id, ...none })],
   ['ggg_tender_get', (id) => actor.ggg_tender_get({ id, ...none })],
   ['ggg_dispute_get', (id) => actor.ggg_dispute_get({ id, on_behalf_of: [] })],
@@ -736,7 +757,11 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
       await mine.ggg_proposal_withdraw({ proposal: id, on_behalf_of: [] });
     }
   };
-  const linkedFrom = async (id) => (await getProposal(mine, id)).linked_from.map((l) => `${tag(l.kind)}:${l.proposal}`);
+  const linkedFrom = async (id) => {
+    const walked = await walk(linkPages(mine, id), (l) => `${tag(l.kind)}:${l.proposal}`);
+    if (walked.err) throw new Error(`ggg_proposal_linked_from(${id}) returned Err ${show(walked.err)}`);
+    return walked.items.map((l) => `${tag(l.kind)}:${l.proposal}`);
+  };
 
   await check('GGG', 'W15', 'a proposal replaces a withdrawn one, and the replaced one shows it is replaced', async () => {
     needMember();
@@ -747,6 +772,10 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
         checkProposal(p);
         assert(show(p.links) === show([link('Replaces', old)]), `links are ${show(p.links)}`);
         assert((await linkedFrom(old)).includes(`Replaces:${next}`), `${old} does not show it is replaced by ${next}`);
+        const replaced = opt((await getProposal(mine, old)).replaced_by);
+        assert(replaced === next, `ggg_proposal_get(${old}) shows replaced_by ${replaced}, not ${next}`);
+        const again = await mine.ggg_proposal_create(motion('a second replacement', { links: [[link('Replaces', old)]] }));
+        err(again, ['Conflict'], 'a second Replaces of the same proposal');
       });
     });
   });

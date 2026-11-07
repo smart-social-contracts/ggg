@@ -1193,7 +1193,8 @@ module {
   };
   /// links is optional, and absent means none, so callers built before links existed keep working. At
   /// most 16 links, each naming an existing proposal once. A Replaces target must be a withdrawn
-  /// proposal filed for the same member (on_behalf_of when set, else the proposer).
+  /// proposal filed for the same member (on_behalf_of when set, else the proposer), and one that no
+  /// other proposal replaces yet.
   public type ProposalCreateArgs = {
     title : Text;
     action : ProposalAction;
@@ -1204,18 +1205,21 @@ module {
     on_behalf_of : ?Principal;
     department : ?Text;
   };
-  /// The proposal, its votes a page at a time, and the links of other proposals to it, oldest first.
+  /// The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
+  /// links to it are in ggg_proposal_linked_from.
   public type ProposalDetail = {
-    linked_from : [ProposalLink];
     votes : [Vote];
     next : ?Text;
+    replaced_by : ?Text;
     proposal : Proposal;
   };
   public type ProposalLink = { kind : ProposalLinkKind; proposal : Text };
   /// A link to another proposal. In Proposal.links it is the proposal's own link, fixed at creation. In
-  /// ProposalDetail.linked_from it is another proposal's link to this one, so Replaces there reads
-  /// "replaced by" and RelatesTo "related to". The target is the other proposal's id.
+  /// ggg_proposal_linked_from it is another proposal's link to this one, so Replaces there reads
+  /// "replaced by" and RelatesTo "related to". The proposal is the other proposal's id.
   public type ProposalLinkKind = { #RelatesTo; #Replaces };
+  /// The links of other proposals to one proposal, oldest first.
+  public type ProposalLinkPage = { next : ?Text; items : [ProposalLink] };
   public type ProposalListArgs = {
     status : ?ProposalStatus;
     cursor : ?Text;
@@ -2177,6 +2181,10 @@ module {
         #Ok : ?ProposalDetail;
         #Err : GggError;
       };
+    ggg_proposal_linked_from : shared query GetArgs -> async {
+        #Ok : ?ProposalLinkPage;
+        #Err : GggError;
+      };
     ggg_proposal_list : shared query ProposalListArgs -> async {
         #Ok : ProposalPage;
         #Err : GggError;
@@ -2185,7 +2193,8 @@ module {
         #Ok : Proposal;
         #Err : GggError;
       };
-    /// Ends a proposal whose execution is scheduled, as Withdrawn. Done carries no id.
+    /// Ends a proposal whose execution is scheduled, as Withdrawn. Governed by the department the
+    /// proposal is scoped to, the root for a realm-wide one. Done carries no id.
     ggg_proposal_stop : shared Text -> async {
         #Ok : Governed;
         #Err : GggError;

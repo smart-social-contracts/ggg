@@ -60,7 +60,7 @@ result. Several operations may share a permission. Flags:
 |---|---|
 | `read` | Query; changes nothing; not audited. |
 | `delegable` | May be called with `on_behalf_of`: the caller acts for a grantor whose active `Delegation` covers the permission. Both principals are audited. |
-| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create`, the parent) or on a record a department owns, such as a fund, budget or tender (the owner). Identity operations name it in their `department` argument (§2). |
+| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create`, the parent) or on a record a department owns, such as a fund, budget, tender or proposal (the owner; a proposal belongs to the department it is scoped to, and a realm-wide one to the root). Identity operations name it in their `department` argument (§2). |
 | `signing` | Produces an act its signer is personally accountable for: a decision, a certification, a sanction. The active codex's [signing policy](#signing-policy) says whether agents may hold the permission and whether it may be delegated. By default only non-agents sign, and nobody signs on another's behalf. |
 
 An operation either succeeds with its result or is refused with a `GggError`, and a refused
@@ -286,8 +286,9 @@ Two kinds of body:
 | `proposal_withdraw` | `proposal.create` (own) | delegable | Bob withdraws his draft `P-8` |
 | `proposal_vote` | `proposal.vote` | delegable | `{proposal: "P-7", choice: "yes", on_behalf_of: "alice"}` → `V-31` |
 | `proposal_open`, `proposal_finalize`, `proposal_execute` | `proposal.manage` | | After the deadline: 412 yes, 120 no, quorum met → `accepted`; execute pays BuildCo |
-| `proposal_stop` | `proposal.manage` | governed | `P-12` is scheduled for 1 Dec; a later vote (`P-15`) calls `proposal_stop` on it and it ends `withdrawn` |
+| `proposal_stop` | `proposal.manage` | governed | `P-12`, scoped to Infrastructure, is scheduled for 1 Dec; under Infrastructure's policy a vote (`P-15`) calls `proposal_stop` on it and it ends `withdrawn` |
 | `proposal_get`, `proposal_list` | `realm.data_view` | read | Open proposals in quarter North |
+| `proposal_linked_from` | `realm.data_view` | read | The proposals that link to `P-7`: `P-9` replaces it, `P-11` and `P-12` relate to it |
 | `mandate_create`, `mandate_revoke` | `mandate.create` | governed | Grant Infrastructure the road-works mandate (via `P-4`) |
 | `mandate_assign_executor` | `mandate.assign_executor` | governed | Make Infrastructure the mandate's executor |
 | `contract_create` | `contract.create_under_mandate` | | Sign `C-9` with BuildCo under the road-works mandate |
@@ -317,20 +318,25 @@ Two kinds of body:
   before `effective_at` the proposal is scheduled, even if its `deadline` is later, and finalized after
   it the proposal is accepted and its action executes at once.
 - I-GOV-8: `proposal_stop` ends a proposal that is `execution_scheduled`, without executing it, as
-  `withdrawn`; for any other status it is refused with `Conflict`. It is governed: under a policy that
-  is not direct, calling it files a proposal whose action is the call, so a vote stops the scheduled
-  proposal; under a direct policy the call applies at once. It replies `Done` with no id, because it
-  creates no record.
+  `withdrawn`; for any other status it is refused with `Conflict`. It is governed by the department
+  that owns the stopped proposal, the department it is scoped to (the root for a realm-wide one), and
+  by that department's policy, not the realm's: under a policy that is not direct, calling it files a
+  proposal, scoped to the same department, whose action is the call, so a vote of that department
+  stops the scheduled proposal; under a direct policy the call applies at once. It replies `Done` with
+  no id, because it creates no record.
 - I-GOV-9: A proposal's links are fixed at creation, like its action: no operation edits a proposal's
   links or its action. To change a proposal, its proposer withdraws it and creates a new one that
   `replaces` it.
 - I-GOV-10: A link names an existing proposal (`NotFound` otherwise), once (`InvalidArgument`
-  otherwise). A proposal has at most 16 links of its own (`InvalidArgument`) and at most 32 links from
-  others (`Conflict`). A `replaces` link names a `withdrawn` proposal filed for the same member (the
+  otherwise). A proposal has at most 16 links of its own (`InvalidArgument`); the links to it from
+  others are not limited. A `replaces` link names a `withdrawn` proposal filed for the same member (the
   grantor when `on_behalf_of` is set, else the proposer), else `Conflict`, or `Forbidden` when it was
-  filed for another. `relates to` has no such condition.
-- I-GOV-11: `proposal_get` shows the other side of every link: the links of other proposals to this one,
-  oldest first. A `replaces` there means "replaced by", and `relates to` is a reference both ways.
+  filed for another. A withdrawn proposal is replaced once: a second `replaces` of it is a `Conflict`.
+  `relates to` has no such conditions.
+- I-GOV-11: The other side of every link is readable. `proposal_get` shows the one proposal that
+  replaces this one (`replaced_by`), and `proposal_linked_from` lists, a page at a time and oldest
+  first, every proposal that links to it. A `replaces` there means "replaced by", and `relates to` is a
+  reference both ways.
 
 ## 5. Finance
 
@@ -737,7 +743,8 @@ with the founder, the network, the registry and whether test features are allowe
   the registry's release wasm has exactly that hash and its namespace is approved by a trusted approver.
 - I-ADM-4: `Realm.timezone` is an IANA time zone name, `Area/Location` (up to three parts, such as
   `Europe/Madrid` or `America/Argentina/Buenos_Aires`) or `UTC`. A realm sets its own with
-  `realm_configure` and is `UTC` until it does; a name of any other shape is refused with
+  `realm_configure` and is `UTC` until it does, so `UTC` is the value of a realm that has not yet
+  chosen. A realm's setup should ask for a zone. A name of any other shape is refused with
   `InvalidArgument`. It is never taken from a layer of legislation or a sync source.
 
 ## 13. Private content

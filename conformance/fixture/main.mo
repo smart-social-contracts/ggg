@@ -1,10 +1,11 @@
 /// A minimal GGG GOS, used to test the conformance suite. It implements every method of ggg.did.
 /// Members are fixed at install time. They may propose, vote, manage proposals (open, finalize,
 /// execute and stop them), read the realm and manage their own profile; every other permission is
-/// held by nobody, so those operations are refused. The only department is the root, with a direct
-/// policy, so every proposal is realm-wide and a governed call is applied at once. Nobody has
-/// granted a delegation, so nobody acts on another's behalf. Every other domain is empty, which the
-/// model allows.
+/// held by nobody, so those operations are refused. There are two departments: the root, with a
+/// direct policy, so a governed call on a realm-wide proposal is applied at once; and a council
+/// under it, deciding 2 of 3, so a governed call on one of its proposals files a proposal instead.
+/// Nobody has granted a delegation, so nobody acts on another's behalf. Every other domain is empty,
+/// which the model allows.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
@@ -30,7 +31,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let VOTING_THRESHOLD = 50_000_000; // 50 %
   let VOTING_QUORUM = 0;
   let MAX_LINKS = 16; // a proposal's own links
-  let MAX_LINKS_TO = 32; // links to a proposal from others
+  let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
 
@@ -43,6 +44,21 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     policy = { m = 1; n = 1; quorum = 0; veto = [] };
     target_policy = null;
     fund = null;
+  };
+
+  let COUNCIL : T.Department = {
+    id = "council";
+    description = "A council under the realm, deciding 2 of 3.";
+    parent = ?ROOT.id;
+    is_root = false;
+    head = null;
+    policy = { m = 2; n = 3; quorum = 0; veto = [] };
+    target_policy = null;
+    fund = null;
+  };
+
+  func findDepartment(id : Text) : ?T.Department {
+    if (id == ROOT.id) ?ROOT else if (id == COUNCIL.id) ?COUNCIL else null;
   };
 
   let createdAt = now();
@@ -167,6 +183,14 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     Iter.toArray(found);
   };
 
+  /// The proposal that replaces this one, if any.
+  func replacedBy(id : Text) : ?Text {
+    for (link in linksTo(id).vals()) {
+      if (link.kind == #Replaces) return ?link.proposal;
+    };
+    null;
+  };
+
   /// The member a proposal was filed for: the grantor when it was filed on their behalf.
   func filedFor(p : T.Proposal) : Principal {
     switch (p.on_behalf_of) { case (?grantor) grantor; case null p.proposer };
@@ -187,8 +211,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
           return ?#Forbidden({ permission = ?"proposal.create"; message = "Only the member it was filed for may replace a withdrawn proposal." });
         };
         if (target.status != #Withdrawn) return ?#Conflict("a replaced proposal must be withdrawn first");
+        if (replacedBy(target.id) != null) return ?#Conflict("proposal " # target.id # " is already replaced");
       };
-      if (linksTo(target.id).size() >= MAX_LINKS_TO) return ?#Conflict("too many proposals link to " # target.id);
     };
     null;
   };
@@ -355,25 +379,26 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   // §3
 
   public query func ggg_department_get(args : T.GetArgs) : async Result<?T.DepartmentDetail> {
-    if (args.id != ROOT.id) return #Ok(null);
+    let department = switch (findDepartment(args.id)) { case null return #Ok(null); case (?found) found };
     switch (none<T.Seat>(args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok(?{ department = ROOT; seats = items; next });
+      case (#Ok({ items; next })) #Ok(?{ department; seats = items; next });
     };
   };
 
   public query func ggg_department_list(args : T.ListArgs) : async Result<T.DepartmentPage> {
-    page([ROOT].vals(), args.cursor, args.limit);
+    page([ROOT, COUNCIL].vals(), args.cursor, args.limit);
   };
 
   public query func ggg_department_chart(args : T.ChartArgs) : async Result<T.Chart> {
-    switch (args.department) {
-      case (?d) { if (d != ROOT.id) return #Err(#NotFound) };
-      case null {};
+    let department = switch (args.department) {
+      case (?d) { switch (findDepartment(d)) { case null return #Err(#NotFound); case (?found) found } };
+      case null ROOT;
     };
-    switch (none<T.Department>(args.cursor, args.limit)) {
+    let below = if (department.id == ROOT.id) [COUNCIL] else [];
+    switch (page(below.vals(), args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok({ department = ROOT; positions = 0; seats = 0; filled = 0; children = items; next });
+      case (#Ok({ items; next })) #Ok({ department; positions = 0; seats = 0; filled = 0; children = items; next });
     };
   };
 
@@ -391,7 +416,15 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     let (n, p) = switch (findProposal(args.id)) { case null return #Ok(null); case (?found) found };
     switch (page(Map.values(ballots(n)), args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok(?{ proposal = p; votes = items; next; linked_from = linksTo(p.id) });
+      case (#Ok({ items; next })) #Ok(?{ proposal = p; votes = items; next; replaced_by = replacedBy(p.id) });
+    };
+  };
+
+  public query func ggg_proposal_linked_from(args : T.GetArgs) : async Result<?T.ProposalLinkPage> {
+    let (_, p) = switch (findProposal(args.id)) { case null return #Ok(null); case (?found) found };
+    switch (page(linksTo(p.id).vals(), args.cursor, args.limit)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(links)) #Ok(?links);
     };
   };
 
@@ -407,7 +440,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     switch (requireMember(caller, "proposal.create")) { case (?e) return #Err(e); case null {} };
     if (args.on_behalf_of != null) return #Err(noDelegation("proposal.create"));
     switch (args.department) {
-      case (?d) { if (d != ROOT.id) return #Err(#NotFound) };
+      case (?d) { switch (findDepartment(d)) { case null return #Err(#NotFound); case (?_) {} } };
       case null {};
     };
     if (Text.size(args.title) == 0) return #Err(#InvalidArgument("title is empty"));
@@ -424,25 +457,40 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
     let links = switch (args.links) { case (?l) l; case null [] };
     switch (checkLinks(caller, links)) { case (?e) return #Err(e); case null {} };
-    let t = now();
     switch (args.effective_at) {
-      case (?e) { if (e <= t) return #Err(#InvalidArgument("effective_at must lie in the future")) };
+      case (?e) { if (e <= now()) return #Err(#InvalidArgument("effective_at must lie in the future")) };
       case null {};
     };
+    let p = fileProposal(caller, args.title, args.description, args.department, args.action, args.effective_at, links);
+    audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
+    #Ok(p.id);
+  };
+
+  /// Files a proposal, open for voting at once. `department` is its scope; the root's is realm-wide.
+  func fileProposal(
+    proposer : Principal,
+    title : Text,
+    description : Text,
+    department : ?Text,
+    action : T.ProposalAction,
+    effective_at : ?T.Timestamp,
+    links : [T.ProposalLink],
+  ) : T.Proposal {
+    let t = now();
     let n = nextProposal;
     nextProposal += 1;
     let p : T.Proposal = {
       id = Nat.toText(n);
-      title = args.title;
-      description = args.description;
-      proposer = caller;
+      title;
+      description;
+      proposer;
       on_behalf_of = null;
-      department = null;
-      action = args.action;
+      department = switch (department) { case (?d) { if (d == ROOT.id) null else ?d }; case null null };
+      action;
       status = #Voting;
       opens_at = ?t;
       deadline = ?(t + VOTING_WINDOW_NS);
-      effective_at = args.effective_at;
+      effective_at;
       threshold = VOTING_THRESHOLD;
       quorum = VOTING_QUORUM;
       tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members) };
@@ -450,8 +498,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       links;
     };
     Map.add(proposals, Nat.compare, n, p);
-    audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
-    #Ok(p.id);
+    p;
   };
 
   public shared ({ caller }) func ggg_proposal_vote(args : T.ProposalVoteArgs) : async Result<T.Vote> {
@@ -553,9 +600,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   /// Ends a scheduled proposal as withdrawn. The caller holds `proposal.manage` or is a replayed proposal.
   func stopProposal(caller : Principal, id : Text) : Result<T.Proposal> {
     let (n, p) = switch (findProposal(id)) { case null return #Err(#NotFound); case (?found) found };
-    if (p.status != #ExecutionScheduled) {
-      return #Err(#Conflict("only a proposal whose execution is scheduled can be stopped"));
-    };
+    if (p.status != #ExecutionScheduled) return #Err(#Conflict(NOT_SCHEDULED));
     let stopped = { p with status = #Withdrawn };
     Map.add(proposals, Nat.compare, n, stopped);
     audit("proposal_stop", caller, #Map([("proposal", #Text(p.id))]), #Text(p.id));
@@ -599,11 +644,26 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     #Ok(executed);
   };
 
+  /// Governed by the department that owns the proposal, the root for a realm-wide one. A direct
+  /// policy (one member decides) applies the stop at once; any other files a proposal that stops it.
   public shared ({ caller }) func ggg_proposal_stop(id : Text) : async Result<T.Governed> {
     switch (requireMember(caller, "proposal.manage")) { case (?e) return #Err(e); case null {} };
-    switch (stopProposal(caller, id)) {
-      case (#Err(e)) #Err(e);
-      case (#Ok(_)) #Ok(#Done(null));
+    let (_, target) = switch (findProposal(id)) { case null return #Err(#NotFound); case (?found) found };
+    if (target.status != #ExecutionScheduled) return #Err(#Conflict(NOT_SCHEDULED));
+    let owner = switch (target.department) {
+      case (?d) { switch (findDepartment(d)) { case (?found) found; case null ROOT } };
+      case null ROOT;
+    };
+    if (owner.policy.m == 1 and owner.policy.n == 1) {
+      switch (stopProposal(caller, id)) {
+        case (#Err(e)) #Err(e);
+        case (#Ok(_)) #Ok(#Done(null));
+      };
+    } else {
+      let call = #Call({ method = "ggg_proposal_stop"; arg = to_candid (id) });
+      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, call, null, []);
+      audit("proposal_stop", caller, #Map([("proposal", #Text(id))]), #Text(filed.id));
+      #Ok(#Proposed(filed.id));
     };
   };
 
