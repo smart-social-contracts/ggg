@@ -1177,6 +1177,7 @@ module {
     effective_at : ?Timestamp;
     description : Text;
     deadline : ?Timestamp;
+    links : [ProposalLink];
     on_behalf_of : ?Principal;
     proposer : Principal;
     department : ?Text;
@@ -1190,21 +1191,35 @@ module {
     /// The decision itself is the outcome.
     #Motion;
   };
+  /// links is optional, and absent means none, so callers built before links existed keep working. At
+  /// most 16 links, each naming an existing proposal once. A Replaces target must be a withdrawn
+  /// proposal filed for the same member (on_behalf_of when set, else the proposer), and one that no
+  /// other proposal replaces yet.
   public type ProposalCreateArgs = {
     title : Text;
     action : ProposalAction;
     /// Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
     effective_at : ?Timestamp;
     description : Text;
+    links : ?[ProposalLink];
     on_behalf_of : ?Principal;
     department : ?Text;
   };
-  /// The proposal, and its votes a page at a time.
+  /// The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
+  /// links to it are in ggg_proposal_linked_from.
   public type ProposalDetail = {
     votes : [Vote];
     next : ?Text;
+    replaced_by : ?Text;
     proposal : Proposal;
   };
+  public type ProposalLink = { kind : ProposalLinkKind; proposal : Text };
+  /// A link to another proposal. In Proposal.links it is the proposal's own link, fixed at creation. In
+  /// ggg_proposal_linked_from it is another proposal's link to this one, so Replaces there reads
+  /// "replaced by" and RelatesTo "related to". The proposal is the other proposal's id.
+  public type ProposalLinkKind = { #RelatesTo; #Replaces };
+  /// The links of other proposals to one proposal, oldest first.
+  public type ProposalLinkPage = { next : ?Text; items : [ProposalLink] };
   public type ProposalListArgs = {
     status : ?ProposalStatus;
     cursor : ?Text;
@@ -2164,6 +2179,10 @@ module {
     /// §4
     ggg_proposal_get : shared query GetArgs -> async {
         #Ok : ?ProposalDetail;
+        #Err : GggError;
+      };
+    ggg_proposal_linked_from : shared query GetArgs -> async {
+        #Ok : ?ProposalLinkPage;
         #Err : GggError;
       };
     ggg_proposal_list : shared query ProposalListArgs -> async {

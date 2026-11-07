@@ -190,6 +190,25 @@ A proposal can link to another: **replaces** (this proposal takes the place of a
 change a codex change list, the proposer withdraws the proposal and creates a new one that replaces
 it, so voters see what the new proposal supersedes and the old one points forward to it.
 
+`Proposal` carries `links : vec ProposalLink`, and `ProposalCreateArgs` takes
+`links : opt vec ProposalLink`, so absent means none and callers built before links existed keep
+working. A `ProposalLink` is a `kind` (`Replaces` or `RelatesTo`) and a proposal id. The rules:
+
+- Links are fixed at creation, like the action. No operation edits them.
+- A link names an existing proposal, once. A `Replaces` target must be a `Withdrawn` proposal filed for
+  the same member (the grantor when `on_behalf_of` is set, else the proposer), so withdrawing first
+  and replacing second keeps the history honest and nobody can claim another's withdrawn proposal.
+  `RelatesTo` has no condition.
+- A withdrawn proposal is replaced once: a second `Replaces` of it is refused with `Conflict`. If the
+  replacement is withdrawn too, a new proposal replaces the replacement, not the first one: in a
+  chain A ← B ← C, `replaced_by` of A stays B.
+- A proposal has at most 16 links of its own, so a reply never outgrows the Internet Computer's limits.
+  The links to it from other proposals are not limited, and are read a page at a time.
+- The other side of a link is readable: `ggg_proposal_get` gives the one proposal that replaces this
+  one (`replaced_by`), and `ggg_proposal_linked_from` pages every proposal that links to it, oldest
+  first. `Replaces` there reads "replaced by", and `RelatesTo` is a reference both ways.
+- Codex guards see `links` as a fact of `proposal_create`, like every argument.
+
 ---
 
 ## 6. `Realm.timezone` ([ggg#5](https://github.com/smart-social-contracts/ggg/issues/5)) and `effective_at` ([ggg#6](https://github.com/smart-social-contracts/ggg/issues/6))

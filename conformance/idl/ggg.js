@@ -1189,11 +1189,20 @@ export const idlFactory = ({ IDL }) => {
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'avatar' : IDL.Opt(IDL.Text),
   });
+  const ProposalLinkKind = IDL.Variant({
+    'RelatesTo' : IDL.Null,
+    'Replaces' : IDL.Null,
+  });
+  const ProposalLink = IDL.Record({
+    'kind' : ProposalLinkKind,
+    'proposal' : IDL.Text,
+  });
   const ProposalCreateArgs = IDL.Record({
     'title' : IDL.Text,
     'action' : ProposalAction,
     'effective_at' : IDL.Opt(Timestamp),
     'description' : IDL.Text,
+    'links' : IDL.Opt(IDL.Vec(ProposalLink)),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'department' : IDL.Opt(IDL.Text),
   });
@@ -1230,6 +1239,7 @@ export const idlFactory = ({ IDL }) => {
     'effective_at' : IDL.Opt(Timestamp),
     'description' : IDL.Text,
     'deadline' : IDL.Opt(Timestamp),
+    'links' : IDL.Vec(ProposalLink),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'proposer' : IDL.Principal,
     'department' : IDL.Opt(IDL.Text),
@@ -1251,7 +1261,12 @@ export const idlFactory = ({ IDL }) => {
   const ProposalDetail = IDL.Record({
     'votes' : IDL.Vec(Vote),
     'next' : IDL.Opt(IDL.Text),
+    'replaced_by' : IDL.Opt(IDL.Text),
     'proposal' : Proposal,
+  });
+  const ProposalLinkPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(ProposalLink),
   });
   const ProposalListArgs = IDL.Record({
     'status' : IDL.Opt(ProposalStatus),
@@ -2382,6 +2397,11 @@ export const idlFactory = ({ IDL }) => {
     'ggg_proposal_get' : IDL.Func(
         [GetArgs],
         [IDL.Variant({ 'Ok' : IDL.Opt(ProposalDetail), 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_proposal_linked_from' : IDL.Func(
+        [GetArgs],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ProposalLinkPage), 'Err' : GggError })],
         ['query'],
       ),
     'ggg_proposal_list' : IDL.Func(

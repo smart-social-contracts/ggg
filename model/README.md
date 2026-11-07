@@ -263,7 +263,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `tally` (Json), `result` (Json) | | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov |
+| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `tally` (Json), `result` (Json), `links` | A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov |
 | `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the vote ends. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
 | `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, terms `sha256:4be1…` |
@@ -288,6 +288,7 @@ Two kinds of body:
 | `proposal_open`, `proposal_finalize`, `proposal_execute` | `proposal.manage` | | After the deadline: 412 yes, 120 no, quorum met → `accepted`; execute pays BuildCo |
 | `proposal_stop` | `proposal.manage` | governed | `P-12`, scoped to Infrastructure, is scheduled for 1 Dec; under Infrastructure's policy a vote (`P-15`) calls `proposal_stop` on it and it ends `withdrawn` |
 | `proposal_get`, `proposal_list` | `realm.data_view` | read | Open proposals in quarter North |
+| `proposal_linked_from` | `realm.data_view` | read | The proposals that link to `P-7`: `P-9` replaces it, `P-11` and `P-12` relate to it |
 | `mandate_create`, `mandate_revoke` | `mandate.create` | governed | Grant Infrastructure the road-works mandate (via `P-4`) |
 | `mandate_assign_executor` | `mandate.assign_executor` | governed | Make Infrastructure the mandate's executor |
 | `contract_create` | `contract.create_under_mandate` | | Sign `C-9` with BuildCo under the road-works mandate |
@@ -324,6 +325,20 @@ Two kinds of body:
   proposal; under a direct policy the call applies at once. A stop proposal that runs after its target
   has already executed or been withdrawn ends `failed`. It replies `Done` with no id, because it
   creates no record.
+- I-GOV-9: A proposal's links are fixed at creation, like its action: no operation edits a proposal's
+  links or its action. To change a proposal, its proposer withdraws it and creates a new one that
+  `replaces` it.
+- I-GOV-10: A link names an existing proposal (`NotFound` otherwise), once (`InvalidArgument`
+  otherwise). A proposal has at most 16 links of its own (`InvalidArgument`); the links to it from
+  others are not limited. A `replaces` link names a `withdrawn` proposal filed for the same member (the
+  grantor when `on_behalf_of` is set, else the proposer), else `Conflict`, or `Forbidden` when it was
+  filed for another. A withdrawn proposal is replaced once: a second `replaces` of it is a `Conflict`.
+  If the replacement is withdrawn too, a new proposal replaces the replacement, not the first one: in
+  a chain A ← B ← C, `replaced_by` of A stays B. `relates to` has no such conditions.
+- I-GOV-11: The other side of every link is readable. `proposal_get` shows the one proposal that
+  replaces this one (`replaced_by`), and `proposal_linked_from` lists, a page at a time and oldest
+  first, every proposal that links to it. A `replaces` there means "replaced by", and `relates to` is a
+  reference both ways.
 
 ## 5. Finance
 
