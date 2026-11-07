@@ -116,6 +116,20 @@ test('a withdrawn proposal is replaced once', async () => {
   assert.deepEqual((await detail(old)).replaced_by, [first]);
 });
 
+test('if the replacement is withdrawn too, a new proposal replaces the replacement, not the first one', async () => {
+  const a = await file(alice);
+  await withdraw(alice, a);
+  const b = await file(alice, [link('Replaces', a)]);
+  await withdraw(alice, b);
+  refusedWith(await create(alice, [link('Replaces', a)]), 'Conflict'); // A is already replaced, by B
+  const c = await file(alice, [link('Replaces', b)]);
+  assert.deepEqual((await detail(a)).replaced_by, [b]);
+  assert.deepEqual((await detail(b)).replaced_by, [c]);
+  assert.deepEqual((await detail(c)).replaced_by, []);
+  assert.deepEqual(ok(await linkedFrom(a))[0].items, [link('Replaces', b)]);
+  assert.deepEqual(ok(await linkedFrom(b))[0].items, [link('Replaces', c)]);
+});
+
 test('a link to an unknown proposal, or the same proposal twice, is refused', async () => {
   const target = await file(alice);
   refusedWith(await create(alice, [link('RelatesTo', 'no-such-proposal')]), 'NotFound');
