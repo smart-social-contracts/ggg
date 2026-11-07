@@ -115,15 +115,17 @@ GGG uses [semantic versioning](https://semver.org). The model, `ggg.did`, the co
 the [domain list](../domains.json) share one version, released as a tag of this repository (`v0.1.0`),
 so the GGG version a canister lists in `icrc10_supported_standards` also names its domain list.
 
-- **0.x:** anything may change from one minor version to the next.
+- **0.x:** anything may change from one minor version to the next, except the domain list, which only
+  grows in every version ([layered-codex §2](../docs/layered-codex.md)).
 - **Minor (from 1.0):** only additions that Candid subtyping accepts: new methods, new `opt`
   arguments, new fields in replies, new entities, new domains in the domain list. Callers built for
   an earlier minor keep working; a GOS claims the new minor once it implements the additions.
 - **Patch:** wording and examples only; nothing an implementation or caller would notice.
 - **Variants** (statuses, kinds, errors) are fixed within a major version, because Candid callers
   reject a tag they don't know.
-- **Major:** any other change. Its methods take a new prefix (`ggg2_x`) and it is listed as `GGG2`,
-  so a canister can serve both while callers move.
+- **Major:** any other change, except to the domain list, which only grows in every version. Its
+  methods take a new prefix (`ggg2_x`) and it is listed as `GGG2`, so a canister can serve both while
+  callers move.
 
 ## Running example
 
@@ -324,8 +326,8 @@ Two kinds of body:
   by that department's policy: under a policy that is not direct, calling it files a proposal, scoped
   to the same department, whose action is the call, so a vote of that department stops the scheduled
   proposal; under a direct policy the call applies at once. A stop proposal that runs after its target
-  has already executed or been withdrawn ends `failed`. It replies `Done` with no id, because it
-  creates no record.
+  is no longer scheduled ends `failed`. `proposal_stop` replies `Done` with no id, because it creates
+  no record.
 - I-GOV-9: A proposal's links are fixed at creation, like its action: no operation edits a proposal's
   links or its action. To change a proposal, its proposer withdraws it and creates a new one that
   `replaces` it.

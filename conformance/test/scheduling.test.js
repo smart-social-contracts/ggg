@@ -265,8 +265,9 @@ test('a stop proposal that runs after its target executed, or was withdrawn, end
     assert.deepEqual(executed.result.map(tag), ['Error']);
   };
 
-  // The target takes effect before the stop proposal is carried out.
-  const far = await file({ action: stopping('0'), days: 60, everyone: true });
+  // The target takes effect before the stop proposal is carried out. Everything here is a council
+  // proposal, so no council vote has to stop a realm-wide proposal (ggg#15).
+  const far = await file({ action: stopping('0'), days: 60, everyone: true, department: 'council' });
   const executing = await file({ action: stopping(far), days: 3, everyone: true, department: 'council' });
   await wait(1);
   await finalize(far);
