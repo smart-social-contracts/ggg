@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "domains": [
+    { "id": "realm", "description": "The realm's own entry points and settings: joining, activating a codex, its quarters." },
+    { "id": "tax", "description": "Taxes, their rates, exemptions and assessment." },
+    { "id": "procedure", "description": "Administrative procedure: deadlines, silence, notices and working days." },
+    { "id": "register", "description": "Registers of residents and others that the realm keeps, and who is told of an entry." },
+    { "id": "local_regime", "description": "How local government works: its organs, ordinances and public comment." },
+    { "id": "water", "description": "Water supply, sanitation and their tariffs." },
+    { "id": "data_protection", "description": "Personal data: the legal bases for sharing it and the duties that follow." },
+    { "id": "language", "description": "Official languages, and the languages of documents and services." },
+    { "id": "treasury", "description": "Budgets, funds, the allocation of revenue and payments." },
+    { "id": "federation", "description": "Relations with other realms: sync sources, followers and quarters." }
+  ]
+}
