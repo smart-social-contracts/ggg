@@ -628,6 +628,7 @@ module {
     #Unauthenticated;
     #Conflict : Text;
   };
+  /// Threshold and quorum in hundred-millionths.
   public type GovernanceUpdateArgs = {
     voting_window : ?Duration;
     voting_quorum : ?Nat;
@@ -1170,6 +1171,7 @@ module {
     tally : Tally;
     title : Text;
     action : ProposalAction;
+    /// Both in hundred-millionths (100 000 000 = 100 %).
     threshold : Nat;
     /// When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
     effective_at : ?Timestamp;
@@ -1311,6 +1313,7 @@ module {
     member_count : Nat;
     voting_quorum : Nat;
     background_image_url : ?Text;
+    /// In hundred-millionths, for realm-wide proposals.
     voting_threshold : Nat;
     installed_version : Text;
     treasury : ?Text;
@@ -2181,7 +2184,7 @@ module {
         #Ok : Proposal;
         #Err : GggError;
       };
-    /// Ends a proposal whose execution is scheduled, as Withdrawn. Done carries its id.
+    /// Ends a proposal whose execution is scheduled, as Withdrawn. Done carries no id.
     ggg_proposal_stop : shared Text -> async {
         #Ok : Governed;
         #Err : GggError;
