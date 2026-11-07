@@ -230,15 +230,15 @@ or the call is refused with `InvalidArgument`. The rules:
   `proposal_execute` is refused with `Conflict` until that time. A motion has nothing to execute: it
   stays `Accepted`, and `proposal_execute` refuses it before and after `effective_at`.
 - Another proposal can stop a scheduled one before its time with `proposal_stop`. It is governed, so a
-  proposal's action calls it, and it needs the governing policy's decision (a vote, unless the policy
-  is direct). It ends the scheduled proposal as `Withdrawn`, without executing it, and is refused with
-  `Conflict` for a proposal in any other status.
+  proposal's action calls it. Under a policy that is not direct, calling it files a proposal, so a vote
+  stops the scheduled one; under a direct policy the call applies at once. It ends the scheduled
+  proposal as `Withdrawn`, without executing it, and is refused with `Conflict` for a proposal in any
+  other status.
 - A vote that ends after `effective_at` does not execute: the proposal ends `Expired`, whatever was
   decided, and the proposer submits a new one. A vote ends at its deadline, or earlier at the moment
-  its outcome is certain, such as when every eligible member has voted. What counts is when the vote
-  ended, not when it is finalized: a vote that ended before `effective_at` and is finalized after it is
-  accepted and executes at once, and a vote decided before `effective_at` is scheduled even if its
-  `deadline` is later.
+  every eligible member has voted. When it is finalized doesn't matter: a vote that ended before
+  `effective_at` does not expire. Finalized before `effective_at` the proposal is scheduled, even if its
+  `deadline` is later, and finalized after it the proposal is accepted and its action executes at once.
 - When several proposals are scheduled for the same moment, no order is specified.
 - Codex guards see it as a fact of `proposal_create`, so legislation can require a minimum delay. This
   is how a statutory wait is expressed: for an ordinance, a guard requires `effective_at` to lie at
