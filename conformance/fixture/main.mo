@@ -1,8 +1,12 @@
 /// A minimal GGG GOS, used to test the conformance suite. It implements every method of ggg.did.
-/// Members are fixed at install time. They may propose, vote, read the realm and manage their own
-/// profile; every other permission is held by nobody, so those operations are refused. The only
-/// department is the root, so every proposal is realm-wide. Nobody has granted a delegation, so
-/// nobody acts on another's behalf. Every other domain is empty, which the model allows.
+/// Members are fixed at install time. They may propose, vote, manage proposals (open, finalize,
+/// execute and stop them), read the realm and manage their own profile; every other permission is
+/// held by nobody, so those operations are refused. There are two departments: the root, with a
+/// direct policy, so a governed call on a realm-wide proposal is applied at once; and a council
+/// under it, deciding 2 of 3, so a governed call on one of its proposals files a proposal instead.
+/// The council has no seats: its proposals are counted like any other here, by every member, and its
+/// policy only makes a stop file a proposal instead of applying at once. Nobody has granted a
+/// delegation, so nobody acts on another's behalf. Every other domain is empty, which the model allows.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
@@ -24,8 +28,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let MAX_LIMIT = 100;
   let MAP_VIEW = 32;
   let VOTING_WINDOW_NS : Nat64 = 7 * 24 * 3600 * 1_000_000_000;
-  let VOTING_THRESHOLD = 50_000_000; // 50 %, in hundred-millionths
+  let WHOLE = 100_000_000; // 100 %, in hundred-millionths
+  let VOTING_THRESHOLD = 50_000_000; // 50 %
   let VOTING_QUORUM = 0;
+  let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
 
@@ -40,6 +46,23 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     fund = null;
   };
 
+  /// It has no seats: its proposals are counted like any other (by every member), and its policy
+  /// only decides whether a governed call on one of them applies at once or files a proposal.
+  let COUNCIL : T.Department = {
+    id = "council";
+    description = "A council under the realm, deciding 2 of 3.";
+    parent = ?ROOT.id;
+    is_root = false;
+    head = null;
+    policy = { m = 2; n = 3; quorum = 0; veto = [] };
+    target_policy = null;
+    fund = null;
+  };
+
+  func findDepartment(id : Text) : ?T.Department {
+    if (id == ROOT.id) ?ROOT else if (id == COUNCIL.id) ?COUNCIL else null;
+  };
+
   let createdAt = now();
   let members = Map.empty<Principal, T.UserEntry>();
   for (p in initMembers.vals()) {
@@ -49,6 +72,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   };
   let proposals = Map.empty<Nat, T.Proposal>();
   let votes = Map.empty<Nat, Map.Map<Principal, T.Vote>>();
+  /// When the last eligible member voted. A vote ends then, if its deadline has not come first.
+  let everyoneVotedAt = Map.empty<Nat, T.Timestamp>();
   let events = Map.empty<Nat, T.Event>();
   var nextProposal = 1;
 
@@ -106,6 +131,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       case "ggg_proposal_create" { let a : ?T.ProposalCreateArgs = from_candid (arg); a != null };
       case "ggg_proposal_vote" { let a : ?T.ProposalVoteArgs = from_candid (arg); a != null };
       case "ggg_proposal_withdraw" { let a : ?T.ProposalWithdrawArgs = from_candid (arg); a != null };
+      case "ggg_proposal_stop" { let a : ?Text = from_candid (arg); a != null };
       case "ggg_profile_update" { let a : ?T.ProfileUpdateArgs = from_candid (arg); a != null };
       case _ return ?#InvalidArgument(method # " is not an update method of this canister");
     };
@@ -307,25 +333,26 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   // §3
 
   public query func ggg_department_get(args : T.GetArgs) : async Result<?T.DepartmentDetail> {
-    if (args.id != ROOT.id) return #Ok(null);
+    let department = switch (findDepartment(args.id)) { case null return #Ok(null); case (?found) found };
     switch (none<T.Seat>(args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok(?{ department = ROOT; seats = items; next });
+      case (#Ok({ items; next })) #Ok(?{ department; seats = items; next });
     };
   };
 
   public query func ggg_department_list(args : T.ListArgs) : async Result<T.DepartmentPage> {
-    page([ROOT].vals(), args.cursor, args.limit);
+    page([ROOT, COUNCIL].vals(), args.cursor, args.limit);
   };
 
   public query func ggg_department_chart(args : T.ChartArgs) : async Result<T.Chart> {
-    switch (args.department) {
-      case (?d) { if (d != ROOT.id) return #Err(#NotFound) };
-      case null {};
+    let department = switch (args.department) {
+      case (?d) { switch (findDepartment(d)) { case null return #Err(#NotFound); case (?found) found } };
+      case null ROOT;
     };
-    switch (none<T.Department>(args.cursor, args.limit)) {
+    let below = if (department.id == ROOT.id) [COUNCIL] else [];
+    switch (page(below.vals(), args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok({ department = ROOT; positions = 0; seats = 0; filled = 0; children = items; next });
+      case (#Ok({ items; next })) #Ok({ department; positions = 0; seats = 0; filled = 0; children = items; next });
     };
   };
 
@@ -359,7 +386,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     switch (requireMember(caller, "proposal.create")) { case (?e) return #Err(e); case null {} };
     if (args.on_behalf_of != null) return #Err(noDelegation("proposal.create"));
     switch (args.department) {
-      case (?d) { if (d != ROOT.id) return #Err(#NotFound) };
+      case (?d) { switch (findDepartment(d)) { case null return #Err(#NotFound); case (?_) {} } };
       case null {};
     };
     if (Text.size(args.title) == 0) return #Err(#InvalidArgument("title is empty"));
@@ -374,28 +401,46 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         switch (checkCall(method, arg)) { case (?e) return #Err(e); case null {} };
       };
     };
+    switch (args.effective_at) {
+      case (?e) { if (e <= now()) return #Err(#InvalidArgument("effective_at must lie in the future")) };
+      case null {};
+    };
+    let p = fileProposal(caller, args.title, args.description, args.department, args.action, args.effective_at);
+    audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
+    #Ok(p.id);
+  };
+
+  /// Files a proposal, open for voting at once. `department` is its scope; the root's is realm-wide.
+  func fileProposal(
+    proposer : Principal,
+    title : Text,
+    description : Text,
+    department : ?Text,
+    action : T.ProposalAction,
+    effective_at : ?T.Timestamp,
+  ) : T.Proposal {
     let t = now();
     let n = nextProposal;
     nextProposal += 1;
     let p : T.Proposal = {
       id = Nat.toText(n);
-      title = args.title;
-      description = args.description;
-      proposer = caller;
+      title;
+      description;
+      proposer;
       on_behalf_of = null;
-      department = null;
-      action = args.action;
+      department = switch (department) { case (?d) { if (d == ROOT.id) null else ?d }; case null null };
+      action;
       status = #Voting;
       opens_at = ?t;
       deadline = ?(t + VOTING_WINDOW_NS);
+      effective_at;
       threshold = VOTING_THRESHOLD;
       quorum = VOTING_QUORUM;
       tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members) };
       result = null;
     };
     Map.add(proposals, Nat.compare, n, p);
-    audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
-    #Ok(p.id);
+    p;
   };
 
   public shared ({ caller }) func ggg_proposal_vote(args : T.ProposalVoteArgs) : async Result<T.Vote> {
@@ -403,7 +448,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     if (args.on_behalf_of != null) return #Err(noDelegation("proposal.vote"));
     let (n, p) = switch (findProposal(args.proposal)) { case null return #Err(#NotFound); case (?found) found };
     let t = now();
-    let open = p.status == #Voting and (switch (p.deadline) { case (?d) t <= d; case null true });
+    let beforeDeadline = switch (p.deadline) { case (?d) t <= d; case null true };
+    let open = p.status == #Voting and beforeDeadline and not Map.containsKey(everyoneVotedAt, Nat.compare, n);
     if (not open) return #Err(#Conflict("voting is not open"));
     let b = ballots(n);
     var tally = p.tally;
@@ -422,6 +468,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
     Map.add(b, Principal.compare, caller, v);
     Map.add(proposals, Nat.compare, n, { p with tally });
+    switch (tally.eligible) {
+      case (?eligible) { if (tally.yes + tally.no + tally.abstain >= eligible) Map.add(everyoneVotedAt, Nat.compare, n, t) };
+      case null {};
+    };
     audit("proposal_vote", caller, #Map([("proposal", #Text(p.id)), ("choice", #Text(debug_show (args.choice)))]), #Text(v.id));
     #Ok(v);
   };
@@ -440,9 +490,124 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     #Ok(withdrawn);
   };
 
-  public shared ({ caller }) func ggg_proposal_open(_ : Text) : async Result<T.Proposal> { nobody(caller, "proposal.manage") };
-  public shared ({ caller }) func ggg_proposal_finalize(_ : Text) : async Result<T.Proposal> { nobody(caller, "proposal.manage") };
-  public shared ({ caller }) func ggg_proposal_execute(_ : Text) : async Result<T.Proposal> { nobody(caller, "proposal.manage") };
+  /// Proposals here are filed already open, so there is never a draft to open.
+  public shared ({ caller }) func ggg_proposal_open(id : Text) : async Result<T.Proposal> {
+    switch (requireMember(caller, "proposal.manage")) { case (?e) return #Err(e); case null {} };
+    switch (findProposal(id)) {
+      case null #Err(#NotFound);
+      case (?_) #Err(#Conflict("only a draft can be opened"));
+    };
+  };
+
+  /// How a vote that ended at `ended` and is finalized at `t` turns out. A vote that ended after
+  /// `effective_at` expires the proposal, whatever was decided. Otherwise quorum and threshold decide,
+  /// and an accepted proposal with an action whose `effective_at` is still ahead is scheduled. A
+  /// motion has nothing to execute, so it stays accepted; so does an action whose `effective_at` has
+  /// passed by the time the vote is finalized, which then executes at once.
+  func outcome(p : T.Proposal, ended : T.Timestamp, t : T.Timestamp) : T.ProposalStatus {
+    switch (p.effective_at) {
+      case (?e) { if (ended > e) return #Expired };
+      case null {};
+    };
+    let { yes; no; abstain; eligible } = p.tally;
+    let quorumMet = switch (eligible) { case (?n) (yes + no + abstain) * WHOLE >= p.quorum * n; case null true };
+    let thresholdMet = yes * WHOLE > p.threshold * (yes + no);
+    if (not (quorumMet and thresholdMet)) return #Rejected;
+    switch (p.action, p.effective_at) {
+      case (#Motion, _) #Accepted;
+      case (_, ?e) { if (e > t) #ExecutionScheduled else #Accepted };
+      case (_, null) #Accepted;
+    };
+  };
+
+  public shared ({ caller }) func ggg_proposal_finalize(id : Text) : async Result<T.Proposal> {
+    switch (requireMember(caller, "proposal.manage")) { case (?e) return #Err(e); case null {} };
+    let (n, p) = switch (findProposal(id)) { case null return #Err(#NotFound); case (?found) found };
+    if (p.status != #Voting) return #Err(#Conflict("only a proposal being voted on can be finalized"));
+    let t = now();
+    // A vote ends at its deadline, or earlier at the moment every eligible member has voted. When
+    // proposal_finalize runs does not change when it ended; it only records the outcome.
+    let ended = switch (Map.get(everyoneVotedAt, Nat.compare, n), p.deadline) {
+      case (?voted, ?d) Nat64.min(voted, d);
+      case (?voted, null) voted;
+      case (null, ?d) { if (t <= d) return #Err(#Conflict("voting is still open")); d };
+      case (null, null) t; // no deadline: it may be finalized at any time, and ends then
+    };
+    let finalized = { p with status = outcome(p, ended, t) };
+    Map.add(proposals, Nat.compare, n, finalized);
+    audit("proposal_finalize", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (finalized.status)));
+    #Ok(finalized);
+  };
+
+  /// Ends a scheduled proposal as withdrawn. The caller holds `proposal.manage` or is a replayed proposal.
+  func stopProposal(caller : Principal, id : Text) : Result<T.Proposal> {
+    let (n, p) = switch (findProposal(id)) { case null return #Err(#NotFound); case (?found) found };
+    if (p.status != #ExecutionScheduled) return #Err(#Conflict(NOT_SCHEDULED));
+    let stopped = { p with status = #Withdrawn };
+    Map.add(proposals, Nat.compare, n, stopped);
+    audit("proposal_stop", caller, #Map([("proposal", #Text(p.id))]), #Text(p.id));
+    #Ok(stopped);
+  };
+
+  /// Applies an accepted action as the realm, or returns null for a motion, which has nothing to
+  /// execute. This fixture replays ggg_proposal_stop only.
+  func replay(caller : Principal, action : T.ProposalAction) : ?(T.ProposalStatus, ?T.ProposalResult) {
+    switch (action) {
+      case (#Motion) null;
+      case (#Code _) ?(#Failed, ?#Error("this fixture installs no codex"));
+      case (#Call { method; arg }) {
+        if (method != "ggg_proposal_stop") return ?(#Failed, ?#Error(method # " is not replayed by this fixture"));
+        let ?id : ?Text = from_candid (arg) else return ?(#Failed, ?#Error("arg does not decode"));
+        switch (stopProposal(caller, id)) {
+          case (#Err(e)) ?(#Failed, ?#Error(debug_show (e)));
+          case (#Ok(_)) {
+            let reply : Result<T.Governed> = #Ok(#Done(null));
+            ?(#Executed, ?#Reply(to_candid (reply)));
+          };
+        };
+      };
+    };
+  };
+
+  public shared ({ caller }) func ggg_proposal_execute(id : Text) : async Result<T.Proposal> {
+    switch (requireMember(caller, "proposal.manage")) { case (?e) return #Err(e); case null {} };
+    let (n, p) = switch (findProposal(id)) { case null return #Err(#NotFound); case (?found) found };
+    if (p.status != #Accepted and p.status != #ExecutionScheduled) {
+      return #Err(#Conflict("only an accepted proposal can be executed"));
+    };
+    switch (p.effective_at) {
+      case (?e) { if (e > now()) return #Err(#Conflict("this proposal takes effect at " # Nat64.toText(e))) };
+      case null {};
+    };
+    let ?(status, result) = replay(caller, p.action) else return #Err(#Conflict("a motion has nothing to execute"));
+    let executed = { p with status; result };
+    Map.add(proposals, Nat.compare, n, executed);
+    audit("proposal_execute", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (status)));
+    #Ok(executed);
+  };
+
+  /// Governed by the department that owns the proposal, the root for a realm-wide one. A direct
+  /// policy (one member decides) applies the stop at once; any other files a proposal that stops it.
+  public shared ({ caller }) func ggg_proposal_stop(id : Text) : async Result<T.Governed> {
+    switch (requireMember(caller, "proposal.manage")) { case (?e) return #Err(e); case null {} };
+    let (_, target) = switch (findProposal(id)) { case null return #Err(#NotFound); case (?found) found };
+    if (target.status != #ExecutionScheduled) return #Err(#Conflict(NOT_SCHEDULED));
+    let owner = switch (target.department) {
+      case (?d) { switch (findDepartment(d)) { case (?found) found; case null ROOT } };
+      case null ROOT;
+    };
+    if (owner.policy.m == 1 and owner.policy.n == 1) {
+      switch (stopProposal(caller, id)) {
+        case (#Err(e)) #Err(e);
+        case (#Ok(_)) #Ok(#Done(null));
+      };
+    } else {
+      let call = #Call({ method = "ggg_proposal_stop"; arg = to_candid (id) });
+      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, call, null);
+      audit("proposal_stop", caller, #Map([("proposal", #Text(id))]), #Text(filed.id));
+      #Ok(#Proposed(filed.id));
+    };
+  };
 
   public shared ({ caller }) func ggg_mandate_create(_ : T.MandateCreateArgs) : async Result<T.Governed> {
     nobody(caller, "mandate.create");

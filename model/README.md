@@ -60,7 +60,7 @@ result. Several operations may share a permission. Flags:
 |---|---|
 | `read` | Query; changes nothing; not audited. |
 | `delegable` | May be called with `on_behalf_of`: the caller acts for a grantor whose active `Delegation` covers the permission. Both principals are audited. |
-| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create`, the parent) or on a record a department owns, such as a fund, budget or tender (the owner). Identity operations name it in their `department` argument (§2). |
+| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create`, the parent) or on a record a department owns, such as a fund, budget, tender or proposal (the owner; a proposal belongs to the department it is scoped to, and a realm-wide one to the root). Identity operations name it in their `department` argument (§2). |
 | `signing` | Produces an act its signer is personally accountable for: a decision, a certification, a sanction. The active codex's [signing policy](#signing-policy) says whether agents may hold the permission and whether it may be delegated. By default only non-agents sign, and nobody signs on another's behalf. |
 
 An operation either succeeds with its result or is refused with a `GggError`, and a refused
@@ -263,15 +263,17 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `threshold`, `quorum` (both in hundred-millionths), `tally` (Json), `result` (Json) | | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov |
-| `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the deadline. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
+| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `tally` (Json), `result` (Json) | | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov |
+| `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the vote ends. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
 | `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, terms `sha256:4be1…` |
 
 ### Lifecycles
 
 - `Proposal.status`: `draft` → `voting` → `accepted` | `rejected` | `expired`; `accepted` →
-  `executed` | `failed`; `draft` | `voting` → `withdrawn`.
+  `executed` | `failed`; `draft` | `voting` → `withdrawn`. A proposal with an action that is accepted
+  with an `effective_at` still ahead goes straight on to `execution_scheduled`, then `executed` |
+  `failed` | `withdrawn`. A motion has nothing to execute, so it stays `accepted`.
 - `Mandate.status`: `active` → `completed` | `revoked` | `expired`.
 - `Contract.status`: `draft` → `active` → `fulfilled` | `terminated` | `disputed`; `disputed` →
   `active` | `terminated`.
@@ -284,6 +286,7 @@ Two kinds of body:
 | `proposal_withdraw` | `proposal.create` (own) | delegable | Bob withdraws his draft `P-8` |
 | `proposal_vote` | `proposal.vote` | delegable | `{proposal: "P-7", choice: "yes", on_behalf_of: "alice"}` → `V-31` |
 | `proposal_open`, `proposal_finalize`, `proposal_execute` | `proposal.manage` | | After the deadline: 412 yes, 120 no, quorum met → `accepted`; execute pays BuildCo |
+| `proposal_stop` | `proposal.manage` | governed | `P-12`, scoped to Infrastructure, is scheduled for 1 Dec; under Infrastructure's policy a vote (`P-15`) calls `proposal_stop` on it and it ends `withdrawn` |
 | `proposal_get`, `proposal_list` | `realm.data_view` | read | Open proposals in quarter North |
 | `mandate_create`, `mandate_revoke` | `mandate.create` | governed | Grant Infrastructure the road-works mandate (via `P-4`) |
 | `mandate_assign_executor` | `mandate.assign_executor` | governed | Make Infrastructure the mandate's executor |
@@ -298,6 +301,29 @@ Two kinds of body:
 - I-GOV-3: A proposal is accepted only if quorum and threshold are met at finalization.
 - I-GOV-4: A contract created under a mandate stays within the mandate's scope and term, and its
   `value` within the mandate's `max_value` in the same `symbol`.
+- I-GOV-5: A proposal may state `effective_at`, the time its action takes effect, in the future when
+  the proposal is created. Without it, the action executes on acceptance. It is part of what voters
+  approve: fixed at creation like the action, and it never moves, not after acceptance either.
+- I-GOV-6: A proposal with an action, accepted with an `effective_at` still ahead, is
+  `execution_scheduled`. It is executed at `effective_at`, not before: until then `proposal_execute`
+  is refused with `Conflict`. A motion has nothing to execute: it stays `accepted`, and
+  `proposal_execute` refuses it with `Conflict`, before and after `effective_at`. When several
+  proposals are scheduled for the same moment, no order is specified.
+- I-GOV-7: A proposal whose vote ends after its `effective_at` ends `expired`, whatever was decided,
+  and is not executed; the proposer submits a new one. A vote ends at its `deadline`, or earlier at
+  the moment every eligible member has voted. When it is finalized doesn't matter: `proposal_finalize`
+  only records the outcome, and may run once the vote has ended. After the vote ends no vote is
+  accepted or replaced (`Conflict`). A vote that ended before `effective_at` does not expire: finalized
+  before `effective_at` the proposal is scheduled, even if its `deadline` is later, and finalized after
+  it the proposal is accepted and its action executes at once.
+- I-GOV-8: `proposal_stop` ends a proposal that is `execution_scheduled`, without executing it, as
+  `withdrawn`; for any other status it is refused with `Conflict`. It is governed by the department
+  that owns the stopped proposal, the department it is scoped to (the root for a realm-wide one), and
+  by that department's policy: under a policy that is not direct, calling it files a proposal, scoped
+  to the same department, whose action is the call, so a vote of that department stops the scheduled
+  proposal; under a direct policy the call applies at once. A stop proposal that runs after its target
+  has already executed or been withdrawn ends `failed`. It replies `Done` with no id, because it
+  creates no record.
 
 ## 5. Finance
 

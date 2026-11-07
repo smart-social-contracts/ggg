@@ -205,7 +205,8 @@ type Authority = record {
 
 // ---- §4 Governance
 
-type ProposalStatus = variant { Draft; Voting; Accepted; Rejected; Expired; Executed; Failed; Withdrawn };
+// ExecutionScheduled: accepted, and waiting for its effective_at.
+type ProposalStatus = variant { Draft; Voting; Accepted; ExecutionScheduled; Rejected; Expired; Executed; Failed; Withdrawn };
 
 type ProposalAction = variant {
   // The decision itself is the outcome.
@@ -236,6 +237,8 @@ type Proposal = record {
   status : ProposalStatus;
   opens_at : opt Timestamp;
   deadline : opt Timestamp;
+  // When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
+  effective_at : opt Timestamp;
   // Both in hundred-millionths (100 000 000 = 100 %).
   threshold : nat;
   quorum : nat;
@@ -1025,6 +1028,8 @@ type ProposalCreateArgs = record {
   description : text;
   department : opt text;
   action : ProposalAction;
+  // Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
+  effective_at : opt Timestamp;
   on_behalf_of : opt principal;
 };
 
@@ -1609,6 +1614,9 @@ service : {
   ggg_proposal_open : (text) -> (variant { Ok : Proposal; Err : GggError });
   ggg_proposal_finalize : (text) -> (variant { Ok : Proposal; Err : GggError });
   ggg_proposal_execute : (text) -> (variant { Ok : Proposal; Err : GggError });
+  // Ends a proposal whose execution is scheduled, as Withdrawn. Governed by the department the
+  // proposal is scoped to, the root for a realm-wide one. Done carries no id.
+  ggg_proposal_stop : (text) -> (variant { Ok : Governed; Err : GggError });
   ggg_mandate_create : (MandateCreateArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_mandate_revoke : (MandateRevokeArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_mandate_assign_executor : (MandateExecutorArgs) -> (variant { Ok : Governed; Err : GggError });

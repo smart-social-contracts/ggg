@@ -13,14 +13,21 @@ let pic;
 let host;
 let canisterId;
 let brokenId;
+let soloId;
 const member = Ed25519KeyIdentity.generate();
+const colleague = Ed25519KeyIdentity.generate();
+const soloMember = Ed25519KeyIdentity.generate();
 
 before(async () => {
   server = await PocketIcServer.start();
   pic = await PocketIc.create(server.getUrl());
   canisterId = await pic.createCanister();
-  const arg = IDL.encode([IDL.Vec(IDL.Principal)], [[member.getPrincipal()]]);
+  // Two members, so that the suite's member voting does not end the vote by itself.
+  const arg = IDL.encode([IDL.Vec(IDL.Principal)], [[member.getPrincipal(), colleague.getPrincipal()]]);
   await pic.installCode({ canisterId, wasm: wasm('ggg_fixture'), arg });
+  soloId = await pic.createCanister();
+  const soloArg = IDL.encode([IDL.Vec(IDL.Principal)], [[soloMember.getPrincipal()]]);
+  await pic.installCode({ canisterId: soloId, wasm: wasm('ggg_fixture'), arg: soloArg });
   brokenId = await pic.createCanister();
   await pic.installCode({ canisterId: brokenId, wasm: wasm('broken'), arg: IDL.encode([], []) });
   host = `http://localhost:${await pic.makeLive()}`;
@@ -53,7 +60,7 @@ test('the fixture passes every check with a member identity', async () => {
   const results = await run({ writes: true, member });
   assert.deepEqual(failures(results), []);
   const o = outcomes(results);
-  for (const id of ['M1', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12']) {
+  for (const id of ['M1', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12', 'W13', 'W14']) {
     assert.equal(o[id], 'pass', id);
   }
 });
@@ -92,5 +99,15 @@ test('a non-member is refused, which the suite reports as a skip', async () => {
   const o = outcomes(results);
   assert.equal(o.W1, 'pass');
   assert.equal(o.W9, 'pass');
-  for (const id of ['W2', 'W5', 'W6', 'W7', 'W8']) assert.equal(o[id], 'skip', id);
+  for (const id of ['W2', 'W5', 'W6', 'W7', 'W8', 'W13', 'W14']) assert.equal(o[id], 'skip', id);
+});
+
+test('in a realm of one member, the first vote ends the vote, so the suite skips replacing it', async () => {
+  const results = await run({ canisterId: soloId, writes: true, member: soloMember });
+  assert.deepEqual(failures(results), []);
+  const o = outcomes(results);
+  assert.equal(o.W2, 'pass');
+  assert.equal(o.W3, 'skip');
+  assert.equal(o.W4, 'skip');
+  assert.equal(o.W11, 'pass');
 });

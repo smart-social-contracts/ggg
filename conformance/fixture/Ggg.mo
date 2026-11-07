@@ -1173,6 +1173,8 @@ module {
     action : ProposalAction;
     /// Both in hundred-millionths (100 000 000 = 100 %).
     threshold : Nat;
+    /// When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
+    effective_at : ?Timestamp;
     description : Text;
     deadline : ?Timestamp;
     on_behalf_of : ?Principal;
@@ -1191,6 +1193,8 @@ module {
   public type ProposalCreateArgs = {
     title : Text;
     action : ProposalAction;
+    /// Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
+    effective_at : ?Timestamp;
     description : Text;
     on_behalf_of : ?Principal;
     department : ?Text;
@@ -1213,8 +1217,10 @@ module {
     /// The Candid-encoded reply of a Call.
     #Reply : Blob;
   };
+  /// ExecutionScheduled: accepted, and waiting for its effective_at.
   public type ProposalStatus = {
     #Failed;
+    #ExecutionScheduled;
     #Withdrawn;
     #Draft;
     #Rejected;
@@ -2166,6 +2172,12 @@ module {
       };
     ggg_proposal_open : shared Text -> async {
         #Ok : Proposal;
+        #Err : GggError;
+      };
+    /// Ends a proposal whose execution is scheduled, as Withdrawn. Governed by the department the
+    /// proposal is scoped to, the root for a realm-wide one. Done carries no id.
+    ggg_proposal_stop : shared Text -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     ggg_proposal_vote : shared ProposalVoteArgs -> async {

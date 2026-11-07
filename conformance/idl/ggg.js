@@ -1192,12 +1192,14 @@ export const idlFactory = ({ IDL }) => {
   const ProposalCreateArgs = IDL.Record({
     'title' : IDL.Text,
     'action' : ProposalAction,
+    'effective_at' : IDL.Opt(Timestamp),
     'description' : IDL.Text,
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'department' : IDL.Opt(IDL.Text),
   });
   const ProposalStatus = IDL.Variant({
     'Failed' : IDL.Null,
+    'ExecutionScheduled' : IDL.Null,
     'Withdrawn' : IDL.Null,
     'Draft' : IDL.Null,
     'Rejected' : IDL.Null,
@@ -1225,6 +1227,7 @@ export const idlFactory = ({ IDL }) => {
     'title' : IDL.Text,
     'action' : ProposalAction,
     'threshold' : IDL.Nat,
+    'effective_at' : IDL.Opt(Timestamp),
     'description' : IDL.Text,
     'deadline' : IDL.Opt(Timestamp),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
@@ -2389,6 +2392,11 @@ export const idlFactory = ({ IDL }) => {
     'ggg_proposal_open' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Proposal, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_proposal_stop' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
     'ggg_proposal_vote' : IDL.Func(
