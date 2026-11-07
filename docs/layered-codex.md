@@ -213,13 +213,15 @@ A proposal can link to another: **replaces** (this proposal takes the place of a
 change a codex change list, the proposer withdraws the proposal and creates a new one that replaces
 it, so voters see what the new proposal supersedes and the old one points forward to it.
 
-`ProposalCreateArgs` and `Proposal` carry `links : vec ProposalLink`, and `ProposalLink` is a `kind`
-(`Replaces` or `RelatesTo`) and a proposal id. The rules:
+`Proposal` carries `links : vec ProposalLink`, and `ProposalCreateArgs` takes
+`links : opt vec ProposalLink`, so absent means none and callers built before links existed keep
+working. A `ProposalLink` is a `kind` (`Replaces` or `RelatesTo`) and a proposal id. The rules:
 
 - Links are fixed at creation, like the action. No operation edits them.
-- A link names an existing proposal, once. A `Replaces` target must be a `Withdrawn` proposal of the
-  same proposer, so withdrawing first and replacing second keeps the history honest and nobody can
-  claim another's withdrawn proposal. `RelatesTo` has no condition.
+- A link names an existing proposal, once. A `Replaces` target must be a `Withdrawn` proposal filed for
+  the same member (the grantor when `on_behalf_of` is set, else the proposer), so withdrawing first
+  and replacing second keeps the history honest and nobody can claim another's withdrawn proposal.
+  `RelatesTo` has no condition.
 - A proposal has at most 16 links of its own, and at most 32 links from other proposals, so a reply
   never outgrows the Internet Computer's limits.
 - `ggg_proposal_get` also lists the links of other proposals to this one (`linked_from`, oldest first):
@@ -232,9 +234,9 @@ it, so voters see what the new proposal supersedes and the old one points forwar
 
 **`Realm.timezone`** is an IANA time zone name such as `Europe/Madrid`. Each realm sets its own; it
 is never inherited from a layer or a sync source. Timestamps stay UTC nanoseconds everywhere; the UI
-shows the realm's official time. The name has the shape `Area/Location` (up to three parts), or
-is `UTC`, which is also the value until the realm sets one. GGG holds the name only. Converting to the realm's local day (for a
-daily journal issue or a working-day count) is the GOS's job.
+shows the realm's official time. The name has the shape `Area/Location` (up to three parts), or is
+`UTC`, which is also the value until the realm sets one. GGG holds the name only. Converting to the
+realm's local day (for a daily journal issue or a working-day count) is the GOS's job.
 
 **`effective_at`** is an optional UTC timestamp on `ProposalCreateArgs` and `Proposal`: the exact
 time the proposal takes effect. It must lie after the time of the call that creates the proposal,
@@ -248,14 +250,18 @@ or the call is refused with `InvalidArgument`. The rules:
   new proposal sets the right date; proposers leave a margin.
 - While it waits, the proposal's status is `ExecutionScheduled`, between `Accepted` and `Executed`: a
   proposal with an action, accepted with an `effective_at` still ahead, goes straight on to it, and
-  `proposal_execute` is refused with `Conflict` until that time. A motion has no action to wait for,
-  so it stays `Accepted`.
+  `proposal_execute` is refused with `Conflict` until that time. A motion has nothing to execute: it
+  stays `Accepted`, and `proposal_execute` refuses it before and after `effective_at`.
 - Another proposal can stop a scheduled one before its time with `proposal_stop`. It is governed, so a
-  proposal's action calls it, and it ends the scheduled proposal as `Withdrawn`, without executing it.
-  It is refused with `Conflict` for a proposal in any other status.
+  proposal's action calls it, and it needs the governing policy's decision (a vote, unless the policy
+  is direct). It ends the scheduled proposal as `Withdrawn`, without executing it, and is refused with
+  `Conflict` for a proposal in any other status.
 - A vote that ends after `effective_at` does not execute: the proposal ends `Expired`, whatever was
-  decided, and the proposer submits a new one. What counts is when the vote actually ended, not its
-  `deadline`: a proposal decided before `effective_at` is scheduled even if its `deadline` is later.
+  decided, and the proposer submits a new one. A vote ends at its deadline, or earlier at the moment
+  its outcome is certain, such as when every eligible member has voted. What counts is when the vote
+  ended, not when it is finalized: a vote that ended before `effective_at` and is finalized after it is
+  accepted and executes at once, and a vote decided before `effective_at` is scheduled even if its
+  `deadline` is later.
 - When several proposals are scheduled for the same moment, no order is specified.
 - Codex guards see it as a fact of `proposal_create`, so legislation can require a minimum delay. This
   is how a statutory wait is expressed: for an ordinance, a guard requires `effective_at` to lie at

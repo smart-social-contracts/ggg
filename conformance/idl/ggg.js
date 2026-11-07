@@ -1202,7 +1202,7 @@ export const idlFactory = ({ IDL }) => {
     'action' : ProposalAction,
     'effective_at' : IDL.Opt(Timestamp),
     'description' : IDL.Text,
-    'links' : IDL.Vec(ProposalLink),
+    'links' : IDL.Opt(IDL.Vec(ProposalLink)),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'department' : IDL.Opt(IDL.Text),
   });

@@ -165,8 +165,13 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     Iter.toArray(found);
   };
 
-  /// Refuses links that break I-GOV-10.
-  func checkLinks(caller : Principal, links : [T.ProposalLink]) : ?T.GggError {
+  /// The member a proposal was filed for: the grantor when it was filed on their behalf.
+  func filedFor(p : T.Proposal) : Principal {
+    switch (p.on_behalf_of) { case (?grantor) grantor; case null p.proposer };
+  };
+
+  /// Refuses links that break I-GOV-10. `filer` is the member the new proposal is filed for.
+  func checkLinks(filer : Principal, links : [T.ProposalLink]) : ?T.GggError {
     if (links.size() > MAX_LINKS) return ?#InvalidArgument("a proposal has at most 16 links");
     let named = Map.empty<Text, ()>();
     for (link in links.vals()) {
@@ -176,8 +181,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       Map.add(named, Text.compare, link.proposal, ());
       let (_, target) = switch (findProposal(link.proposal)) { case null return ?#NotFound; case (?found) found };
       if (link.kind == #Replaces) {
-        if (target.proposer != caller) {
-          return ?#Forbidden({ permission = ?"proposal.create"; message = "Only the proposer may replace their withdrawn proposal." });
+        if (filedFor(target) != filer) {
+          return ?#Forbidden({ permission = ?"proposal.create"; message = "Only the member it was filed for may replace a withdrawn proposal." });
         };
         if (target.status != #Withdrawn) return ?#Conflict("a replaced proposal must be withdrawn first");
       };
@@ -415,7 +420,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         switch (checkCall(method, arg)) { case (?e) return #Err(e); case null {} };
       };
     };
-    switch (checkLinks(caller, args.links)) { case (?e) return #Err(e); case null {} };
+    let links = switch (args.links) { case (?l) l; case null [] };
+    switch (checkLinks(caller, links)) { case (?e) return #Err(e); case null {} };
     let t = now();
     switch (args.effective_at) {
       case (?e) { if (e <= t) return #Err(#InvalidArgument("effective_at must lie in the future")) };
@@ -439,7 +445,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       quorum = VOTING_QUORUM;
       tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members) };
       result = null;
-      links = args.links;
+      links;
     };
     Map.add(proposals, Nat.compare, n, p);
     audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
@@ -497,12 +503,14 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
   };
 
-  /// How a vote that ended at `t` turns out. A vote that ended after `effective_at` expires the
-  /// proposal, whatever was decided. Otherwise quorum and threshold decide, and an accepted proposal
-  /// with an action whose `effective_at` is still ahead is scheduled; a motion stays accepted.
-  func outcome(p : T.Proposal, t : T.Timestamp) : T.ProposalStatus {
+  /// How a vote that ended at `ended` and is finalized at `t` turns out. A vote that ended after
+  /// `effective_at` expires the proposal, whatever was decided. Otherwise quorum and threshold decide,
+  /// and an accepted proposal with an action whose `effective_at` is still ahead is scheduled. A
+  /// motion has nothing to execute, so it stays accepted; so does an action whose `effective_at` has
+  /// passed by the time the vote is finalized, which then executes at once.
+  func outcome(p : T.Proposal, ended : T.Timestamp, t : T.Timestamp) : T.ProposalStatus {
     switch (p.effective_at) {
-      case (?e) { if (t > e) return #Expired };
+      case (?e) { if (ended > e) return #Expired };
       case null {};
     };
     let { yes; no; abstain; eligible } = p.tally;
@@ -521,11 +529,12 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     let (n, p) = switch (findProposal(id)) { case null return #Err(#NotFound); case (?found) found };
     if (p.status != #Voting) return #Err(#Conflict("only a proposal being voted on can be finalized"));
     let t = now();
-    switch (p.deadline) {
-      case (?d) { if (t <= d) return #Err(#Conflict("voting is still open")) };
-      case null {};
-    };
-    let finalized = { p with status = outcome(p, t) };
+    let deadline = switch (p.deadline) { case (?d) d; case null t };
+    // A vote ends at its deadline, or earlier once every eligible member has voted. Finalizing later
+    // does not change when it ended.
+    let everyoneVoted = switch (p.tally.eligible) { case (?n) p.tally.yes + p.tally.no + p.tally.abstain >= n; case null false };
+    if (t <= deadline and not everyoneVoted) return #Err(#Conflict("voting is still open"));
+    let finalized = { p with status = outcome(p, Nat64.min(t, deadline), t) };
     Map.add(proposals, Nat.compare, n, finalized);
     audit("proposal_finalize", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (finalized.status)));
     #Ok(finalized);
@@ -543,19 +552,20 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     #Ok(stopped);
   };
 
-  /// Applies an accepted action as the realm. This fixture replays motions and ggg_proposal_stop only.
-  func replay(caller : Principal, action : T.ProposalAction) : (T.ProposalStatus, ?T.ProposalResult) {
+  /// Applies an accepted action as the realm, or returns null for a motion, which has nothing to
+  /// execute. This fixture replays ggg_proposal_stop only.
+  func replay(caller : Principal, action : T.ProposalAction) : ?(T.ProposalStatus, ?T.ProposalResult) {
     switch (action) {
-      case (#Motion) (#Executed, null);
-      case (#Code _) (#Failed, ?#Error("this fixture installs no codex"));
+      case (#Motion) null;
+      case (#Code _) ?(#Failed, ?#Error("this fixture installs no codex"));
       case (#Call { method; arg }) {
-        if (method != "ggg_proposal_stop") return (#Failed, ?#Error(method # " is not replayed by this fixture"));
-        let ?id : ?Text = from_candid (arg) else return (#Failed, ?#Error("arg does not decode"));
+        if (method != "ggg_proposal_stop") return ?(#Failed, ?#Error(method # " is not replayed by this fixture"));
+        let ?id : ?Text = from_candid (arg) else return ?(#Failed, ?#Error("arg does not decode"));
         switch (stopProposal(caller, id)) {
-          case (#Err(e)) (#Failed, ?#Error(debug_show (e)));
-          case (#Ok(p)) {
-            let reply : Result<T.Governed> = #Ok(#Done(?p.id));
-            (#Executed, ?#Reply(to_candid (reply)));
+          case (#Err(e)) ?(#Failed, ?#Error(debug_show (e)));
+          case (#Ok(_)) {
+            let reply : Result<T.Governed> = #Ok(#Done(null));
+            ?(#Executed, ?#Reply(to_candid (reply)));
           };
         };
       };
@@ -572,7 +582,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       case (?e) { if (e > now()) return #Err(#Conflict("this proposal takes effect at " # Nat64.toText(e))) };
       case null {};
     };
-    let (status, result) = replay(caller, p.action);
+    let ?(status, result) = replay(caller, p.action) else return #Err(#Conflict("a motion has nothing to execute"));
     let executed = { p with status; result };
     Map.add(proposals, Nat.compare, n, executed);
     audit("proposal_execute", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (status)));
@@ -583,7 +593,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     switch (requireMember(caller, "proposal.manage")) { case (?e) return #Err(e); case null {} };
     switch (stopProposal(caller, id)) {
       case (#Err(e)) #Err(e);
-      case (#Ok(p)) #Ok(#Done(?p.id));
+      case (#Ok(_)) #Ok(#Done(null));
     };
   };
 

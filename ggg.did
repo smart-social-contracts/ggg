@@ -245,6 +245,7 @@ type Proposal = record {
   deadline : opt Timestamp;
   // When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
   effective_at : opt Timestamp;
+  // Both in hundred-millionths (100 000 000 = 100 %).
   threshold : nat;
   quorum : nat;
   tally : Tally;
@@ -699,6 +700,7 @@ type Realm = record {
   trusted_principals : vec principal;
   require_marketplace_approval : bool;
   trusted_approvers : vec text;
+  // In hundred-millionths, for realm-wide proposals.
   voting_threshold : nat;
   voting_quorum : nat;
   open_registration : bool;
@@ -1028,8 +1030,9 @@ type ProposalDetail = record { proposal : Proposal; votes : vec Vote; next : opt
 type ProposalListArgs = record { cursor : opt text; limit : opt nat32; status : opt ProposalStatus };
 type ProposalPage = record { items : vec Proposal; next : opt text };
 
-// At most 16 links, each naming an existing proposal once. A Replaces target must be a withdrawn
-// proposal of the same proposer.
+// links is optional, and absent means none, so callers built before links exist keep working. At most
+// 16 links, each naming an existing proposal once. A Replaces target must be a withdrawn proposal
+// filed for the same member (on_behalf_of when set, else the proposer).
 type ProposalCreateArgs = record {
   title : text;
   description : text;
@@ -1037,7 +1040,7 @@ type ProposalCreateArgs = record {
   action : ProposalAction;
   // Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
   effective_at : opt Timestamp;
-  links : vec ProposalLink;
+  links : opt vec ProposalLink;
   on_behalf_of : opt principal;
 };
 
@@ -1073,6 +1076,7 @@ type ContractCreateArgs = record {
   ends_at : opt Timestamp;
 };
 
+// Threshold and quorum in hundred-millionths.
 type GovernanceUpdateArgs = record {
   voting_window : opt Duration;
   voting_threshold : opt nat;
@@ -1621,7 +1625,7 @@ service : {
   ggg_proposal_open : (text) -> (variant { Ok : Proposal; Err : GggError });
   ggg_proposal_finalize : (text) -> (variant { Ok : Proposal; Err : GggError });
   ggg_proposal_execute : (text) -> (variant { Ok : Proposal; Err : GggError });
-  // Ends a proposal whose execution is scheduled, as Withdrawn. Done carries its id.
+  // Ends a proposal whose execution is scheduled, as Withdrawn. Done carries no id.
   ggg_proposal_stop : (text) -> (variant { Ok : Governed; Err : GggError });
   ggg_mandate_create : (MandateCreateArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_mandate_revoke : (MandateRevokeArgs) -> (variant { Ok : Governed; Err : GggError });

@@ -628,6 +628,7 @@ module {
     #Unauthenticated;
     #Conflict : Text;
   };
+  /// Threshold and quorum in hundred-millionths.
   public type GovernanceUpdateArgs = {
     voting_window : ?Duration;
     voting_quorum : ?Nat;
@@ -1170,6 +1171,7 @@ module {
     tally : Tally;
     title : Text;
     action : ProposalAction;
+    /// Both in hundred-millionths (100 000 000 = 100 %).
     threshold : Nat;
     /// When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
     effective_at : ?Timestamp;
@@ -1189,15 +1191,16 @@ module {
     /// The decision itself is the outcome.
     #Motion;
   };
-  /// At most 16 links, each naming an existing proposal once. A Replaces target must be a withdrawn
-  /// proposal of the same proposer.
+  /// links is optional, and absent means none, so callers built before links exist keep working. At most
+  /// 16 links, each naming an existing proposal once. A Replaces target must be a withdrawn proposal
+  /// filed for the same member (on_behalf_of when set, else the proposer).
   public type ProposalCreateArgs = {
     title : Text;
     action : ProposalAction;
     /// Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
     effective_at : ?Timestamp;
     description : Text;
-    links : [ProposalLink];
+    links : ?[ProposalLink];
     on_behalf_of : ?Principal;
     department : ?Text;
   };
@@ -1311,6 +1314,7 @@ module {
     member_count : Nat;
     voting_quorum : Nat;
     background_image_url : ?Text;
+    /// In hundred-millionths, for realm-wide proposals.
     voting_threshold : Nat;
     installed_version : Text;
     treasury : ?Text;
@@ -2181,7 +2185,7 @@ module {
         #Ok : Proposal;
         #Err : GggError;
       };
-    /// Ends a proposal whose execution is scheduled, as Withdrawn. Done carries its id.
+    /// Ends a proposal whose execution is scheduled, as Withdrawn. Done carries no id.
     ggg_proposal_stop : shared Text -> async {
         #Ok : Governed;
         #Err : GggError;
