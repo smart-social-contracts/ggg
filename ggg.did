@@ -142,7 +142,7 @@ type DelegationRequest = record {
 
 // ---- §3 Departments and organizations
 
-// m of n approvals; quorum in basis points.
+// m of n approvals; quorum in hundred-millionths (100 000 000 = 100 %).
 type Policy = record { m : nat; n : nat; quorum : nat; veto : vec principal };
 
 type Department = record {
@@ -236,6 +236,7 @@ type Proposal = record {
   status : ProposalStatus;
   opens_at : opt Timestamp;
   deadline : opt Timestamp;
+  // Both in hundred-millionths (100 000 000 = 100 %).
   threshold : nat;
   quorum : nat;
   tally : Tally;
@@ -353,7 +354,7 @@ type Budget = record {
 // AllocationRule and TaxPolicy.
 type AdoptionStatus = variant { Draft; Proposed; Adopted; Superseded };
 
-// share in basis points.
+// share in hundred-millionths.
 type Allocation = record { fund : text; share : nat };
 
 type AllocationRule = record {
@@ -630,7 +631,7 @@ type Penalty = record {
 
 type TenderStatus = variant { Draft; Open; Closed; Evaluation; Awarded; Contracted; Cancelled };
 
-// weight in basis points.
+// weight in hundred-millionths.
 type Criterion = record { criterion : text; weight : nat };
 
 type Tender = record {
@@ -689,6 +690,7 @@ type Realm = record {
   trusted_principals : vec principal;
   require_marketplace_approval : bool;
   trusted_approvers : vec text;
+  // In hundred-millionths, for realm-wide proposals.
   voting_threshold : nat;
   voting_quorum : nat;
   open_registration : bool;
@@ -1056,6 +1058,7 @@ type ContractCreateArgs = record {
   ends_at : opt Timestamp;
 };
 
+// Threshold and quorum in hundred-millionths.
 type GovernanceUpdateArgs = record {
   voting_window : opt Duration;
   voting_threshold : opt nat;
@@ -1151,7 +1154,7 @@ type FundCreateArgs = record { fund : text; name : opt text; kind : opt text; de
 type PeriodOpenArgs = record { period : text; name : opt text; starts_at : Timestamp; ends_at : Timestamp };
 type BudgetDraftArgs = record { fund : text; period : text; category : text; kind : opt text; planned : nat };
 type BudgetAmendArgs = record { budget : text; planned : nat };
-// Shares in basis points, adding up to at most 10 000.
+// Shares in hundred-millionths, adding up to at most 100 000 000.
 type AllocationRuleDraftArgs = record { source_fund : text; rules : vec Allocation };
 // Pays each active, non-agent appointee once per period label.
 type PayrollRunArgs = record { department : text; period : text; symbol : opt text };
@@ -1343,7 +1346,7 @@ type TenderPage = record { items : vec Tender; next : opt text };
 // A sealed bid shows no price or score.
 type TenderDetail = record { tender : Tender; bids : vec Bid; next : opt text };
 
-// Weights in basis points, adding up to 10 000.
+// Weights in hundred-millionths, adding up to 100 000 000.
 type TenderCreateArgs = record {
   requester : text;
   title : text;

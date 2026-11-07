@@ -133,8 +133,8 @@ No layer of legislation names a department of a lower layer.
   Integers inside, decimals for people: a GOS shows `0.123456 %`, and a chapter writes a rate as the
   legislation does. Integers because there is one form for every value, so checksums are stable;
   nothing is parsed; and Cedar compares integers natively, while its decimal type has only four digits
-  after the point. The model's basis-point fields ([conventions](../model/README.md#1-conventions))
-  move to this scale in [ggg#9](https://github.com/smart-social-contracts/ggg/issues/9), a breaking
+  after the point. The model's ratio fields ([conventions](../model/README.md#1-conventions)) are
+  on this scale since [ggg#9](https://github.com/smart-social-contracts/ggg/issues/9), a breaking
   change.
 - **Money is rounded by one rule:** wherever money is computed from a rate, the result is rounded to
   the nearest cent, and an exact half is rounded away from zero (2.345 becomes 2.35, and −2.345

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory } from '../idl/ggg.js';
-import { PUBLIC_UPDATES, updateTable } from '../src/suite.js';
+import { PUBLIC_UPDATES, looksLikeBasisPoints, updateTable } from '../src/suite.js';
 
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const model = read('model/README.md');
@@ -101,4 +101,9 @@ test('delegable operations, and only they, take on_behalf_of', () => {
     .filter(([, fn]) => fn.argTypes.length && fn.argTypes[0] instanceof IDL.RecordClass && fn.argTypes[0]._fields.some(([k]) => k === 'on_behalf_of'))
     .map(([name]) => name.replace(/^ggg_/, ''));
   assert.deepEqual(taking.sort(), [...new Set(flagged('delegable'))].sort());
+});
+
+test('a nonzero ratio under 1 % looks like an unconverted basis-point value', () => {
+  for (const ratio of [1n, 5_000n, 999_999n]) assert.ok(looksLikeBasisPoints(ratio), `${ratio} looks like basis points`);
+  for (const ratio of [0n, 1_000_000n, 50_000_000n, 100_000_000n]) assert.ok(!looksLikeBasisPoints(ratio), `${ratio} is a ratio`);
 });
