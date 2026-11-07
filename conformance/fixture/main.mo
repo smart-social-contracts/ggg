@@ -4,8 +4,9 @@
 /// held by nobody, so those operations are refused. There are two departments: the root, with a
 /// direct policy, so a governed call on a realm-wide proposal is applied at once; and a council
 /// under it, deciding 2 of 3, so a governed call on one of its proposals files a proposal instead.
-/// Nobody has granted a delegation, so nobody acts on another's behalf. Every other domain is empty,
-/// which the model allows.
+/// The council has no seats: its proposals are counted like any other here, by every member, and its
+/// policy only makes a stop file a proposal instead of applying at once. Nobody has granted a
+/// delegation, so nobody acts on another's behalf. Every other domain is empty, which the model allows.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
@@ -46,6 +47,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     fund = null;
   };
 
+  /// It has no seats: its proposals are counted like any other (by every member), and its policy
+  /// only decides whether a governed call on one of them applies at once or files a proposal.
   let COUNCIL : T.Department = {
     id = "council";
     description = "A council under the realm, deciding 2 of 3.";
