@@ -50,9 +50,9 @@ The two entry points of a realm's own legislation are ordinary members of these 
 ## 2. The domain list ([ggg#1](https://github.com/smart-social-contracts/ggg/issues/1))
 
 A **domain** is a subject of legislation, such as `tax` or `water`. (It is not one of the sections of
-the model.) The list of domains is [`domains.json`](../domains.json): a `version` and, for each domain,
-its `id` and a one-line `description`. A chapter is one source's legislation in one domain, so the
-domain ids are the chapter file names.
+the model.) The list of domains is [`domains.json`](../domains.json): for each domain, its `id` and a
+one-line `description`. A chapter is one source's legislation in one domain, so the domain ids are the
+chapter file names.
 
 | Domain | What its legislation covers |
 |---|---|
@@ -71,11 +71,13 @@ Later: `immigration`, `education`, `social_security`, `defense`, and so on.
 
 - **An id** is lowercase letters and underscores, starting with a letter (`data_protection`), so it is
   a file name and, in CamelCase, a class name (`DataProtection`).
-- **The list only grows.** An id is never renamed, reused or removed, because chapters are named after
-  it. `version` is a whole number that goes up by one each time domains are added, and starts at 1.
+- **The list has GGG's version, none of its own.** One GGG, one version: `domains.json` is released
+  with the model, `ggg.did` and the conformance suite as a tag of this repository (`v0.1.0`). A tool
+  that reads the list names the GGG version it read it from.
+- **Within a major version the list only grows.** An id is never renamed, reused or removed, because
+  chapters are named after it. Adding a domain is a minor release, and wording a description better is
+  a patch. Until 1.0, anything may change, as in the rest of GGG.
 - **A chapter's domain must be in the list.** The tools that read a codex refuse a chapter in any other.
-- **The list is part of GGG's release:** `domains.json` is released with the model, as a tag of this
-  repository. Its `version` is its own number, not the model's.
 
 ---
 

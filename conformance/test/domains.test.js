@@ -3,12 +3,13 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
-const { version, domains } = JSON.parse(read('domains.json'));
+const list = JSON.parse(read('domains.json'));
+const { domains } = list;
 
 const STARTING = ['realm', 'tax', 'procedure', 'register', 'local_regime', 'water', 'data_protection', 'language', 'treasury', 'federation'];
 
-test('the domain list is versioned with a whole number', () => {
-  assert.ok(Number.isInteger(version) && version >= 1, `version is ${version}`);
+test('the domain list has no version of its own: it carries the GGG release it is in', () => {
+  assert.deepEqual(Object.keys(list), ['domains']);
 });
 
 test('the domain list starts with the agreed domains', () => {

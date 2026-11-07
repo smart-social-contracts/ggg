@@ -1,5 +1,4 @@
 {
-  "version": 1,
   "domains": [
     { "id": "realm", "description": "The realm's own entry points and settings: joining, activating a codex, its quarters." },
     { "id": "tax", "description": "Taxes, their rates, exemptions and assessment." },
