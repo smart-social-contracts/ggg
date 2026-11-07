@@ -320,10 +320,11 @@ Two kinds of body:
 - I-GOV-8: `proposal_stop` ends a proposal that is `execution_scheduled`, without executing it, as
   `withdrawn`; for any other status it is refused with `Conflict`. It is governed by the department
   that owns the stopped proposal, the department it is scoped to (the root for a realm-wide one), and
-  by that department's policy, not the realm's: under a policy that is not direct, calling it files a
-  proposal, scoped to the same department, whose action is the call, so a vote of that department
-  stops the scheduled proposal; under a direct policy the call applies at once. It replies `Done` with
-  no id, because it creates no record.
+  by that department's policy: under a policy that is not direct, calling it files a proposal, scoped
+  to the same department, whose action is the call, so a vote of that department stops the scheduled
+  proposal; under a direct policy the call applies at once. A stop proposal that runs after its target
+  has already executed or been withdrawn ends `failed`. It replies `Done` with no id, because it
+  creates no record.
 - I-GOV-9: A proposal's links are fixed at creation, like its action: no operation edits a proposal's
   links or its action. To change a proposal, its proposer withdraws it and creates a new one that
   `replaces` it.
@@ -332,7 +333,8 @@ Two kinds of body:
   others are not limited. A `replaces` link names a `withdrawn` proposal filed for the same member (the
   grantor when `on_behalf_of` is set, else the proposer), else `Conflict`, or `Forbidden` when it was
   filed for another. A withdrawn proposal is replaced once: a second `replaces` of it is a `Conflict`.
-  `relates to` has no such conditions.
+  If the replacement is withdrawn too, a new proposal replaces the replacement, not the first one: in
+  a chain A ← B ← C, `replaced_by` of A stays B. `relates to` has no such conditions.
 - I-GOV-11: The other side of every link is readable. `proposal_get` shows the one proposal that
   replaces this one (`replaced_by`), and `proposal_linked_from` lists, a page at a time and oldest
   first, every proposal that links to it. A `replaces` there means "replaced by", and `relates to` is a
