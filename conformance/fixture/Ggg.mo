@@ -1275,6 +1275,8 @@ module {
   public type Realm = {
     id : Text;
     status : RealmStatus;
+    /// An IANA time zone name such as "Europe/Madrid"; "UTC" until the realm sets one.
+    timezone : Text;
     require_marketplace_approval : Bool;
     is_quarter : Bool;
     name : Text;
@@ -1302,6 +1304,8 @@ module {
     accounting_currency : ?Text;
   };
   public type RealmConfigureArgs = {
+    /// An IANA name; any other text is InvalidArgument.
+    timezone : ?Text;
     name : ?Text;
     manifesto : ?Text;
     quarter_join_mode : ?Text;

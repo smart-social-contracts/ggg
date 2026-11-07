@@ -196,8 +196,10 @@ it, so voters see what the new proposal supersedes and the old one points forwar
 
 **`Realm.timezone`** is an IANA time zone name such as `Europe/Madrid`. Each realm sets its own; it
 is never inherited from a layer or a sync source. Timestamps stay UTC nanoseconds everywhere; the UI
-shows the realm's official time. GGG holds the name only. Converting to the realm's local day (for a
-daily journal issue or a working-day count) is the GOS's job.
+shows the realm's official time. The name has the shape `Area/Location` (up to three parts), or is
+`UTC`, which is also the value until the realm sets one, so a realm's setup should ask for a zone. GGG
+holds the name only. Converting to the realm's local day (for a daily journal issue or a working-day
+count) is the GOS's job.
 
 **`effective_at`** is an optional UTC timestamp on `ProposalCreateArgs` and `Proposal`: the exact
 time the proposal takes effect. The rules:
