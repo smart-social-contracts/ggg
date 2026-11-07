@@ -156,13 +156,41 @@ test('a motion stays Accepted, with or without an effective_at, and proposal_exe
 
 test('a vote that ends after effective_at expires the proposal, whatever was decided', async () => {
   const deadline = await file({ action: stopping('0'), days: 3 }); // the 7-day deadline is after effective_at
-  const early = await file({ action: stopping('0'), days: 3, everyone: true }); // finalized early, but after it
+  const lastVote = await file({ action: stopping('0'), days: 3 }); // the last member votes after effective_at
   await wait(4);
-  assert.equal(await finalize(early), 'Expired');
+  ok(await as(bob).ggg_proposal_vote({ proposal: lastVote, choice: { Yes: null }, on_behalf_of: [] }));
   await wait(5);
+  assert.equal(await finalize(lastVote), 'Expired');
   assert.equal(await finalize(deadline), 'Expired');
   refusedWith(await execute(deadline), 'Conflict');
-  refusedWith(await execute(early), 'Conflict');
+  refusedWith(await execute(lastVote), 'Conflict');
+});
+
+test('a finalizer who waits cannot expire a vote that ended before effective_at', async () => {
+  const target = await file({ action: stopping('0'), days: 60, everyone: true });
+  const decided = await file({ action: stopping(target), days: 3, everyone: true }); // the vote ends on day 0
+  await wait(4); // before the 7-day deadline, after effective_at
+  assert.equal(await finalize(target), 'ExecutionScheduled');
+  assert.equal(await finalize(decided), 'Accepted');
+  assert.equal(tag(ok(await execute(decided)).status), 'Executed');
+  assert.equal(await status(target), 'Withdrawn');
+});
+
+test('once every eligible member has voted the vote has ended: no vote is accepted or replaced', async () => {
+  const id = await file({ everyone: true });
+  for (const voter of [alice, bob]) {
+    refusedWith(await as(voter).ggg_proposal_vote({ proposal: id, choice: { No: null }, on_behalf_of: [] }), 'Conflict');
+  }
+  assert.deepEqual((await get(id)).tally, { yes: 2n, no: 0n, abstain: 0n, eligible: [2n] });
+  assert.equal(await status(id), 'Voting');
+  assert.equal(await finalize(id), 'Accepted');
+});
+
+test('a proposal is finalized once', async () => {
+  const id = await file({ everyone: true });
+  assert.equal(await finalize(id), 'Accepted');
+  refusedWith(await as(bob).ggg_proposal_finalize(id), 'Conflict');
+  assert.equal(await status(id), 'Accepted');
 });
 
 test('a vote can be finalized early once every eligible member has voted, and is then scheduled', async () => {

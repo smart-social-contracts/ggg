@@ -311,15 +311,16 @@ Two kinds of body:
   proposals are scheduled for the same moment, no order is specified.
 - I-GOV-7: A proposal whose vote ends after its `effective_at` ends `expired`, whatever was decided,
   and is not executed; the proposer submits a new one. A vote ends at its `deadline`, or earlier at
-  the moment its outcome is certain, for example once every eligible member has voted, and
-  `proposal_finalize` may run then. What counts is when the vote ended, not when `proposal_finalize`
-  runs: a vote that ended before `effective_at` and is finalized after it is accepted, and its action
-  executes at once. A vote decided before `effective_at` is scheduled even if its `deadline` is later.
+  the moment every eligible member has voted. When it is finalized doesn't matter: `proposal_finalize`
+  only records the outcome, and may run once the vote has ended. After the vote ends no vote is
+  accepted or replaced (`Conflict`). A vote that ended before `effective_at` does not expire: finalized
+  before `effective_at` the proposal is scheduled, even if its `deadline` is later, and finalized after
+  it the proposal is accepted and its action executes at once.
 - I-GOV-8: `proposal_stop` ends a proposal that is `execution_scheduled`, without executing it, as
-  `withdrawn`; for any other status it is refused with `Conflict`. It is governed, so it needs the
-  decision of the governing department's policy: a vote, unless the policy is direct. A proposal's
-  action calls it, so a vote is what stops a scheduled proposal. It replies `Done` with no id, because
-  it creates no record.
+  `withdrawn`; for any other status it is refused with `Conflict`. It is governed: under a policy that
+  is not direct, calling it files a proposal whose action is the call, so a vote stops the scheduled
+  proposal; under a direct policy the call applies at once. It replies `Done` with no id, because it
+  creates no record.
 
 ## 5. Finance
 
