@@ -60,7 +60,7 @@ result. Several operations may share a permission. Flags:
 |---|---|
 | `read` | Query; changes nothing; not audited. |
 | `delegable` | May be called with `on_behalf_of`: the caller acts for a grantor whose active `Delegation` covers the permission. Both principals are audited. |
-| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create`, the parent) or on a record a department owns, such as a fund, budget or tender (the owner). Identity operations name it in their `department` argument (§2). |
+| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create`, the parent) or on a record a department owns, such as a fund, budget, tender or proposal (the owner; a proposal belongs to the department it is scoped to, and a realm-wide one to the root). Identity operations name it in their `department` argument (§2). |
 | `signing` | Produces an act its signer is personally accountable for: a decision, a certification, a sanction. The active codex's [signing policy](#signing-policy) says whether agents may hold the permission and whether it may be delegated. By default only non-agents sign, and nobody signs on another's behalf. |
 
 An operation either succeeds with its result or is refused with a `GggError`, and a refused
@@ -286,7 +286,7 @@ Two kinds of body:
 | `proposal_withdraw` | `proposal.create` (own) | delegable | Bob withdraws his draft `P-8` |
 | `proposal_vote` | `proposal.vote` | delegable | `{proposal: "P-7", choice: "yes", on_behalf_of: "alice"}` → `V-31` |
 | `proposal_open`, `proposal_finalize`, `proposal_execute` | `proposal.manage` | | After the deadline: 412 yes, 120 no, quorum met → `accepted`; execute pays BuildCo |
-| `proposal_stop` | `proposal.manage` | governed | `P-12` is scheduled for 1 Dec; a later vote (`P-15`) calls `proposal_stop` on it and it ends `withdrawn` |
+| `proposal_stop` | `proposal.manage` | governed | `P-12`, scoped to Infrastructure, is scheduled for 1 Dec; under Infrastructure's policy a vote (`P-15`) calls `proposal_stop` on it and it ends `withdrawn` |
 | `proposal_get`, `proposal_list` | `realm.data_view` | read | Open proposals in quarter North |
 | `mandate_create`, `mandate_revoke` | `mandate.create` | governed | Grant Infrastructure the road-works mandate (via `P-4`) |
 | `mandate_assign_executor` | `mandate.assign_executor` | governed | Make Infrastructure the mandate's executor |
@@ -317,10 +317,12 @@ Two kinds of body:
   before `effective_at` the proposal is scheduled, even if its `deadline` is later, and finalized after
   it the proposal is accepted and its action executes at once.
 - I-GOV-8: `proposal_stop` ends a proposal that is `execution_scheduled`, without executing it, as
-  `withdrawn`; for any other status it is refused with `Conflict`. It is governed: under a policy that
-  is not direct, calling it files a proposal whose action is the call, so a vote stops the scheduled
-  proposal; under a direct policy the call applies at once. It replies `Done` with no id, because it
-  creates no record.
+  `withdrawn`; for any other status it is refused with `Conflict`. It is governed by the department
+  that owns the stopped proposal, the department it is scoped to (the root for a realm-wide one), and
+  by that department's policy, not the realm's: under a policy that is not direct, calling it files a
+  proposal, scoped to the same department, whose action is the call, so a vote of that department
+  stops the scheduled proposal; under a direct policy the call applies at once. It replies `Done` with
+  no id, because it creates no record.
 
 ## 5. Finance
 

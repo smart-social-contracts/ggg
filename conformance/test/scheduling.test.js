@@ -55,14 +55,15 @@ const stopping = (id) => ({ Call: { method: 'ggg_proposal_stop', arg: new Uint8A
 
 /**
  * Files a proposal as Alice, with Alice voting yes, and Bob too when `everyone` is set (then every
- * eligible member has voted). `days` is when it takes effect, counted from now.
+ * eligible member has voted). `days` is when it takes effect, counted from now. `department` is the
+ * proposal's scope.
  */
-async function file({ action = motion, days = null, everyone = false } = {}) {
+async function file({ action = motion, days = null, everyone = false, department = null } = {}) {
   const effective_at = days === null ? [] : [(await nowNs()) + BigInt(days * DAY_MS) * 1_000_000n];
   const id = ok(await as(alice).ggg_proposal_create({
     title: 'A proposal',
     description: '',
-    department: [],
+    department: department ? [department] : [],
     action,
     effective_at,
     on_behalf_of: [],
@@ -221,4 +222,32 @@ test('a proposal decided before effective_at is scheduled, though its deadline i
   const id = await file({ action: stopping('0'), days: 8 });
   await wait(7.5);
   assert.equal(await finalize(id), 'ExecutionScheduled');
+});
+
+test('proposal_stop follows the policy of the department that owns the proposal', async () => {
+  // The root decides alone, so a stop of a realm-wide proposal applies at once (above). The council
+  // decides 2 of 3, so a stop of one of its proposals files a proposal of the council instead.
+  const target = await file({ action: stopping('0'), days: 40, everyone: true, department: 'council' });
+  await wait(1);
+  assert.equal(await finalize(target), 'ExecutionScheduled');
+
+  const filedId = ok(await as(bob).ggg_proposal_stop(target)).Proposed;
+  assert.ok(filedId, 'a stop under a policy that is not direct files a proposal');
+  assert.equal(await status(target), 'ExecutionScheduled');
+  const filed = await get(filedId);
+  assert.deepEqual(filed.department, ['council']);
+  assert.equal(filed.action.Call.method, 'ggg_proposal_stop');
+  assert.deepEqual(IDL.decode([IDL.Text], filed.action.Call.arg), [target]);
+
+  // Once the council's proposal is accepted and executed, the scheduled proposal ends.
+  for (const voter of [alice, bob]) {
+    ok(await as(voter).ggg_proposal_vote({ proposal: filedId, choice: { Yes: null }, on_behalf_of: [] }));
+  }
+  assert.equal(await finalize(filedId), 'Accepted');
+  assert.equal(tag(ok(await execute(filedId)).status), 'Executed');
+  assert.equal(await status(target), 'Withdrawn');
+
+  // Nothing is filed for a proposal that is not scheduled.
+  const open = await file({ department: 'council' });
+  refusedWith(await as(bob).ggg_proposal_stop(open), 'Conflict');
 });
