@@ -628,6 +628,7 @@ module {
     #Unauthenticated;
     #Conflict : Text;
   };
+  /// Threshold and quorum in hundred-millionths.
   public type GovernanceUpdateArgs = {
     voting_window : ?Duration;
     voting_quorum : ?Nat;
@@ -1170,6 +1171,7 @@ module {
     tally : Tally;
     title : Text;
     action : ProposalAction;
+    /// Both in hundred-millionths (100 000 000 = 100 %).
     threshold : Nat;
     description : Text;
     deadline : ?Timestamp;
@@ -1293,6 +1295,7 @@ module {
     member_count : Nat;
     voting_quorum : Nat;
     background_image_url : ?Text;
+    /// In hundred-millionths, for realm-wide proposals.
     voting_threshold : Nat;
     installed_version : Text;
     treasury : ?Text;
