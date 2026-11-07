@@ -1614,7 +1614,7 @@ service : {
   ggg_proposal_open : (text) -> (variant { Ok : Proposal; Err : GggError });
   ggg_proposal_finalize : (text) -> (variant { Ok : Proposal; Err : GggError });
   ggg_proposal_execute : (text) -> (variant { Ok : Proposal; Err : GggError });
-  // Ends a proposal whose execution is scheduled, as Withdrawn. Done carries its id.
+  // Ends a proposal whose execution is scheduled, as Withdrawn. Done carries no id.
   ggg_proposal_stop : (text) -> (variant { Ok : Governed; Err : GggError });
   ggg_mandate_create : (MandateCreateArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_mandate_revoke : (MandateRevokeArgs) -> (variant { Ok : Governed; Err : GggError });
