@@ -71,7 +71,7 @@ test('signing acts ask each time in the sign group, Launch is the founder\'s, on
   const signing = new Set(flagged('signing'));
   assert.ok(signing.size > 0, 'no signing operation found in the model');
   for (const name of signing) assert.deepEqual([operations[name].tier, operations[name].group], ['confirm', 'sign'], name);
-  for (const [name, op] of Object.entries(operations)) if (op.group === 'sign') assert.ok(signing.has(name), `${name} is in the sign group but is not a signing act`);
+  for (const [name, op] of Object.entries(operations)) if (op.group === 'sign') assert.ok(signing.has(name) || CONFIRM_READS.includes(name), `${name} is in the sign group but is neither a signing act nor a personal-data read`);
   assert.equal(operations.setup_launch.tier, 'founder');
   // A read asks each time only when it returns third parties' personal data.
   for (const { name, read: isRead } of methods) if (isRead && !CONFIRM_READS.includes(name)) assert.notEqual(operations[name].tier, 'confirm', `${name} is a read`);
