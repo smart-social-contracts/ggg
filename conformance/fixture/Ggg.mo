@@ -1095,6 +1095,7 @@ module {
     amount : ?Nat;
     symbol : ?Text;
   };
+  public type Period = { count : Nat; unit : PeriodUnit };
   /// Periods open in order: one starts no earlier than the latest ends.
   public type PeriodOpenArgs = {
     starts_at : Timestamp;
@@ -1102,6 +1103,13 @@ module {
     ends_at : Timestamp;
     name : ?Text;
   };
+  /// A count of calendar units: three months is three months, whatever the days. Deadlines and terms in
+  /// legislation are Periods, never Durations. A WorkingDay is a day that is neither a weekend day nor a
+  /// holiday in the realm's calendar, taken in the realm's time zone; GGG names the unit and the GOS
+  /// counts it, failing closed when its calendar has no entries for a year the count reaches. Periods
+  /// compare only within one unit: comparing two units fails closed, with no conversion through the
+  /// calendar (model §1).
+  public type PeriodUnit = { #Day; #Year; #WorkingDay; #Month };
   public type Permission = {
     id : Text;
     departments : [Text];
