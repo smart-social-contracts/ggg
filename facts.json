@@ -1,0 +1,4492 @@
+{
+  "kinds": {
+    "ratio": {
+      "alias": "Ratio",
+      "candid": "nat",
+      "unit": "hundred-millionths",
+      "min": 0,
+      "max": 100000000,
+      "rule": "One scale for every ratio: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456. People read and write decimals; the value is the integer."
+    },
+    "money": {
+      "alias": "Money",
+      "candid": "nat",
+      "unit": "the token's smallest unit (Token.decimals)",
+      "min": 0,
+      "rule": "Money computed from a ratio is rounded to the nearest cent, an exact half away from zero. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units."
+    },
+    "timestamp": {
+      "alias": "Timestamp",
+      "candid": "nat64",
+      "unit": "nanoseconds since 1970-01-01 UTC",
+      "min": 0
+    },
+    "duration": {
+      "alias": "Duration",
+      "candid": "nat64",
+      "unit": "nanoseconds",
+      "min": 0
+    },
+    "period": {
+      "alias": "Period",
+      "candid": "record { count : nat; unit : PeriodUnit }",
+      "unit": "a count of one calendar unit: Day, WorkingDay, Month or Year",
+      "rule": "Periods compare only within one unit; comparing two units fails closed, with no conversion through the calendar."
+    }
+  },
+  "actions": {
+    "user_get": {
+      "operation": "ggg_user_get",
+      "facts": {
+        "user": {
+          "type": "principal"
+        }
+      },
+      "read": true
+    },
+    "user_list": {
+      "operation": "ggg_user_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "invite_list": {
+      "operation": "ggg_invite_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "delegation_list": {
+      "operation": "ggg_delegation_list",
+      "facts": {
+        "role": {
+          "type": "variant",
+          "values": [
+            "Grantor",
+            "Delegate"
+          ]
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "delegable_operations": {
+      "operation": "ggg_delegable_operations",
+      "facts": {},
+      "read": true
+    },
+    "me": {
+      "operation": "ggg_me",
+      "facts": {
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "realm_join": {
+      "operation": "ggg_realm_join",
+      "facts": {
+        "code": {
+          "type": "text",
+          "optional": true
+        },
+        "nickname": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "profile_update": {
+      "operation": "ggg_profile_update",
+      "facts": {
+        "nickname": {
+          "type": "text",
+          "optional": true
+        },
+        "avatar": {
+          "type": "text",
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "private_data_update": {
+      "operation": "ggg_private_data_update",
+      "facts": {
+        "data": {
+          "type": "blob"
+        }
+      }
+    },
+    "user_add": {
+      "operation": "ggg_user_add",
+      "facts": {
+        "user": {
+          "type": "principal"
+        },
+        "nickname": {
+          "type": "text",
+          "optional": true
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "user_import": {
+      "operation": "ggg_user_import",
+      "facts": {
+        "users": {
+          "type": "vec",
+          "element": {
+            "type": "NewUser",
+            "fields": {
+              "user": {
+                "type": "principal"
+              },
+              "nickname": {
+                "type": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        }
+      },
+      "lists": {
+        "users": "user_import.users"
+      }
+    },
+    "user_import.users": {
+      "operation": "ggg_user_import",
+      "list": {
+        "field": "users",
+        "of": "the argument",
+        "element": "NewUser"
+      },
+      "facts": {
+        "user": {
+          "type": "principal"
+        },
+        "nickname": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "user_edit": {
+      "operation": "ggg_user_edit",
+      "facts": {
+        "user": {
+          "type": "principal"
+        },
+        "nickname": {
+          "type": "text",
+          "optional": true
+        },
+        "avatar": {
+          "type": "text",
+          "optional": true
+        },
+        "home_quarter": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "user_set_status": {
+      "operation": "ggg_user_set_status",
+      "facts": {
+        "user": {
+          "type": "principal"
+        },
+        "status": {
+          "type": "MemberStatus",
+          "values": [
+            "Active",
+            "Inactive",
+            "Suspended",
+            "Banned"
+          ]
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "user_remove": {
+      "operation": "ggg_user_remove",
+      "facts": {
+        "user": {
+          "type": "principal"
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "identity_submit": {
+      "operation": "ggg_identity_submit",
+      "facts": {
+        "kind": {
+          "type": "text"
+        },
+        "issuer": {
+          "type": "text",
+          "optional": true
+        },
+        "ref": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "identity_review": {
+      "operation": "ggg_identity_review",
+      "facts": {
+        "identity": {
+          "type": "text"
+        },
+        "status": {
+          "type": "variant",
+          "values": [
+            "Verified",
+            "Rejected"
+          ]
+        }
+      }
+    },
+    "invite_create": {
+      "operation": "ggg_invite_create",
+      "facts": {
+        "profile": {
+          "type": "text",
+          "optional": true
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        },
+        "position": {
+          "type": "text",
+          "optional": true
+        },
+        "code": {
+          "type": "text",
+          "optional": true
+        },
+        "max_uses": {
+          "type": "nat",
+          "min": 0,
+          "optional": true
+        },
+        "expires_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "invite_revoke": {
+      "operation": "ggg_invite_revoke",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "profile_create": {
+      "operation": "ggg_profile_create",
+      "facts": {
+        "profile": {
+          "type": "text"
+        },
+        "description": {
+          "type": "text"
+        },
+        "allowed_to": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          }
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "profile_edit": {
+      "operation": "ggg_profile_edit",
+      "facts": {
+        "profile": {
+          "type": "text"
+        },
+        "description": {
+          "type": "text",
+          "optional": true
+        },
+        "allowed_to": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          },
+          "optional": true
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "role_assign": {
+      "operation": "ggg_role_assign",
+      "facts": {
+        "user": {
+          "type": "principal"
+        },
+        "profile": {
+          "type": "text"
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "role_revoke": {
+      "operation": "ggg_role_revoke",
+      "facts": {
+        "user": {
+          "type": "principal"
+        },
+        "profile": {
+          "type": "text"
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "delegation_grant": {
+      "operation": "ggg_delegation_grant",
+      "facts": {
+        "delegate": {
+          "type": "principal"
+        },
+        "scope": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          }
+        },
+        "starts_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        },
+        "expires_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0
+        },
+        "label": {
+          "type": "text"
+        },
+        "description": {
+          "type": "text"
+        }
+      }
+    },
+    "delegation_accept": {
+      "operation": "ggg_delegation_accept",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "delegation_revoke": {
+      "operation": "ggg_delegation_revoke",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "delegation_request": {
+      "operation": "ggg_delegation_request",
+      "facts": {
+        "grantor": {
+          "type": "principal"
+        },
+        "scope": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          }
+        },
+        "starts_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        },
+        "expires_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0
+        },
+        "label": {
+          "type": "text"
+        },
+        "description": {
+          "type": "text"
+        }
+      }
+    },
+    "delegation_request_decide": {
+      "operation": "ggg_delegation_request_decide",
+      "facts": {
+        "request": {
+          "type": "text"
+        },
+        "approve": {
+          "type": "bool"
+        },
+        "scope": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          },
+          "optional": true
+        },
+        "expires_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "department_get": {
+      "operation": "ggg_department_get",
+      "facts": {
+        "id": {
+          "type": "text"
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "department_list": {
+      "operation": "ggg_department_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "department_chart": {
+      "operation": "ggg_department_chart",
+      "facts": {
+        "department": {
+          "type": "text",
+          "optional": true
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "organization_get": {
+      "operation": "ggg_organization_get",
+      "facts": {
+        "id": {
+          "type": "text"
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "organization_list": {
+      "operation": "ggg_organization_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "status": {
+          "type": "OrganizationStatus",
+          "values": [
+            "Active",
+            "Suspended",
+            "Dissolved"
+          ],
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "department_create": {
+      "operation": "ggg_department_create",
+      "facts": {
+        "department": {
+          "type": "text"
+        },
+        "parent": {
+          "type": "text",
+          "optional": true
+        },
+        "description": {
+          "type": "text"
+        }
+      }
+    },
+    "department_edit": {
+      "operation": "ggg_department_edit",
+      "facts": {
+        "department": {
+          "type": "text"
+        },
+        "description": {
+          "type": "text",
+          "optional": true
+        },
+        "parent": {
+          "type": "text",
+          "optional": true
+        },
+        "head": {
+          "type": "variant",
+          "values": [
+            "Set",
+            "Clear"
+          ],
+          "cases": {
+            "Set": {
+              "type": "principal"
+            }
+          },
+          "optional": true
+        }
+      }
+    },
+    "department_delete": {
+      "operation": "ggg_department_delete",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "department_set_policy": {
+      "operation": "ggg_department_set_policy",
+      "facts": {
+        "department": {
+          "type": "text"
+        },
+        "policy": {
+          "type": "Policy",
+          "fields": {
+            "m": {
+              "type": "nat",
+              "min": 0
+            },
+            "n": {
+              "type": "nat",
+              "min": 0
+            },
+            "quorum": {
+              "type": "nat",
+              "kind": "ratio",
+              "min": 0,
+              "max": 100000000
+            },
+            "veto": {
+              "type": "vec",
+              "element": {
+                "type": "principal"
+              }
+            }
+          }
+        }
+      }
+    },
+    "position_create": {
+      "operation": "ggg_position_create",
+      "facts": {
+        "department": {
+          "type": "text"
+        },
+        "position": {
+          "type": "text"
+        },
+        "title": {
+          "type": "text"
+        },
+        "headcount": {
+          "type": "nat",
+          "min": 0,
+          "optional": true
+        },
+        "salary": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "optional": true
+        },
+        "salary_period": {
+          "type": "nat64",
+          "kind": "duration",
+          "min": 0,
+          "optional": true
+        },
+        "profile": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "position_edit": {
+      "operation": "ggg_position_edit",
+      "facts": {
+        "position": {
+          "type": "text"
+        },
+        "status": {
+          "type": "variant",
+          "values": [
+            "Open",
+            "Frozen"
+          ],
+          "optional": true
+        },
+        "headcount": {
+          "type": "nat",
+          "min": 0,
+          "optional": true
+        },
+        "title": {
+          "type": "text",
+          "optional": true
+        },
+        "salary": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "optional": true
+        },
+        "salary_period": {
+          "type": "nat64",
+          "kind": "duration",
+          "min": 0,
+          "optional": true
+        },
+        "profile": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "position_close": {
+      "operation": "ggg_position_close",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "appoint": {
+      "operation": "ggg_appoint",
+      "facts": {
+        "position": {
+          "type": "text"
+        },
+        "user": {
+          "type": "principal"
+        },
+        "agent": {
+          "type": "bool"
+        },
+        "supervisor": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "appoint_acting": {
+      "operation": "ggg_appoint_acting",
+      "facts": {
+        "position": {
+          "type": "text"
+        },
+        "user": {
+          "type": "principal"
+        },
+        "agent": {
+          "type": "bool"
+        },
+        "supervisor": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "appointment_end": {
+      "operation": "ggg_appointment_end",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "department_expel": {
+      "operation": "ggg_department_expel",
+      "facts": {
+        "department": {
+          "type": "text"
+        },
+        "user": {
+          "type": "principal"
+        }
+      }
+    },
+    "authority_grant": {
+      "operation": "ggg_authority_grant",
+      "facts": {
+        "department": {
+          "type": "text"
+        },
+        "target": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "operations": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          }
+        }
+      }
+    },
+    "authority_revoke": {
+      "operation": "ggg_authority_revoke",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "organization_register": {
+      "operation": "ggg_organization_register",
+      "facts": {
+        "organization": {
+          "type": "text"
+        },
+        "description": {
+          "type": "text"
+        }
+      }
+    },
+    "organization_edit": {
+      "operation": "ggg_organization_edit",
+      "facts": {
+        "organization": {
+          "type": "text"
+        },
+        "description": {
+          "type": "text",
+          "optional": true
+        },
+        "admins": {
+          "type": "vec",
+          "element": {
+            "type": "principal"
+          },
+          "optional": true
+        }
+      }
+    },
+    "representative_add": {
+      "operation": "ggg_representative_add",
+      "facts": {
+        "organization": {
+          "type": "text"
+        },
+        "position": {
+          "type": "text"
+        },
+        "user": {
+          "type": "principal"
+        },
+        "agent": {
+          "type": "bool"
+        },
+        "supervisor": {
+          "type": "principal",
+          "optional": true
+        },
+        "title": {
+          "type": "text",
+          "optional": true
+        },
+        "profile": {
+          "type": "text",
+          "optional": true
+        },
+        "headcount": {
+          "type": "nat",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "representative_remove": {
+      "operation": "ggg_representative_remove",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "organization_set_status": {
+      "operation": "ggg_organization_set_status",
+      "facts": {
+        "organization": {
+          "type": "text"
+        },
+        "status": {
+          "type": "OrganizationStatus",
+          "values": [
+            "Active",
+            "Suspended",
+            "Dissolved"
+          ]
+        }
+      }
+    },
+    "proposal_get": {
+      "operation": "ggg_proposal_get",
+      "facts": {
+        "id": {
+          "type": "text"
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "proposal_linked_from": {
+      "operation": "ggg_proposal_linked_from",
+      "facts": {
+        "id": {
+          "type": "text"
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "proposal_list": {
+      "operation": "ggg_proposal_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "status": {
+          "type": "ProposalStatus",
+          "values": [
+            "Draft",
+            "Voting",
+            "Accepted",
+            "ExecutionScheduled",
+            "Rejected",
+            "Expired",
+            "Executed",
+            "Failed",
+            "Withdrawn"
+          ],
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "proposal_create": {
+      "operation": "ggg_proposal_create",
+      "facts": {
+        "title": {
+          "type": "text"
+        },
+        "description": {
+          "type": "text"
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        },
+        "action": {
+          "type": "ProposalAction",
+          "values": [
+            "Motion",
+            "Call",
+            "Code"
+          ],
+          "cases": {
+            "Call": {
+              "type": "record",
+              "fields": {
+                "method": {
+                  "type": "text"
+                },
+                "arg": {
+                  "type": "blob"
+                }
+              }
+            },
+            "Code": {
+              "type": "record",
+              "fields": {
+                "url": {
+                  "type": "text"
+                },
+                "checksum": {
+                  "type": "text"
+                }
+              }
+            }
+          }
+        },
+        "effective_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        },
+        "links": {
+          "type": "vec",
+          "element": {
+            "type": "ProposalLink",
+            "fields": {
+              "kind": {
+                "type": "ProposalLinkKind",
+                "values": [
+                  "Replaces",
+                  "RelatesTo"
+                ]
+              },
+              "proposal": {
+                "type": "text"
+              }
+            }
+          },
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      },
+      "lists": {
+        "links": "proposal_create.links"
+      }
+    },
+    "proposal_create.links": {
+      "operation": "ggg_proposal_create",
+      "list": {
+        "field": "links",
+        "of": "the argument",
+        "element": "ProposalLink"
+      },
+      "facts": {
+        "kind": {
+          "type": "ProposalLinkKind",
+          "values": [
+            "Replaces",
+            "RelatesTo"
+          ]
+        },
+        "proposal": {
+          "type": "text"
+        }
+      }
+    },
+    "proposal_vote": {
+      "operation": "ggg_proposal_vote",
+      "facts": {
+        "proposal": {
+          "type": "text"
+        },
+        "choice": {
+          "type": "VoteChoice",
+          "values": [
+            "Yes",
+            "No",
+            "Abstain"
+          ]
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "proposal_withdraw": {
+      "operation": "ggg_proposal_withdraw",
+      "facts": {
+        "proposal": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "proposal_open": {
+      "operation": "ggg_proposal_open",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "proposal_finalize": {
+      "operation": "ggg_proposal_finalize",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "proposal_execute": {
+      "operation": "ggg_proposal_execute",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "proposal_stop": {
+      "operation": "ggg_proposal_stop",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "mandate_create": {
+      "operation": "ggg_mandate_create",
+      "facts": {
+        "title": {
+          "type": "text"
+        },
+        "scope": {
+          "type": "Value"
+        },
+        "max_value": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "optional": true
+        },
+        "symbol": {
+          "type": "text",
+          "optional": true
+        },
+        "executor": {
+          "type": "text",
+          "optional": true
+        },
+        "expires_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "mandate_revoke": {
+      "operation": "ggg_mandate_revoke",
+      "facts": {
+        "mandate": {
+          "type": "text"
+        }
+      }
+    },
+    "mandate_assign_executor": {
+      "operation": "ggg_mandate_assign_executor",
+      "facts": {
+        "mandate": {
+          "type": "text"
+        },
+        "executor": {
+          "type": "text"
+        }
+      }
+    },
+    "contract_create": {
+      "operation": "ggg_contract_create",
+      "facts": {
+        "title": {
+          "type": "text"
+        },
+        "parties": {
+          "type": "vec",
+          "element": {
+            "type": "Ref",
+            "fields": {
+              "kind": {
+                "type": "text"
+              },
+              "id": {
+                "type": "text"
+              }
+            }
+          }
+        },
+        "mandate": {
+          "type": "text",
+          "optional": true
+        },
+        "value": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0
+        },
+        "symbol": {
+          "type": "text"
+        },
+        "terms_ref": {
+          "type": "text"
+        },
+        "terms_hash": {
+          "type": "text"
+        },
+        "starts_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        },
+        "ends_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        }
+      },
+      "lists": {
+        "parties": "contract_create.parties"
+      }
+    },
+    "contract_create.parties": {
+      "operation": "ggg_contract_create",
+      "list": {
+        "field": "parties",
+        "of": "the argument",
+        "element": "Ref"
+      },
+      "facts": {
+        "kind": {
+          "type": "text"
+        },
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "contract_terminate": {
+      "operation": "ggg_contract_terminate",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "governance_update": {
+      "operation": "ggg_governance_update",
+      "facts": {
+        "voting_window": {
+          "type": "nat64",
+          "kind": "duration",
+          "min": 0,
+          "optional": true
+        },
+        "voting_threshold": {
+          "type": "nat",
+          "kind": "ratio",
+          "min": 0,
+          "max": 100000000,
+          "optional": true
+        },
+        "voting_quorum": {
+          "type": "nat",
+          "kind": "ratio",
+          "min": 0,
+          "max": 100000000,
+          "optional": true
+        }
+      }
+    },
+    "treasury_view": {
+      "operation": "ggg_treasury_view",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "ledger_view": {
+      "operation": "ggg_ledger_view",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "transaction": {
+          "type": "text",
+          "optional": true
+        },
+        "symbol": {
+          "type": "text",
+          "optional": true
+        },
+        "kind": {
+          "type": "LedgerKind",
+          "values": [
+            "Asset",
+            "Liability",
+            "Equity",
+            "Revenue",
+            "Expense"
+          ],
+          "optional": true
+        },
+        "fund": {
+          "type": "text",
+          "optional": true
+        },
+        "period": {
+          "type": "text",
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "report_view": {
+      "operation": "ggg_report_view",
+      "facts": {
+        "id": {
+          "type": "text",
+          "optional": true
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "treasury_configure": {
+      "operation": "ggg_treasury_configure",
+      "facts": {
+        "epoch": {
+          "type": "nat64",
+          "kind": "duration",
+          "min": 0,
+          "optional": true
+        },
+        "anchor_month": {
+          "type": "nat8",
+          "min": 0,
+          "max": 255,
+          "optional": true
+        },
+        "source_fund": {
+          "type": "text",
+          "optional": true
+        },
+        "auto_allocate": {
+          "type": "bool",
+          "optional": true
+        }
+      }
+    },
+    "token_register": {
+      "operation": "ggg_token_register",
+      "facts": {
+        "symbol": {
+          "type": "text"
+        },
+        "ledger": {
+          "type": "principal"
+        },
+        "indexer": {
+          "type": "principal",
+          "optional": true
+        },
+        "decimals": {
+          "type": "nat8",
+          "min": 0,
+          "max": 255,
+          "optional": true
+        },
+        "fee": {
+          "type": "nat",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "nft_token_register": {
+      "operation": "ggg_nft_token_register",
+      "facts": {
+        "symbol": {
+          "type": "text"
+        },
+        "canister": {
+          "type": "principal"
+        },
+        "name": {
+          "type": "text",
+          "optional": true
+        },
+        "description": {
+          "type": "text",
+          "optional": true
+        },
+        "transferable": {
+          "type": "bool",
+          "optional": true
+        },
+        "required_license": {
+          "type": "text",
+          "optional": true
+        },
+        "supply_cap": {
+          "type": "nat",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "transfer_create": {
+      "operation": "ggg_transfer_create",
+      "facts": {
+        "fund": {
+          "type": "text"
+        },
+        "to": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0
+        },
+        "symbol": {
+          "type": "text",
+          "optional": true
+        },
+        "category": {
+          "type": "text",
+          "optional": true
+        },
+        "description": {
+          "type": "text",
+          "optional": true
+        },
+        "contract": {
+          "type": "text",
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "transfer_revert": {
+      "operation": "ggg_transfer_revert",
+      "facts": {
+        "transfer": {
+          "type": "text"
+        },
+        "reason": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "invoice_create": {
+      "operation": "ggg_invoice_create",
+      "facts": {
+        "payer": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0
+        },
+        "symbol": {
+          "type": "text",
+          "optional": true
+        },
+        "due_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        },
+        "reason": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          },
+          "optional": true
+        }
+      }
+    },
+    "invoice_check": {
+      "operation": "ggg_invoice_check",
+      "facts": {
+        "invoice": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "my_invoices": {
+      "operation": "ggg_my_invoices",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "invoice_refresh": {
+      "operation": "ggg_invoice_refresh",
+      "facts": {
+        "invoice": {
+          "type": "text",
+          "optional": true
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      }
+    },
+    "fund_create": {
+      "operation": "ggg_fund_create",
+      "facts": {
+        "fund": {
+          "type": "text"
+        },
+        "name": {
+          "type": "text",
+          "optional": true
+        },
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "period_open": {
+      "operation": "ggg_period_open",
+      "facts": {
+        "period": {
+          "type": "text"
+        },
+        "name": {
+          "type": "text",
+          "optional": true
+        },
+        "starts_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0
+        },
+        "ends_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0
+        }
+      }
+    },
+    "period_close": {
+      "operation": "ggg_period_close",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "budget_draft": {
+      "operation": "ggg_budget_draft",
+      "facts": {
+        "fund": {
+          "type": "text"
+        },
+        "period": {
+          "type": "text"
+        },
+        "category": {
+          "type": "text"
+        },
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "planned": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0
+        }
+      }
+    },
+    "budget_propose": {
+      "operation": "ggg_budget_propose",
+      "facts": {
+        "id": {
+          "type": "text"
+        },
+        "revenue": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "derived": "the sum of the period's revenue lines"
+        },
+        "expense": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "derived": "the sum of the period's expense lines"
+        }
+      }
+    },
+    "budget_amend": {
+      "operation": "ggg_budget_amend",
+      "facts": {
+        "budget": {
+          "type": "text"
+        },
+        "planned": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0
+        }
+      }
+    },
+    "allocation_rule_draft": {
+      "operation": "ggg_allocation_rule_draft",
+      "facts": {
+        "source_fund": {
+          "type": "text"
+        },
+        "rules": {
+          "type": "vec",
+          "element": {
+            "type": "Allocation",
+            "fields": {
+              "fund": {
+                "type": "text"
+              },
+              "share": {
+                "type": "nat",
+                "kind": "ratio",
+                "min": 0,
+                "max": 100000000
+              }
+            }
+          }
+        }
+      },
+      "lists": {
+        "rules": "allocation_rule_draft.rules"
+      }
+    },
+    "allocation_rule_draft.rules": {
+      "operation": "ggg_allocation_rule_draft",
+      "list": {
+        "field": "rules",
+        "of": "the argument",
+        "element": "Allocation"
+      },
+      "facts": {
+        "fund": {
+          "type": "text"
+        },
+        "share": {
+          "type": "nat",
+          "kind": "ratio",
+          "min": 0,
+          "max": 100000000
+        }
+      }
+    },
+    "allocation_rule_propose": {
+      "operation": "ggg_allocation_rule_propose",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "payroll_run": {
+      "operation": "ggg_payroll_run",
+      "facts": {
+        "department": {
+          "type": "text"
+        },
+        "period": {
+          "type": "text"
+        },
+        "symbol": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "report_issue": {
+      "operation": "ggg_report_issue",
+      "facts": {
+        "period": {
+          "type": "text"
+        },
+        "kind": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "tax_policy_draft": {
+      "operation": "ggg_tax_policy_draft",
+      "facts": {
+        "document": {
+          "type": "Value"
+        },
+        "description": {
+          "type": "text",
+          "optional": true
+        },
+        "taxes": {
+          "type": "vec",
+          "element": {
+            "type": "TaxEntry",
+            "fields": {
+              "code": {
+                "type": "text"
+              },
+              "kind": {
+                "type": "text"
+              },
+              "subject": {
+                "type": "text"
+              },
+              "rate": {
+                "type": "nat",
+                "kind": "ratio",
+                "min": 0,
+                "max": 100000000,
+                "optional": true
+              },
+              "amount": {
+                "type": "nat",
+                "kind": "money",
+                "min": 0,
+                "optional": true
+              },
+              "facts": {
+                "type": "Value"
+              }
+            }
+          }
+        }
+      },
+      "lists": {
+        "taxes": "tax_policy_draft.taxes"
+      }
+    },
+    "tax_policy_draft.taxes": {
+      "operation": "ggg_tax_policy_draft",
+      "list": {
+        "field": "taxes",
+        "of": "the argument",
+        "element": "TaxEntry"
+      },
+      "facts": {
+        "code": {
+          "type": "text"
+        },
+        "kind": {
+          "type": "text"
+        },
+        "subject": {
+          "type": "text"
+        },
+        "rate": {
+          "type": "nat",
+          "kind": "ratio",
+          "min": 0,
+          "max": 100000000,
+          "optional": true
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "optional": true
+        },
+        "facts": {
+          "type": "Value"
+        }
+      }
+    },
+    "tax_policy_propose": {
+      "operation": "ggg_tax_policy_propose",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      },
+      "lists": {
+        "taxes": "tax_policy_propose.taxes"
+      }
+    },
+    "tax_policy_propose.taxes": {
+      "operation": "ggg_tax_policy_propose",
+      "list": {
+        "field": "taxes",
+        "of": "the saved policy the id names",
+        "element": "TaxEntry"
+      },
+      "facts": {
+        "code": {
+          "type": "text"
+        },
+        "kind": {
+          "type": "text"
+        },
+        "subject": {
+          "type": "text"
+        },
+        "rate": {
+          "type": "nat",
+          "kind": "ratio",
+          "min": 0,
+          "max": 100000000,
+          "optional": true
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "optional": true
+        },
+        "facts": {
+          "type": "Value"
+        }
+      }
+    },
+    "tax_assess": {
+      "operation": "ggg_tax_assess",
+      "facts": {
+        "period": {
+          "type": "text"
+        },
+        "tax": {
+          "type": "text",
+          "optional": true
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      }
+    },
+    "tax_declare": {
+      "operation": "ggg_tax_declare",
+      "facts": {
+        "base": {
+          "type": "text"
+        },
+        "period": {
+          "type": "text"
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0
+        },
+        "organization": {
+          "type": "text",
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "payment_account_add": {
+      "operation": "ggg_payment_account_add",
+      "facts": {
+        "network": {
+          "type": "text"
+        },
+        "address": {
+          "type": "text"
+        },
+        "symbol": {
+          "type": "text",
+          "optional": true
+        },
+        "label": {
+          "type": "text",
+          "optional": true
+        },
+        "organization": {
+          "type": "text",
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "payment_account_remove": {
+      "operation": "ggg_payment_account_remove",
+      "facts": {
+        "account": {
+          "type": "text"
+        },
+        "organization": {
+          "type": "text",
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "token_force_transfer": {
+      "operation": "ggg_token_force_transfer",
+      "facts": {
+        "symbol": {
+          "type": "text"
+        },
+        "from": {
+          "type": "principal"
+        },
+        "to": {
+          "type": "principal"
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0
+        },
+        "reason": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "token_freeze": {
+      "operation": "ggg_token_freeze",
+      "facts": {
+        "symbol": {
+          "type": "text"
+        },
+        "account": {
+          "type": "principal"
+        },
+        "frozen": {
+          "type": "bool"
+        },
+        "reason": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "land_list": {
+      "operation": "ggg_land_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "owner": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          },
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "land_map": {
+      "operation": "ggg_land_map",
+      "facts": {
+        "x": {
+          "type": "nat",
+          "min": 0
+        },
+        "y": {
+          "type": "nat",
+          "min": 0
+        },
+        "w": {
+          "type": "nat",
+          "min": 0
+        },
+        "h": {
+          "type": "nat",
+          "min": 0
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "credential_verify": {
+      "operation": "ggg_credential_verify",
+      "facts": {
+        "header": {
+          "type": "vec",
+          "element": {
+            "type": "record",
+            "fields": {
+              "_0": {
+                "type": "text"
+              },
+              "_1": {
+                "type": "text"
+              }
+            }
+          }
+        },
+        "frozen": {
+          "type": "bool"
+        }
+      },
+      "read": true
+    },
+    "land_register": {
+      "operation": "ggg_land_register",
+      "facts": {
+        "x": {
+          "type": "nat",
+          "min": 0
+        },
+        "y": {
+          "type": "nat",
+          "min": 0
+        },
+        "width": {
+          "type": "nat",
+          "min": 0,
+          "optional": true
+        },
+        "height": {
+          "type": "nat",
+          "min": 0,
+          "optional": true
+        },
+        "owner": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "metadata": {
+          "type": "Value",
+          "optional": true
+        }
+      }
+    },
+    "land_transfer": {
+      "operation": "ggg_land_transfer",
+      "facts": {
+        "land": {
+          "type": "text"
+        },
+        "to": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "order": {
+          "type": "text"
+        }
+      }
+    },
+    "land_mint_nft": {
+      "operation": "ggg_land_mint_nft",
+      "facts": {
+        "land": {
+          "type": "text"
+        },
+        "prepared_by": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "land_freeze": {
+      "operation": "ggg_land_freeze",
+      "facts": {
+        "land": {
+          "type": "text"
+        },
+        "reason": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "land_unfreeze": {
+      "operation": "ggg_land_unfreeze",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "zone_set": {
+      "operation": "ggg_zone_set",
+      "facts": {
+        "zone": {
+          "type": "text"
+        },
+        "name": {
+          "type": "text",
+          "optional": true
+        },
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "zone_clear": {
+      "operation": "ggg_zone_clear",
+      "facts": {
+        "zone": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "credential_issue": {
+      "operation": "ggg_credential_issue",
+      "facts": {
+        "schema": {
+          "type": "text"
+        },
+        "holder": {
+          "type": "principal"
+        },
+        "organization": {
+          "type": "text"
+        },
+        "subject": {
+          "type": "text",
+          "optional": true
+        },
+        "fields": {
+          "type": "vec",
+          "element": {
+            "type": "record",
+            "fields": {
+              "_0": {
+                "type": "text"
+              },
+              "_1": {
+                "type": "text"
+              }
+            }
+          }
+        },
+        "payload_hash": {
+          "type": "text",
+          "optional": true
+        },
+        "payload_ref": {
+          "type": "text",
+          "optional": true
+        },
+        "prepared_by": {
+          "type": "principal",
+          "optional": true
+        },
+        "expires_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "credential_revoke": {
+      "operation": "ggg_credential_revoke",
+      "facts": {
+        "schema": {
+          "type": "text"
+        },
+        "token_id": {
+          "type": "nat",
+          "min": 0
+        },
+        "organization": {
+          "type": "text"
+        },
+        "reason": {
+          "type": "text"
+        }
+      }
+    },
+    "license_list": {
+      "operation": "ggg_license_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "holder": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          },
+          "optional": true
+        },
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "status": {
+          "type": "LicenseStatus",
+          "values": [
+            "Applied",
+            "Active",
+            "Rejected",
+            "Suspended",
+            "Revoked",
+            "Expired"
+          ],
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "license_verify": {
+      "operation": "ggg_license_verify",
+      "facts": {
+        "id": {
+          "type": "text",
+          "optional": true
+        },
+        "holder": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          },
+          "optional": true
+        },
+        "kind": {
+          "type": "text",
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "license_apply": {
+      "operation": "ggg_license_apply",
+      "facts": {
+        "kind": {
+          "type": "text"
+        },
+        "holder": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          },
+          "optional": true
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        },
+        "evidence_ref": {
+          "type": "text",
+          "optional": true
+        },
+        "conditions": {
+          "type": "Value",
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "license_renew": {
+      "operation": "ggg_license_renew",
+      "facts": {
+        "license": {
+          "type": "text"
+        },
+        "evidence_ref": {
+          "type": "text",
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "license_decide": {
+      "operation": "ggg_license_decide",
+      "facts": {
+        "license": {
+          "type": "text"
+        },
+        "approve": {
+          "type": "bool"
+        },
+        "department": {
+          "type": "text",
+          "optional": true
+        },
+        "expires_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        },
+        "conditions": {
+          "type": "Value",
+          "optional": true
+        }
+      }
+    },
+    "license_suspend": {
+      "operation": "ggg_license_suspend",
+      "facts": {
+        "license": {
+          "type": "text"
+        },
+        "resume": {
+          "type": "bool"
+        }
+      }
+    },
+    "license_revoke": {
+      "operation": "ggg_license_revoke",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "dispute_get": {
+      "operation": "ggg_dispute_get",
+      "facts": {
+        "id": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "dispute_list_all": {
+      "operation": "ggg_dispute_list_all",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "status": {
+          "type": "DisputeStatus",
+          "values": [
+            "Filed",
+            "Accepted",
+            "Rejected",
+            "Withdrawn"
+          ],
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "resolution_query": {
+      "operation": "ggg_resolution_query",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "since": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        },
+        "court": {
+          "type": "text",
+          "optional": true
+        },
+        "search": {
+          "type": "text",
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "dispute_file": {
+      "operation": "ggg_dispute_file",
+      "facts": {
+        "title": {
+          "type": "text"
+        },
+        "respondent": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "subject": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          },
+          "optional": true
+        },
+        "description_ref": {
+          "type": "text",
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "dispute_withdraw": {
+      "operation": "ggg_dispute_withdraw",
+      "facts": {
+        "dispute": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "dispute_accept": {
+      "operation": "ggg_dispute_accept",
+      "facts": {
+        "dispute": {
+          "type": "text"
+        },
+        "court": {
+          "type": "text"
+        }
+      }
+    },
+    "dispute_reject": {
+      "operation": "ggg_dispute_reject",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "case_assign": {
+      "operation": "ggg_case_assign",
+      "facts": {
+        "case": {
+          "type": "text"
+        },
+        "judge": {
+          "type": "text"
+        }
+      }
+    },
+    "evidence_submit": {
+      "operation": "ggg_evidence_submit",
+      "facts": {
+        "case": {
+          "type": "text"
+        },
+        "ref": {
+          "type": "text"
+        },
+        "hash": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "evidence_evaluate": {
+      "operation": "ggg_evidence_evaluate",
+      "facts": {
+        "case": {
+          "type": "text"
+        },
+        "evidence": {
+          "type": "text"
+        },
+        "admitted": {
+          "type": "bool"
+        }
+      }
+    },
+    "verdict_draft": {
+      "operation": "ggg_verdict_draft",
+      "facts": {
+        "case": {
+          "type": "text"
+        },
+        "decision": {
+          "type": "text"
+        },
+        "reasoning_ref": {
+          "type": "text",
+          "optional": true
+        },
+        "penalties": {
+          "type": "vec",
+          "element": {
+            "type": "PenaltyTerms",
+            "fields": {
+              "kind": {
+                "type": "PenaltyKind",
+                "values": [
+                  "Fine",
+                  "Restitution",
+                  "CommunityService",
+                  "Suspension",
+                  "Revocation",
+                  "Injunction",
+                  "Freeze",
+                  "Termination"
+                ]
+              },
+              "target": {
+                "type": "Ref",
+                "fields": {
+                  "kind": {
+                    "type": "text"
+                  },
+                  "id": {
+                    "type": "text"
+                  }
+                }
+              },
+              "amount": {
+                "type": "nat",
+                "kind": "money",
+                "min": 0,
+                "optional": true
+              },
+              "symbol": {
+                "type": "text",
+                "optional": true
+              },
+              "due_at": {
+                "type": "nat64",
+                "kind": "timestamp",
+                "min": 0,
+                "optional": true
+              }
+            }
+          }
+        }
+      },
+      "lists": {
+        "penalties": "verdict_draft.penalties"
+      }
+    },
+    "verdict_draft.penalties": {
+      "operation": "ggg_verdict_draft",
+      "list": {
+        "field": "penalties",
+        "of": "the argument",
+        "element": "PenaltyTerms"
+      },
+      "facts": {
+        "kind": {
+          "type": "PenaltyKind",
+          "values": [
+            "Fine",
+            "Restitution",
+            "CommunityService",
+            "Suspension",
+            "Revocation",
+            "Injunction",
+            "Freeze",
+            "Termination"
+          ]
+        },
+        "target": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "optional": true
+        },
+        "symbol": {
+          "type": "text",
+          "optional": true
+        },
+        "due_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "verdict_issue": {
+      "operation": "ggg_verdict_issue",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "verdict_finalize": {
+      "operation": "ggg_verdict_finalize",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "verdict_link_contract": {
+      "operation": "ggg_verdict_link_contract",
+      "facts": {
+        "verdict": {
+          "type": "text"
+        },
+        "contract": {
+          "type": "text"
+        }
+      }
+    },
+    "verdict_modify_terms": {
+      "operation": "ggg_verdict_modify_terms",
+      "facts": {
+        "verdict": {
+          "type": "text"
+        },
+        "decision": {
+          "type": "text",
+          "optional": true
+        },
+        "reasoning_ref": {
+          "type": "text",
+          "optional": true
+        },
+        "penalties": {
+          "type": "vec",
+          "element": {
+            "type": "PenaltyTerms",
+            "fields": {
+              "kind": {
+                "type": "PenaltyKind",
+                "values": [
+                  "Fine",
+                  "Restitution",
+                  "CommunityService",
+                  "Suspension",
+                  "Revocation",
+                  "Injunction",
+                  "Freeze",
+                  "Termination"
+                ]
+              },
+              "target": {
+                "type": "Ref",
+                "fields": {
+                  "kind": {
+                    "type": "text"
+                  },
+                  "id": {
+                    "type": "text"
+                  }
+                }
+              },
+              "amount": {
+                "type": "nat",
+                "kind": "money",
+                "min": 0,
+                "optional": true
+              },
+              "symbol": {
+                "type": "text",
+                "optional": true
+              },
+              "due_at": {
+                "type": "nat64",
+                "kind": "timestamp",
+                "min": 0,
+                "optional": true
+              }
+            }
+          },
+          "optional": true
+        }
+      },
+      "lists": {
+        "penalties": "verdict_modify_terms.penalties"
+      }
+    },
+    "verdict_modify_terms.penalties": {
+      "operation": "ggg_verdict_modify_terms",
+      "list": {
+        "field": "penalties",
+        "of": "the argument",
+        "element": "PenaltyTerms"
+      },
+      "facts": {
+        "kind": {
+          "type": "PenaltyKind",
+          "values": [
+            "Fine",
+            "Restitution",
+            "CommunityService",
+            "Suspension",
+            "Revocation",
+            "Injunction",
+            "Freeze",
+            "Termination"
+          ]
+        },
+        "target": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "optional": true
+        },
+        "symbol": {
+          "type": "text",
+          "optional": true
+        },
+        "due_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "appeal_file": {
+      "operation": "ggg_appeal_file",
+      "facts": {
+        "verdict": {
+          "type": "text"
+        },
+        "court": {
+          "type": "text",
+          "optional": true
+        },
+        "grounds_ref": {
+          "type": "text",
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "appeal_decide": {
+      "operation": "ggg_appeal_decide",
+      "facts": {
+        "appeal": {
+          "type": "text"
+        },
+        "granted": {
+          "type": "bool"
+        },
+        "decision": {
+          "type": "text",
+          "optional": true
+        },
+        "reasoning_ref": {
+          "type": "text",
+          "optional": true
+        },
+        "penalties": {
+          "type": "vec",
+          "element": {
+            "type": "PenaltyTerms",
+            "fields": {
+              "kind": {
+                "type": "PenaltyKind",
+                "values": [
+                  "Fine",
+                  "Restitution",
+                  "CommunityService",
+                  "Suspension",
+                  "Revocation",
+                  "Injunction",
+                  "Freeze",
+                  "Termination"
+                ]
+              },
+              "target": {
+                "type": "Ref",
+                "fields": {
+                  "kind": {
+                    "type": "text"
+                  },
+                  "id": {
+                    "type": "text"
+                  }
+                }
+              },
+              "amount": {
+                "type": "nat",
+                "kind": "money",
+                "min": 0,
+                "optional": true
+              },
+              "symbol": {
+                "type": "text",
+                "optional": true
+              },
+              "due_at": {
+                "type": "nat64",
+                "kind": "timestamp",
+                "min": 0,
+                "optional": true
+              }
+            }
+          }
+        }
+      },
+      "lists": {
+        "penalties": "appeal_decide.penalties"
+      }
+    },
+    "appeal_decide.penalties": {
+      "operation": "ggg_appeal_decide",
+      "list": {
+        "field": "penalties",
+        "of": "the argument",
+        "element": "PenaltyTerms"
+      },
+      "facts": {
+        "kind": {
+          "type": "PenaltyKind",
+          "values": [
+            "Fine",
+            "Restitution",
+            "CommunityService",
+            "Suspension",
+            "Revocation",
+            "Injunction",
+            "Freeze",
+            "Termination"
+          ]
+        },
+        "target": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "optional": true
+        },
+        "symbol": {
+          "type": "text",
+          "optional": true
+        },
+        "due_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "penalty_execute": {
+      "operation": "ggg_penalty_execute",
+      "facts": {
+        "penalty": {
+          "type": "text"
+        },
+        "due_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "enforcement_record": {
+      "operation": "ggg_enforcement_record",
+      "facts": {
+        "verdict": {
+          "type": "text"
+        },
+        "note": {
+          "type": "text"
+        }
+      }
+    },
+    "enforcement_escalate": {
+      "operation": "ggg_enforcement_escalate",
+      "facts": {
+        "verdict": {
+          "type": "text"
+        },
+        "note": {
+          "type": "text"
+        }
+      }
+    },
+    "enforcement_notify": {
+      "operation": "ggg_enforcement_notify",
+      "facts": {
+        "verdict": {
+          "type": "text"
+        },
+        "to": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "title": {
+          "type": "text",
+          "optional": true
+        },
+        "body": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "court_create": {
+      "operation": "ggg_court_create",
+      "facts": {
+        "name": {
+          "type": "text"
+        },
+        "operator": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "level": {
+          "type": "CourtLevel",
+          "values": [
+            "FirstInstance",
+            "Appellate",
+            "Supreme",
+            "Specialized"
+          ],
+          "optional": true
+        },
+        "jurisdiction": {
+          "type": "text",
+          "optional": true
+        },
+        "parent": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "judge_appoint": {
+      "operation": "ggg_judge_appoint",
+      "facts": {
+        "court": {
+          "type": "text"
+        },
+        "user": {
+          "type": "principal"
+        },
+        "specialization": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "judge_revoke": {
+      "operation": "ggg_judge_revoke",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "tender_list": {
+      "operation": "ggg_tender_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "status": {
+          "type": "TenderStatus",
+          "values": [
+            "Draft",
+            "Open",
+            "Closed",
+            "Evaluation",
+            "Awarded",
+            "Contracted",
+            "Cancelled"
+          ],
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "tender_get": {
+      "operation": "ggg_tender_get",
+      "facts": {
+        "id": {
+          "type": "text"
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "tender_create": {
+      "operation": "ggg_tender_create",
+      "facts": {
+        "requester": {
+          "type": "text"
+        },
+        "title": {
+          "type": "text"
+        },
+        "description": {
+          "type": "text",
+          "optional": true
+        },
+        "opens_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        },
+        "closes_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        },
+        "rubric": {
+          "type": "vec",
+          "element": {
+            "type": "Criterion",
+            "fields": {
+              "criterion": {
+                "type": "text"
+              },
+              "weight": {
+                "type": "nat",
+                "kind": "ratio",
+                "min": 0,
+                "max": 100000000
+              }
+            }
+          }
+        }
+      },
+      "lists": {
+        "rubric": "tender_create.rubric"
+      }
+    },
+    "tender_create.rubric": {
+      "operation": "ggg_tender_create",
+      "list": {
+        "field": "rubric",
+        "of": "the argument",
+        "element": "Criterion"
+      },
+      "facts": {
+        "criterion": {
+          "type": "text"
+        },
+        "weight": {
+          "type": "nat",
+          "kind": "ratio",
+          "min": 0,
+          "max": 100000000
+        }
+      }
+    },
+    "tender_open": {
+      "operation": "ggg_tender_open",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "tender_close": {
+      "operation": "ggg_tender_close",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "tender_cancel": {
+      "operation": "ggg_tender_cancel",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "bid_submit": {
+      "operation": "ggg_bid_submit",
+      "facts": {
+        "tender": {
+          "type": "text"
+        },
+        "vendor": {
+          "type": "text"
+        },
+        "payload_ref": {
+          "type": "text"
+        },
+        "payload_hash": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "bid_withdraw": {
+      "operation": "ggg_bid_withdraw",
+      "facts": {
+        "bid": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "bids_reveal": {
+      "operation": "ggg_bids_reveal",
+      "facts": {
+        "tender": {
+          "type": "text"
+        },
+        "openings": {
+          "type": "vec",
+          "element": {
+            "type": "BidOpening",
+            "fields": {
+              "bid": {
+                "type": "text"
+              },
+              "price": {
+                "type": "nat",
+                "kind": "money",
+                "min": 0
+              },
+              "nonce": {
+                "type": "text"
+              }
+            }
+          }
+        }
+      },
+      "lists": {
+        "openings": "bids_reveal.openings"
+      }
+    },
+    "bids_reveal.openings": {
+      "operation": "ggg_bids_reveal",
+      "list": {
+        "field": "openings",
+        "of": "the argument",
+        "element": "BidOpening"
+      },
+      "facts": {
+        "bid": {
+          "type": "text"
+        },
+        "price": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0
+        },
+        "nonce": {
+          "type": "text"
+        }
+      }
+    },
+    "bid_score": {
+      "operation": "ggg_bid_score",
+      "facts": {
+        "bid": {
+          "type": "text"
+        },
+        "scores": {
+          "type": "vec",
+          "element": {
+            "type": "record",
+            "fields": {
+              "criterion": {
+                "type": "text"
+              },
+              "score": {
+                "type": "nat",
+                "min": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "tender_award": {
+      "operation": "ggg_tender_award",
+      "facts": {
+        "tender": {
+          "type": "text"
+        },
+        "bid": {
+          "type": "text",
+          "optional": true
+        },
+        "justification": {
+          "type": "text",
+          "optional": true
+        },
+        "published_in": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          },
+          "derived": "the journals of the notices the tender has"
+        }
+      }
+    },
+    "quarter_directory": {
+      "operation": "ggg_quarter_directory",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "join_targets": {
+      "operation": "ggg_join_targets",
+      "facts": {},
+      "read": true
+    },
+    "quarter_sync": {
+      "operation": "ggg_quarter_sync",
+      "facts": {}
+    },
+    "quarter_report": {
+      "operation": "ggg_quarter_report",
+      "facts": {
+        "population": {
+          "type": "nat",
+          "min": 0
+        },
+        "codex_id": {
+          "type": "text",
+          "optional": true
+        },
+        "codex_version": {
+          "type": "text",
+          "optional": true
+        },
+        "leg": {
+          "type": "FederalVoteLeg",
+          "fields": {
+            "id": {
+              "type": "text"
+            },
+            "vote": {
+              "type": "text"
+            },
+            "quarter": {
+              "type": "text"
+            },
+            "proposal_id": {
+              "type": "text",
+              "optional": true
+            },
+            "outcome": {
+              "type": "Outcome",
+              "values": [
+                "Passed",
+                "Failed"
+              ],
+              "optional": true
+            },
+            "yes": {
+              "type": "nat",
+              "min": 0
+            },
+            "no": {
+              "type": "nat",
+              "min": 0
+            },
+            "abstain": {
+              "type": "nat",
+              "min": 0
+            },
+            "eligible": {
+              "type": "nat",
+              "min": 0
+            },
+            "status": {
+              "type": "FederalVoteLegStatus",
+              "values": [
+                "Open",
+                "Reported"
+              ]
+            },
+            "hash": {
+              "type": "text",
+              "optional": true
+            }
+          },
+          "optional": true
+        }
+      }
+    },
+    "quarter_register": {
+      "operation": "ggg_quarter_register",
+      "facts": {
+        "canister": {
+          "type": "principal"
+        },
+        "name": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "quarter_deregister": {
+      "operation": "ggg_quarter_deregister",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "quarter_configure": {
+      "operation": "ggg_quarter_configure",
+      "facts": {
+        "quarter": {
+          "type": "text",
+          "optional": true
+        },
+        "name": {
+          "type": "text",
+          "optional": true
+        },
+        "status": {
+          "type": "QuarterStatus",
+          "values": [
+            "Setup",
+            "Active",
+            "Suspended",
+            "Splitting",
+            "Merging"
+          ],
+          "optional": true
+        },
+        "quarter_join_mode": {
+          "type": "text",
+          "optional": true
+        },
+        "federation_codex": {
+          "type": "text",
+          "optional": true
+        },
+        "rule": {
+          "type": "Value",
+          "optional": true
+        },
+        "timezone": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "quarter_secede": {
+      "operation": "ggg_quarter_secede",
+      "facts": {}
+    },
+    "quarter_join_federation": {
+      "operation": "ggg_quarter_join_federation",
+      "facts": {
+        "capital": {
+          "type": "principal"
+        },
+        "name": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "self_change_quarter": {
+      "operation": "ggg_self_change_quarter",
+      "facts": {
+        "quarter": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "federal_vote_propose": {
+      "operation": "ggg_federal_vote_propose",
+      "facts": {
+        "title": {
+          "type": "text"
+        },
+        "action": {
+          "type": "ProposalAction",
+          "values": [
+            "Motion",
+            "Call",
+            "Code"
+          ],
+          "cases": {
+            "Call": {
+              "type": "record",
+              "fields": {
+                "method": {
+                  "type": "text"
+                },
+                "arg": {
+                  "type": "blob"
+                }
+              }
+            },
+            "Code": {
+              "type": "record",
+              "fields": {
+                "url": {
+                  "type": "text"
+                },
+                "checksum": {
+                  "type": "text"
+                }
+              }
+            }
+          }
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "federal_vote_cancel": {
+      "operation": "ggg_federal_vote_cancel",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "federal_vote_finalize": {
+      "operation": "ggg_federal_vote_finalize",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "federation_message": {
+      "operation": "ggg_federation_message",
+      "facts": {
+        "topic": {
+          "type": "text"
+        },
+        "body": {
+          "type": "Value"
+        },
+        "to": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "codex_status": {
+      "operation": "ggg_codex_status",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "notification_list": {
+      "operation": "ggg_notification_list",
+      "facts": {
+        "recipient": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          },
+          "optional": true
+        },
+        "unread": {
+          "type": "bool",
+          "optional": true
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "events": {
+      "operation": "ggg_events",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "codex_install": {
+      "operation": "ggg_codex_install",
+      "facts": {
+        "id": {
+          "type": "CodexSource",
+          "values": [
+            "Package",
+            "Registry"
+          ],
+          "cases": {
+            "Package": {
+              "type": "record",
+              "fields": {
+                "manifest": {
+                  "type": "Value"
+                },
+                "source": {
+                  "type": "text"
+                }
+              }
+            },
+            "Registry": {
+              "type": "record",
+              "fields": {
+                "codex": {
+                  "type": "text"
+                },
+                "version": {
+                  "type": "text"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "codex_uninstall": {
+      "operation": "ggg_codex_uninstall",
+      "facts": {}
+    },
+    "codex_revert": {
+      "operation": "ggg_codex_revert",
+      "facts": {}
+    },
+    "notification_read": {
+      "operation": "ggg_notification_read",
+      "facts": {
+        "notification": {
+          "type": "text",
+          "optional": true
+        },
+        "recipient": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          },
+          "optional": true
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "notification_send": {
+      "operation": "ggg_notification_send",
+      "facts": {
+        "recipient": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "title": {
+          "type": "text"
+        },
+        "body": {
+          "type": "text",
+          "optional": true
+        },
+        "href": {
+          "type": "text",
+          "optional": true
+        },
+        "topic": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "realm_info": {
+      "operation": "ggg_realm_info",
+      "facts": {},
+      "read": true
+    },
+    "realm_monitor": {
+      "operation": "ggg_realm_monitor",
+      "facts": {},
+      "read": true
+    },
+    "setup_state": {
+      "operation": "ggg_setup_state",
+      "facts": {}
+    },
+    "setup_step": {
+      "operation": "ggg_setup_step",
+      "facts": {
+        "id": {
+          "type": "SetupStep",
+          "values": [
+            "Realm",
+            "Branding",
+            "Tokens",
+            "TrustPolicy"
+          ],
+          "cases": {
+            "Realm": {
+              "type": "RealmConfigureArgs",
+              "fields": {
+                "name": {
+                  "type": "text",
+                  "optional": true
+                },
+                "manifesto": {
+                  "type": "text",
+                  "optional": true
+                },
+                "welcome_message": {
+                  "type": "text",
+                  "optional": true
+                },
+                "open_registration": {
+                  "type": "bool",
+                  "optional": true
+                },
+                "quarter_join_mode": {
+                  "type": "text",
+                  "optional": true
+                },
+                "timezone": {
+                  "type": "text",
+                  "optional": true
+                }
+              }
+            },
+            "Branding": {
+              "type": "BrandingArgs",
+              "fields": {
+                "logo_url": {
+                  "type": "text",
+                  "optional": true
+                },
+                "background_image_url": {
+                  "type": "text",
+                  "optional": true
+                }
+              }
+            },
+            "Tokens": {
+              "type": "TokensArgs",
+              "fields": {
+                "accounting_currency": {
+                  "type": "text",
+                  "optional": true
+                },
+                "accounting_currency_decimals": {
+                  "type": "nat8",
+                  "min": 0,
+                  "max": 255,
+                  "optional": true
+                }
+              }
+            },
+            "TrustPolicy": {
+              "type": "TrustPolicyArgs",
+              "fields": {
+                "require_marketplace_approval": {
+                  "type": "bool",
+                  "optional": true
+                },
+                "trusted_approvers": {
+                  "type": "vec",
+                  "element": {
+                    "type": "text"
+                  },
+                  "optional": true
+                },
+                "trusted_principals": {
+                  "type": "vec",
+                  "element": {
+                    "type": "principal"
+                  },
+                  "optional": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "setup_launch": {
+      "operation": "ggg_setup_launch",
+      "facts": {}
+    },
+    "host_install": {
+      "operation": "ggg_host_install",
+      "facts": {
+        "founder": {
+          "type": "principal"
+        },
+        "network": {
+          "type": "text"
+        },
+        "registry": {
+          "type": "principal",
+          "optional": true
+        },
+        "test_mode": {
+          "type": "bool"
+        }
+      }
+    },
+    "host_infrastructure": {
+      "operation": "ggg_host_infrastructure",
+      "facts": {
+        "frontend": {
+          "type": "principal",
+          "optional": true
+        },
+        "file_registry": {
+          "type": "principal",
+          "optional": true
+        },
+        "extra": {
+          "type": "vec",
+          "element": {
+            "type": "record",
+            "fields": {
+              "_0": {
+                "type": "text"
+              },
+              "_1": {
+                "type": "principal"
+              }
+            }
+          }
+        }
+      }
+    },
+    "realm_configure": {
+      "operation": "ggg_realm_configure",
+      "facts": {
+        "name": {
+          "type": "text",
+          "optional": true
+        },
+        "manifesto": {
+          "type": "text",
+          "optional": true
+        },
+        "welcome_message": {
+          "type": "text",
+          "optional": true
+        },
+        "open_registration": {
+          "type": "bool",
+          "optional": true
+        },
+        "quarter_join_mode": {
+          "type": "text",
+          "optional": true
+        },
+        "timezone": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "realm_configure_branding": {
+      "operation": "ggg_realm_configure_branding",
+      "facts": {
+        "logo_url": {
+          "type": "text",
+          "optional": true
+        },
+        "background_image_url": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "realm_configure_tokens": {
+      "operation": "ggg_realm_configure_tokens",
+      "facts": {
+        "accounting_currency": {
+          "type": "text",
+          "optional": true
+        },
+        "accounting_currency_decimals": {
+          "type": "nat8",
+          "min": 0,
+          "max": 255,
+          "optional": true
+        }
+      }
+    },
+    "realm_configure_trust_policy": {
+      "operation": "ggg_realm_configure_trust_policy",
+      "facts": {
+        "require_marketplace_approval": {
+          "type": "bool",
+          "optional": true
+        },
+        "trusted_approvers": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          },
+          "optional": true
+        },
+        "trusted_principals": {
+          "type": "vec",
+          "element": {
+            "type": "principal"
+          },
+          "optional": true
+        }
+      }
+    },
+    "realm_register": {
+      "operation": "ggg_realm_register",
+      "facts": {
+        "registry": {
+          "type": "principal"
+        },
+        "url": {
+          "type": "text",
+          "optional": true
+        },
+        "backend_url": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "realm_upgrade": {
+      "operation": "ggg_realm_upgrade",
+      "facts": {
+        "version": {
+          "type": "text"
+        },
+        "module_hash": {
+          "type": "blob"
+        }
+      }
+    },
+    "crypto_envelope": {
+      "operation": "ggg_crypto_envelope",
+      "facts": {
+        "scope": {
+          "type": "text"
+        }
+      },
+      "read": true
+    },
+    "crypto_scopes": {
+      "operation": "ggg_crypto_scopes",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "crypto_access": {
+      "operation": "ggg_crypto_access",
+      "facts": {
+        "scope": {
+          "type": "text"
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "document_list": {
+      "operation": "ggg_document_list",
+      "facts": {
+        "department": {
+          "type": "text"
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "document_get": {
+      "operation": "ggg_document_get",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      },
+      "read": true
+    },
+    "crypto_public_key": {
+      "operation": "ggg_crypto_public_key",
+      "facts": {}
+    },
+    "crypto_derive_key": {
+      "operation": "ggg_crypto_derive_key",
+      "facts": {
+        "transport_key": {
+          "type": "blob"
+        }
+      }
+    },
+    "crypto_grant": {
+      "operation": "ggg_crypto_grant",
+      "facts": {
+        "scope": {
+          "type": "text"
+        },
+        "keys": {
+          "type": "vec",
+          "element": {
+            "type": "WrappedKey",
+            "fields": {
+              "principal": {
+                "type": "principal"
+              },
+              "wrapped_dek": {
+                "type": "blob"
+              }
+            }
+          }
+        }
+      },
+      "lists": {
+        "keys": "crypto_grant.keys"
+      }
+    },
+    "crypto_grant.keys": {
+      "operation": "ggg_crypto_grant",
+      "list": {
+        "field": "keys",
+        "of": "the argument",
+        "element": "WrappedKey"
+      },
+      "facts": {
+        "principal": {
+          "type": "principal"
+        },
+        "wrapped_dek": {
+          "type": "blob"
+        }
+      }
+    },
+    "crypto_revoke": {
+      "operation": "ggg_crypto_revoke",
+      "facts": {
+        "scope": {
+          "type": "text"
+        },
+        "principals": {
+          "type": "vec",
+          "element": {
+            "type": "principal"
+          }
+        }
+      }
+    },
+    "document_store": {
+      "operation": "ggg_document_store",
+      "facts": {
+        "document": {
+          "type": "text",
+          "optional": true
+        },
+        "department": {
+          "type": "text"
+        },
+        "title": {
+          "type": "text"
+        },
+        "ref": {
+          "type": "text"
+        },
+        "hash": {
+          "type": "text"
+        },
+        "keys": {
+          "type": "vec",
+          "element": {
+            "type": "WrappedKey",
+            "fields": {
+              "principal": {
+                "type": "principal"
+              },
+              "wrapped_dek": {
+                "type": "blob"
+              }
+            }
+          }
+        }
+      },
+      "lists": {
+        "keys": "document_store.keys"
+      }
+    },
+    "document_store.keys": {
+      "operation": "ggg_document_store",
+      "list": {
+        "field": "keys",
+        "of": "the argument",
+        "element": "WrappedKey"
+      },
+      "facts": {
+        "principal": {
+          "type": "principal"
+        },
+        "wrapped_dek": {
+          "type": "blob"
+        }
+      }
+    },
+    "document_share": {
+      "operation": "ggg_document_share",
+      "facts": {
+        "document": {
+          "type": "text"
+        },
+        "keys": {
+          "type": "vec",
+          "element": {
+            "type": "WrappedKey",
+            "fields": {
+              "principal": {
+                "type": "principal"
+              },
+              "wrapped_dek": {
+                "type": "blob"
+              }
+            }
+          }
+        }
+      },
+      "lists": {
+        "keys": "document_share.keys"
+      }
+    },
+    "document_share.keys": {
+      "operation": "ggg_document_share",
+      "list": {
+        "field": "keys",
+        "of": "the argument",
+        "element": "WrappedKey"
+      },
+      "facts": {
+        "principal": {
+          "type": "principal"
+        },
+        "wrapped_dek": {
+          "type": "blob"
+        }
+      }
+    },
+    "document_revoke": {
+      "operation": "ggg_document_revoke",
+      "facts": {
+        "document": {
+          "type": "text"
+        },
+        "principals": {
+          "type": "vec",
+          "element": {
+            "type": "principal"
+          }
+        }
+      }
+    },
+    "document_delete": {
+      "operation": "ggg_document_delete",
+      "facts": {
+        "document": {
+          "type": "text"
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      }
+    }
+  }
+}

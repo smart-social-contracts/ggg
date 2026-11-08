@@ -37,6 +37,7 @@ Each check reports one outcome:
 ```bash
 npm install
 npm run idl     # regenerate idl/ggg.js and fixture/Ggg.mo from ggg.did; needs didc
+npm run facts   # regenerate ../facts.json, the fact schema, from ggg.did
 npm test        # check ggg.did against the model, and run the suite against the fixture on PocketIC
 ```
 
@@ -52,6 +53,8 @@ path.
   method is not a model operation.
 - `test/domains.test.js` fails when `domains.json` is malformed or differs from the table in
   `docs/layered-codex.md`.
+- `test/facts.test.js` fails when `facts.json` differs from what `scripts/facts.js` generates from
+  `ggg.did`, or when the kinds table in `docs/layered-codex.md` differs from it.
 - `fixture/Ggg.mo` holds the Motoko types generated from `ggg.did`.
 - `fixture/main.mo` is a minimal Motoko GOS: members and proposals, and every other domain empty. The build checks its interface against `ggg.did` with
   `didc check`, and the tests expect it to pass every check.
