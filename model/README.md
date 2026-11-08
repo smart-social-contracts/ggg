@@ -262,15 +262,17 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
   operation must be one the grant covers directly at that moment: never a `confirm`, `member` or
   `founder` operation, and never one outside the grant's groups. The task fails once the grant is
   revoked, replaced or expired (I-EXT-5).
-- **Grants made before groups.** A grant whose `scope` names permissions covers only the operations
-  that were delegable before groups, with the rules that held then: `me`, `profile_update`,
-  `attribute_list`, `zone_set`, `zone_clear`, `proposal_create` (a motion), `proposal_withdraw`,
-  `proposal_vote`, `transfer_create` (always a proposal), `invoice_check`, `my_invoices`,
-  `tax_declare`, `license_apply`, `license_renew`, `request_file`, `request_get`, `dispute_file`,
-  `dispute_withdraw`, `dispute_get`, `evidence_submit`, `appeal_file`, `bid_submit`, `bid_withdraw`,
-  `notification_list` and `notification_read`. Under such a grant a proposal with an action, a payout
-  account, an identity proof, an attribute, a quarter move and a federal vote stay refused: nothing
-  widens an old grant. A new grant may still name permissions, and then it covers these alone.
+- **Grants made before groups.** A grant whose `scope` names permissions covers only these operations,
+  with the rules that held before groups: `me`, `profile_update`, `zone_set`, `zone_clear`,
+  `proposal_create` (a motion), `proposal_withdraw`, `proposal_vote`, `transfer_create` (always a
+  proposal), `invoice_check`, `my_invoices`, `tax_declare`, `license_apply`, `license_renew`,
+  `request_file`, `request_get`, `dispute_file`, `dispute_withdraw`, `dispute_get`, `evidence_submit`,
+  `appeal_file`, `bid_submit`, `bid_withdraw`, `notification_list` and `notification_read`. Not
+  `attribute_list`, delegable then too: an attribute is I-PRV-1 data, and such a grant was consented
+  to for the member's own card, notifications and invoices; it is read under `see`. Under such a grant
+  a proposal with an action, a payout account, an identity proof, an attribute, a quarter move and a
+  federal vote stay refused: nothing widens an old grant. A new grant may still name permissions, and
+  then it covers these alone.
 - **The vocabulary.** `delegation_groups` returns the groups the caller can grant, each with its
   label, summary, risk and longest duration, whether some of its operations ask each time, and the
   caller's operations in it with their tiers, as `delegation.json` states them, so every GOS and
