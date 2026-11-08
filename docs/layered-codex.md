@@ -234,8 +234,10 @@ A fact that is not an argument is marked `derived`, with what the GOS computes i
   becomes −2.35), as euro legislation requires (Regulation (EC) 1103/97 Art. 5). GGG states it with
   the money kind of its fact schema (`Money`), so every implementation rounds the same way. Money is
   an integer in the token's smallest unit, so a cent is 10^(decimals − 2) of them and the rounded
-  result is a multiple of it; the token's `decimals` is on `Token`, where chapters can read it. Another
-  rule is added only when a piece of legislation needs it.
+  result is a multiple of it; the token's `decimals` is on `Token`, where chapters can read it. One
+  amount computed from several rates, as a progressive tax over its brackets, is computed exactly and
+  rounded once; separate amounts, such as invoice items, are each rounded and then added (model §5,
+  D23). Another rule is added only when a piece of legislation needs it.
 - **A `Period` is a count and a unit:** `PeriodUnit = variant { Day; WorkingDay; Month; Year }`, both
   in `ggg.did` (§7 for `WorkingDay`). A deadline is a `Period`, not a `Duration` in nanoseconds: three months is
   three months, whatever the days. Periods compare only within one unit: comparing two units, such as

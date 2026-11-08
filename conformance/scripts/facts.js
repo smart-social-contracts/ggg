@@ -29,7 +29,7 @@ export const KINDS = {
     aliases: { Money: { min: 0, max: SAFE_MAX }, SignedMoney: { min: -SAFE_MAX, max: SAFE_MAX } },
     unit: "the token's smallest unit (Token.decimals)",
     range: '`Money` 0 to 9 007 199 254 740 991 (2^53 − 1); `SignedMoney` −9 007 199 254 740 991 to 9 007 199 254 740 991, for a discount line',
-    rule: 'Money computed from a ratio is rounded to the nearest cent, an exact half away from zero. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units. Money is never negative; SignedMoney may be, for a discount or bonus line.',
+    rule: 'Money computed from a ratio is rounded to the nearest cent, an exact half away from zero; one amount computed from several ratios, as a progressive tax over its brackets, is computed exactly and rounded once; separate amounts, such as invoice items, are each rounded and then added. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units. Money is never negative; SignedMoney may be, for a discount or bonus line.',
   },
   area: {
     aliases: { Area: { min: 0, max: LONG_MAX } },
