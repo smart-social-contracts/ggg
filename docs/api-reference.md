@@ -56,7 +56,12 @@ Delegating authority is power of attorney in the model ([§2](../model/README.md
 `ggg_delegation_grant` names groups of operations; `ggg_delegation_groups` lists the groups a member can
 grant, each with its operations and their tiers; `ggg_delegation_activity` pages what a delegate did
 under one grant; `ggg_delegation_revoke_all` ends every grant the member gave. The tiers and groups are
-in [`delegation.json`](../delegation.json).
+in [`delegation.json`](../delegation.json). A delegate acts through `ggg_call_for` (and reads through
+`ggg_read_for`): a direct operation runs, and an operation that asks the member each time comes back
+`Pending`, with the action's id and hash. The client gives the member the realm's link to it, and reads
+the outcome with `ggg_action_get` once the member has approved or declined it in the realm. An approved
+read stores nothing: the client collects it once with `ggg_action_collect`, which runs the read at that
+moment and returns the reply.
 
 ### State
 

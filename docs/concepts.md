@@ -55,7 +55,9 @@ Edges in the graph can represent various relationships:
 In the model this is power of attorney ([model §2](../model/README.md#power-of-attorney)): a member
 grants another principal, a person or an AI connection, plain-language groups of operations, and every
 operation has a tier: direct under the grant, asking the member each time, the member's own, or the
-founder's. [`delegation.json`](../delegation.json) lists the groups and every operation's tier.
+founder's. [`delegation.json`](../delegation.json) lists the groups and every operation's tier. An
+operation that asks each time is prepared by the delegate as a pending action and runs only on the
+member's own approval of that exact call ([model §2](../model/README.md#pending-actions)).
 
 ### Graph Operations
 
