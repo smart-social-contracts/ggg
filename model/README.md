@@ -296,7 +296,7 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed at creation like the action; the casting vote is the realm's, for a realm-wide proposal only, never the proposer's. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of Infrastructure's 3 policy seats |
+| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed when the vote opens; the casting vote is the realm's, for a realm-wide proposal only, never the proposer's. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of Infrastructure's 3 policy seats |
 | `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the vote ends. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
 | `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `kind`, `procedure`, `tender` → `Tender`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. `kind` (works, supplies, services) and `procedure` are the realm's words; a contract made from a tender names it and takes its kind and procedure. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, from tender `T-5`, terms `sha256:4be1…` |
@@ -336,16 +336,19 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 - I-GOV-2: Votes count only from users eligible for the proposal's scope when they vote.
 - I-GOV-3: A proposal is accepted only if its quorum and threshold are met when its vote ends. Its rule,
   `threshold`, `quorum`, `threshold_of` and `casting_vote`, states the one that decides it, and that rule
-  is applied; it is fixed at creation, like the action. One comparison per scope:
+  is applied; it is fixed when the vote opens, together with `tally.eligible` and `tally.seats`: at
+  creation for a proposal filed open, at `proposal_open` for a draft, and after that it never moves,
+  like the action. One comparison per scope:
   - A **realm-wide** proposal takes the realm's `voting_threshold` and `voting_quorum`, over the votes
     `cast`: it is accepted when the votes cast reach the quorum of the eligible voters and the yes votes
     *exceed* `threshold` of the yes and no votes. Over the `eligible` voters, the yes votes must exceed
     `threshold` of them all, so 50 % over the eligible is more than half of the members.
   - A **department's** proposal under an m-of-n policy takes `threshold` m/n, in hundred-millionths
-    rounded down (2 of 3 is 66 666 666, shown as 66.666666 %), over the policy's n (`tally.seats`, fixed
-    when the vote opens), not over the seats filled, and the policy's quorum: it is accepted when the
-    yes votes *reach* `threshold` of n, exactly m under the policy's own rule and the next whole number
-    at or above t·n under a stricter threshold t, and a veto holder's `no` rejects it whatever the count
+    rounded down (2 of 3 is 66 666 666, shown as 66.666666 %), over the policy's n (`tally.seats`), not
+    over the seats filled, and the policy's quorum; its `threshold_of` is `eligible`, which for a
+    department means its policy's n, and `cast` is weaker and refused. It is accepted when the yes
+    votes *reach* `threshold` of n, exactly m under the policy's own rule and the next whole number at
+    or above t·n under a stricter threshold t, and a veto holder's `no` rejects it whatever the count
     (I-GOV-7). A direct policy (1 of 1) needs one yes. The eligible voters are the department's seated
     members (`tally.eligible`): they drive the quorum and the end at which everyone has voted, never
     the threshold, so a vacancy never makes a vote easier.
@@ -507,13 +510,14 @@ the entry's fields as its facts, and the same rules run when a draft is saved wi
 ([layered codex §3.2](../docs/layered-codex.md#32-four-mechanisms)). An entry's `rate` or `amount` is
 what it charges when no codex computes it; `tax_assess` asks the active codex for each taxpayer's
 amount where it has one to give. A progressive tax, a rate per bracket of the base, is the exact total
-over all its brackets, rounded once by the money rule, an exact half away from zero, to the token's
-smallest unit ([layered codex §3.3](../docs/layered-codex.md#33-the-fact-schema-units-rates-money-and-periods));
-rounding each bracket's share would move the total by up to a cent per bracket. On a base of 150.08
-under 10 % up to 100.05 and 20 % above, the shares are 10.005 and 10.006 and the tax is 20.01, the
-total 20.011 rounded once; bracket by bracket it would be 10.01 + 10.01 = 20.02.
-[`conformance/scripts/money.js`](../conformance/scripts/money.js) is this rule as code, with the
-example as its test.
+over all its brackets, rounded once by the money rule, an exact half away from zero, to the nearest
+cent, a multiple of 10^(decimals − 2) smallest units
+([layered codex §3.3](../docs/layered-codex.md#33-the-fact-schema-units-rates-money-and-periods));
+rounding each bracket's share would move the total by up to half a cent per bracket. On a base of
+150.08 under 10 % up to 100.05 and 20 % above, the shares are 10.005 and 10.006 and the tax is 20.01,
+the total 20.011 rounded once; bracket by bracket it would be 10.01 + 10.01 = 20.02.
+[`conformance/src/money.js`](../conformance/src/money.js) is this rule as code, with the example as
+its test.
 
 A budget is proposed per period: `budget_propose` takes the draft lines of the period together, with
 `years` when the plan covers more than one period, and legislation reads the totals of the lines it
@@ -1229,10 +1233,10 @@ There is no permission for raw database writes: everything is an operation.
 | D12 | Sessions of a collegiate organ as entities, with operations to open and close one | Rejected: a proposal's `opens_at` and `deadline` are the session |
 | D13 | Holidays as realm data | Rejected: they stay in the codex, beside its chapters |
 | D14 | Outside bodies as registry entries, or as realms | Rejected: an `External` with a `Dispatch` outbox, confirmed by an operator or a bridge; what they say enters through `external_report` |
-| D15 | What a proposal's `threshold` means under a department's m-of-n policy | Decided 8 Nov 2026: it states the rule that decides the proposal and is applied, with one comparison per scope: a realm-wide proposal's yes votes *exceed* the threshold of its basis (votes cast, or all eligible members), a department's *reach* it over the eligible seats (m of n is m/n rounded down: 2 of 3 is 66 666 666); the proposer may only tighten the rule, and the casting vote is the realm's, for a realm-wide proposal only, set by governed configuration (I-GOV-3) |
+| D15 | What a proposal's `threshold` means under a department's m-of-n policy | Decided 8 Nov 2026: it states the rule that decides the proposal and is applied, with one comparison per scope: a realm-wide proposal's yes votes *exceed* the threshold of its basis (votes cast, or all eligible members), a department's *reach* it over its policy's n (D20) (m of n is m/n rounded down: 2 of 3 is 66 666 666); the proposer may only tighten the rule, and the casting vote is the realm's, for a realm-wide proposal only, set by governed configuration (I-GOV-3) |
 | D16 | Personal data in attributes, requests, dispatches and published documents | Decided 8 Nov 2026: an attribute's kind and value are in clear, readable only by the person, the reviewers and the codex; a request's or dispatch's personal content is an encrypted `Document` reference; a published copy holds no personal data (I-PRV-1) |
 | D17 | The majority of a proposal that a governed call files | Decided 8 Nov 2026: the scope's default rule; legislation that needs more requires a proposal of its own and may refuse the direct path with a guard (I-GOV-3) |
 | D18 | Which vote may carry a governed call on another department's record | Decided 8 Nov 2026: a realm-wide proposal carries any call; a department's only a governed call whose governing department is that department or one below it, checked at creation and again when the action executes (I-GOV-13) |
 | D19 | Which department governs a change of parent, `department_delete`, `fund_create` and `budget_propose` | Decided 8 Nov 2026: a change of `parent` is governed by the lowest department that is, or is above, both the old and the new parent (an unknown new parent is `NotFound`), and every other edit by the department itself; `department_delete` by the parent, the root for a top-level department, never the root (`InvalidArgument`) nor a department that owns a fund (`Conflict`); creating an owned record, `fund_create`, by the owner named; `budget_propose` by the owner of the `fund` it names, or by the root when it names none and proposes every fund's lines; its lines are fixed when it files (`proposed`, with the proposal), a later one takes only `draft` lines, its totals are the sums over the lines it proposes, and `budget_extend` and the replacement of extended lines are per fund (§1, §3, §5) |
 | D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3) |
-| D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the token's smallest unit; never bracket by bracket (§5) |
+| D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the nearest cent (a multiple of 10^(decimals − 2) smallest units); never bracket by bracket (§5) |

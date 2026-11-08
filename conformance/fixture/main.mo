@@ -4,7 +4,8 @@
 /// policy applies at once), read the realm and manage their own profile; every other permission is
 /// held by nobody, so those operations are refused. There are four departments: the root, with a
 /// direct policy, so a governed call on a realm-wide proposal is applied at once; a council under
-/// it, deciding 2 of 3, so a governed call on one of its proposals files a proposal instead; and two
+/// it, deciding 2 of 3 with a 75 % quorum, so a governed call on one of its proposals files a proposal
+/// instead; and two
 /// committees under the council, each deciding alone, so that a proposal of the council can carry a
 /// call on a committee's records where a committee's cannot carry one on its sibling's (I-GOV-13).
 /// Members may also edit a department (department_edit, governed by that department, or by the lowest
@@ -18,7 +19,8 @@
 /// department's proposal (its tally.eligible), and its threshold is measured against its policy's n
 /// (tally.seats), as I-GOV-3 says: two yes votes carry a council proposal whether two or twenty
 /// members vote. The fixture never ends a department vote early (I-GOV-7 allows it, it does not
-/// require it): that needs veto holders, who must hold a seat (I-ORG-5). Nor does it settle a proposal as its vote ends or run
+/// require it): that needs veto holders, who must hold a seat (I-ORG-5). Nor does it settle a
+/// proposal as its vote ends or run
 /// an accepted action as it finalizes (I-GOV-12): proposal_finalize records the outcome of a vote that
 /// has ended, and proposal_execute runs the action. Nobody has granted a delegation, so nobody acts on
 /// another's behalf. Every other domain is empty, which the model allows. A proposal's rule is its
@@ -77,7 +79,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   /// the policy's quorum.
   func scopeRule(department : T.Department) : Rule {
     if (department.is_root) return defaultRule();
-    { threshold = department.policy.m * WHOLE / department.policy.n; quorum = department.policy.quorum; threshold_of = #Eligible; casting_vote = null };
+    {
+      threshold = department.policy.m * WHOLE / department.policy.n;
+      quorum = department.policy.quorum;
+      threshold_of = #Eligible;
+      casting_vote = null;
+    };
   };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
   let NO_MORE_BUDGETING = "keeps no fiscal periods, allocation rules, payroll or loans";
@@ -97,7 +104,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   let departments = Map.empty<Text, T.Department>();
   for (d in [
     department(ROOT_ID, "The realm itself.", null, DIRECT),
-    department("council", "A council under the realm, deciding 2 of 3.", ?ROOT_ID, { m = 2; n = 3; quorum = 0; veto = [] }),
+    department(
+      "council",
+      "A council under the realm, deciding 2 of 3 with a 75 % quorum.",
+      ?ROOT_ID,
+      { m = 2; n = 3; quorum = 75_000_000; veto = [] },
+    ),
     department("roads", "A committee under the council, deciding alone.", ?"council", DIRECT),
     department("parks", "A committee under the council, deciding alone.", ?"council", DIRECT),
   ].vals()) Map.add(departments, Text.compare, d.id, d);
@@ -399,10 +411,9 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     null;
   };
 
-  /// The rule a proposer states, checked against the scope's default: stricter is allowed, weaker is
-  /// refused (I-GOV-3). The casting vote is the realm's, for a realm-wide proposal only.
-  /// The scope's rule, tightened as the proposer states (I-GOV-3): a higher threshold or quorum, or the
-  /// eligible basis where the scope counts the votes cast.
+  /// The rule a proposer states, checked against the scope's: a higher threshold or quorum, or the
+  /// eligible basis where the scope counts the votes cast, is allowed; weaker is refused (I-GOV-3). The
+  /// casting vote is the scope's.
   func statedRule(args : T.ProposalCreateArgs) : Result<Rule> {
     let scope = switch (args.department) {
       case (?d) { switch (findDepartment(d)) { case (?found) scopeRule(found); case null return #Err(#NotFound) } };
@@ -411,7 +422,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     let threshold = switch (args.threshold) { case (?t) t; case null scope.threshold };
     let quorum = switch (args.quorum) { case (?q) q; case null scope.quorum };
     let threshold_of = switch (args.threshold_of) { case (?b) b; case null scope.threshold_of };
-    if (threshold < scope.threshold or quorum < scope.quorum or (threshold_of == #Cast and scope.threshold_of == #Eligible)) {
+    let weakerBasis = threshold_of == #Cast and scope.threshold_of == #Eligible;
+    if (threshold < scope.threshold or quorum < scope.quorum or weakerBasis) {
       return #Err(#InvalidArgument("the rule is weaker than the scope's: a proposer may only tighten it"));
     };
     if (threshold > WHOLE or quorum > WHOLE) return #Err(#InvalidArgument("a ratio is at most 100 000 000 (100 %)"));
@@ -1717,7 +1729,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     for (s in Iter.toArray(Map.values(sources)).vals()) {
       switch (s.source, linkStatus(s.link)) {
         case (#Realm(capital), #Active) {
-          let ?items = await* readRecord(capital) else return #Err(#Unavailable("the record of a sync source could not be read, or ran past " # Nat.toText(PAGE_LIMIT) # " pages: " # Principal.toText(capital)));
+          let ?items = await* readRecord(capital) else {
+            let why = "could not be read, or ran past " # Nat.toText(PAGE_LIMIT) # " pages";
+            return #Err(#Unavailable("the record of sync source " # Principal.toText(capital) # " " # why));
+          };
           let order = Array.map<T.Release, Text>(items, func(r) { r.source });
           for (r in items.vals()) {
             if (r.source == source and r.version == version) {
