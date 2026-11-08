@@ -1,36 +1,58 @@
 {
   "kinds": {
     "ratio": {
-      "alias": "Ratio",
-      "candid": "nat",
+      "aliases": [
+        "Ratio",
+        "Rate"
+      ],
+      "candid": [
+        "nat",
+        "nat"
+      ],
       "unit": "hundred-millionths",
-      "min": 0,
-      "max": 100000000,
-      "rule": "One scale for every ratio: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456. People read and write decimals; the value is the integer."
+      "range": "`Ratio` 0 to 100 000 000 (100 %); `Rate` 0 to 10 000 000 000 (100 times that)",
+      "rule": "One scale for every ratio: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456. People read and write decimals; the value is the integer. A Ratio (quorum, threshold, share, weight) is at most 100 %; a Rate (a tax rate, a coefficient) is at most 100 times that."
     },
     "money": {
-      "alias": "Money",
-      "candid": "nat",
+      "aliases": [
+        "Money"
+      ],
+      "candid": [
+        "nat"
+      ],
       "unit": "the token's smallest unit (Token.decimals)",
-      "min": 0,
+      "range": "0 to 9 007 199 254 740 991 (2^53 − 1)",
       "rule": "Money computed from a ratio is rounded to the nearest cent, an exact half away from zero. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units."
     },
     "timestamp": {
-      "alias": "Timestamp",
-      "candid": "nat64",
+      "aliases": [
+        "Timestamp"
+      ],
+      "candid": [
+        "nat64"
+      ],
       "unit": "nanoseconds since 1970-01-01 UTC",
-      "min": 0
+      "range": "0 to 9 223 372 036 854 775 807"
     },
     "duration": {
-      "alias": "Duration",
-      "candid": "nat64",
+      "aliases": [
+        "Duration"
+      ],
+      "candid": [
+        "nat64"
+      ],
       "unit": "nanoseconds",
-      "min": 0
+      "range": "0 to 9 223 372 036 854 775 807"
     },
     "period": {
-      "alias": "Period",
-      "candid": "record { count : nat; unit : PeriodUnit }",
-      "unit": "a count of one calendar unit: Day, WorkingDay, Month or Year",
+      "aliases": [
+        "Period"
+      ],
+      "candid": [
+        "record { count : nat; unit : PeriodUnit }"
+      ],
+      "unit": "a count of one calendar unit",
+      "range": "`count` 0 to 1 000 000; `unit` one of `Day`, `WorkingDay`, `Month`, `Year`",
       "rule": "Periods compare only within one unit; comparing two units fails closed, with no conversion through the calendar."
     }
   },
@@ -321,12 +343,14 @@
         "max_uses": {
           "type": "nat",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "expires_at": {
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       }
@@ -429,12 +453,14 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "expires_at": {
           "type": "nat64",
           "kind": "timestamp",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         },
         "label": {
           "type": "text"
@@ -476,12 +502,14 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "expires_at": {
           "type": "nat64",
           "kind": "timestamp",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         },
         "label": {
           "type": "text"
@@ -511,6 +539,7 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       }
@@ -677,11 +706,13 @@
           "fields": {
             "m": {
               "type": "nat",
-              "min": 0
+              "min": 0,
+              "max": "9223372036854775807"
             },
             "n": {
               "type": "nat",
-              "min": 0
+              "min": 0,
+              "max": "9223372036854775807"
             },
             "quorum": {
               "type": "nat",
@@ -714,18 +745,21 @@
         "headcount": {
           "type": "nat",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "salary": {
           "type": "nat",
           "kind": "money",
           "min": 0,
+          "max": 9007199254740991,
           "optional": true
         },
         "salary_period": {
           "type": "nat64",
           "kind": "duration",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "profile": {
@@ -751,6 +785,7 @@
         "headcount": {
           "type": "nat",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "title": {
@@ -761,12 +796,14 @@
           "type": "nat",
           "kind": "money",
           "min": 0,
+          "max": 9007199254740991,
           "optional": true
         },
         "salary_period": {
           "type": "nat64",
           "kind": "duration",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "profile": {
@@ -931,6 +968,7 @@
         "headcount": {
           "type": "nat",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       }
@@ -1077,6 +1115,7 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "links": {
@@ -1204,6 +1243,7 @@
           "type": "nat",
           "kind": "money",
           "min": 0,
+          "max": 9007199254740991,
           "optional": true
         },
         "symbol": {
@@ -1218,6 +1258,7 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       }
@@ -1268,7 +1309,8 @@
         "value": {
           "type": "nat",
           "kind": "money",
-          "min": 0
+          "min": 0,
+          "max": 9007199254740991
         },
         "symbol": {
           "type": "text"
@@ -1283,12 +1325,14 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "ends_at": {
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       },
@@ -1327,6 +1371,7 @@
           "type": "nat64",
           "kind": "duration",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "voting_threshold": {
@@ -1431,6 +1476,7 @@
           "type": "nat64",
           "kind": "duration",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "anchor_month": {
@@ -1471,6 +1517,7 @@
         "fee": {
           "type": "nat",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       }
@@ -1503,6 +1550,7 @@
         "supply_cap": {
           "type": "nat",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       }
@@ -1527,7 +1575,8 @@
         "amount": {
           "type": "nat",
           "kind": "money",
-          "min": 0
+          "min": 0,
+          "max": 9007199254740991
         },
         "symbol": {
           "type": "text",
@@ -1580,7 +1629,8 @@
         "amount": {
           "type": "nat",
           "kind": "money",
-          "min": 0
+          "min": 0,
+          "max": 9007199254740991
         },
         "symbol": {
           "type": "text",
@@ -1590,6 +1640,7 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "reason": {
@@ -1690,12 +1741,14 @@
         "starts_at": {
           "type": "nat64",
           "kind": "timestamp",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         },
         "ends_at": {
           "type": "nat64",
           "kind": "timestamp",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         }
       }
     },
@@ -1726,7 +1779,8 @@
         "planned": {
           "type": "nat",
           "kind": "money",
-          "min": 0
+          "min": 0,
+          "max": 9007199254740991
         }
       }
     },
@@ -1735,18 +1789,6 @@
       "facts": {
         "id": {
           "type": "text"
-        },
-        "revenue": {
-          "type": "nat",
-          "kind": "money",
-          "min": 0,
-          "derived": "the sum of the period's revenue lines"
-        },
-        "expense": {
-          "type": "nat",
-          "kind": "money",
-          "min": 0,
-          "derived": "the sum of the period's expense lines"
         }
       }
     },
@@ -1759,7 +1801,8 @@
         "planned": {
           "type": "nat",
           "kind": "money",
-          "min": 0
+          "min": 0,
+          "max": 9007199254740991
         }
       }
     },
@@ -1873,13 +1916,14 @@
                 "type": "nat",
                 "kind": "ratio",
                 "min": 0,
-                "max": 100000000,
+                "max": 10000000000,
                 "optional": true
               },
               "amount": {
                 "type": "nat",
                 "kind": "money",
                 "min": 0,
+                "max": 9007199254740991,
                 "optional": true
               },
               "facts": {
@@ -1914,13 +1958,14 @@
           "type": "nat",
           "kind": "ratio",
           "min": 0,
-          "max": 100000000,
+          "max": 10000000000,
           "optional": true
         },
         "amount": {
           "type": "nat",
           "kind": "money",
           "min": 0,
+          "max": 9007199254740991,
           "optional": true
         },
         "facts": {
@@ -1960,13 +2005,14 @@
           "type": "nat",
           "kind": "ratio",
           "min": 0,
-          "max": 100000000,
+          "max": 10000000000,
           "optional": true
         },
         "amount": {
           "type": "nat",
           "kind": "money",
           "min": 0,
+          "max": 9007199254740991,
           "optional": true
         },
         "facts": {
@@ -2008,7 +2054,8 @@
         "amount": {
           "type": "nat",
           "kind": "money",
-          "min": 0
+          "min": 0,
+          "max": 9007199254740991
         },
         "organization": {
           "type": "text",
@@ -2078,7 +2125,8 @@
         "amount": {
           "type": "nat",
           "kind": "money",
-          "min": 0
+          "min": 0,
+          "max": 9007199254740991
         },
         "reason": {
           "type": "text",
@@ -2137,19 +2185,23 @@
       "facts": {
         "x": {
           "type": "nat",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         },
         "y": {
           "type": "nat",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         },
         "w": {
           "type": "nat",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         },
         "h": {
           "type": "nat",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         },
         "cursor": {
           "type": "text",
@@ -2192,20 +2244,24 @@
       "facts": {
         "x": {
           "type": "nat",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         },
         "y": {
           "type": "nat",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         },
         "width": {
           "type": "nat",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "height": {
           "type": "nat",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "owner": {
@@ -2361,6 +2417,7 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       }
@@ -2373,7 +2430,8 @@
         },
         "token_id": {
           "type": "nat",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         },
         "organization": {
           "type": "text"
@@ -2522,6 +2580,7 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "conditions": {
@@ -2605,6 +2664,7 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "court": {
@@ -2777,6 +2837,7 @@
                 "type": "nat",
                 "kind": "money",
                 "min": 0,
+                "max": 9007199254740991,
                 "optional": true
               },
               "symbol": {
@@ -2787,6 +2848,7 @@
                 "type": "nat64",
                 "kind": "timestamp",
                 "min": 0,
+                "max": "9223372036854775807",
                 "optional": true
               }
             }
@@ -2833,6 +2895,7 @@
           "type": "nat",
           "kind": "money",
           "min": 0,
+          "max": 9007199254740991,
           "optional": true
         },
         "symbol": {
@@ -2843,6 +2906,7 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       }
@@ -2921,6 +2985,7 @@
                 "type": "nat",
                 "kind": "money",
                 "min": 0,
+                "max": 9007199254740991,
                 "optional": true
               },
               "symbol": {
@@ -2931,6 +2996,7 @@
                 "type": "nat64",
                 "kind": "timestamp",
                 "min": 0,
+                "max": "9223372036854775807",
                 "optional": true
               }
             }
@@ -2978,6 +3044,7 @@
           "type": "nat",
           "kind": "money",
           "min": 0,
+          "max": 9007199254740991,
           "optional": true
         },
         "symbol": {
@@ -2988,6 +3055,7 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       }
@@ -3062,6 +3130,7 @@
                 "type": "nat",
                 "kind": "money",
                 "min": 0,
+                "max": 9007199254740991,
                 "optional": true
               },
               "symbol": {
@@ -3072,6 +3141,7 @@
                 "type": "nat64",
                 "kind": "timestamp",
                 "min": 0,
+                "max": "9223372036854775807",
                 "optional": true
               }
             }
@@ -3118,6 +3188,7 @@
           "type": "nat",
           "kind": "money",
           "min": 0,
+          "max": 9007199254740991,
           "optional": true
         },
         "symbol": {
@@ -3128,6 +3199,7 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       }
@@ -3142,6 +3214,7 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         }
       }
@@ -3320,12 +3393,14 @@
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "closes_at": {
           "type": "nat64",
           "kind": "timestamp",
           "min": 0,
+          "max": "9223372036854775807",
           "optional": true
         },
         "rubric": {
@@ -3443,7 +3518,8 @@
               "price": {
                 "type": "nat",
                 "kind": "money",
-                "min": 0
+                "min": 0,
+                "max": 9007199254740991
               },
               "nonce": {
                 "type": "text"
@@ -3470,7 +3546,8 @@
         "price": {
           "type": "nat",
           "kind": "money",
-          "min": 0
+          "min": 0,
+          "max": 9007199254740991
         },
         "nonce": {
           "type": "text"
@@ -3493,7 +3570,8 @@
               },
               "score": {
                 "type": "nat",
-                "min": 0
+                "min": 0,
+                "max": "9223372036854775807"
               }
             }
           }
@@ -3513,13 +3591,6 @@
         "justification": {
           "type": "text",
           "optional": true
-        },
-        "published_in": {
-          "type": "vec",
-          "element": {
-            "type": "text"
-          },
-          "derived": "the journals of the notices the tender has"
         }
       }
     },
@@ -3553,7 +3624,8 @@
       "facts": {
         "population": {
           "type": "nat",
-          "min": 0
+          "min": 0,
+          "max": "9223372036854775807"
         },
         "codex_id": {
           "type": "text",
@@ -3589,19 +3661,23 @@
             },
             "yes": {
               "type": "nat",
-              "min": 0
+              "min": 0,
+              "max": "9223372036854775807"
             },
             "no": {
               "type": "nat",
-              "min": 0
+              "min": 0,
+              "max": "9223372036854775807"
             },
             "abstain": {
               "type": "nat",
-              "min": 0
+              "min": 0,
+              "max": "9223372036854775807"
             },
             "eligible": {
               "type": "nat",
-              "min": 0
+              "min": 0,
+              "max": "9223372036854775807"
             },
             "status": {
               "type": "FederalVoteLegStatus",
@@ -3674,6 +3750,10 @@
           "optional": true
         },
         "timezone": {
+          "type": "text",
+          "optional": true
+        },
+        "welcome_message": {
           "type": "text",
           "optional": true
         }
@@ -3853,7 +3933,7 @@
     "codex_install": {
       "operation": "ggg_codex_install",
       "facts": {
-        "id": {
+        "source": {
           "type": "CodexSource",
           "values": [
             "Package",
@@ -3977,7 +4057,7 @@
     "setup_step": {
       "operation": "ggg_setup_step",
       "facts": {
-        "id": {
+        "step": {
           "type": "SetupStep",
           "values": [
             "Realm",

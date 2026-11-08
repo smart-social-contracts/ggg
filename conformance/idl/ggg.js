@@ -1551,11 +1551,12 @@ export const idlFactory = ({ IDL }) => {
     'invoice' : IDL.Opt(Invoice),
     'declaration' : TaxDeclaration,
   });
+  const Rate = IDL.Nat;
   const TaxEntry = IDL.Record({
     'subject' : IDL.Text,
     'code' : IDL.Text,
     'kind' : IDL.Text,
-    'rate' : IDL.Opt(Ratio),
+    'rate' : IDL.Opt(Rate),
     'amount' : IDL.Opt(Money),
     'facts' : Value,
   });

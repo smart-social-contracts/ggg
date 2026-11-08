@@ -102,7 +102,8 @@ model lacks. Each is added at the scope below; some are narrowed, and some stay 
 - **certified attributes** on a person;
 - **typed tax entries**: a saved `TaxPolicy` holds a `taxes` list, so a forbid on `tax_policy_propose`
   can range over the policy's entries. The same forbids run when a draft is saved with
-  `tax_policy_draft`;
+  `tax_policy_draft`, whose `taxes` is required (a breaking change of 0.2.0: a draft states its entries;
+  the brackets of a progressive tax go in an entry's `facts` and the codex computes each amount);
 - **invoice items**;
 - a contract's and a tender's **kind**;
 - **requests**, and the **access-to-information request**;
@@ -166,21 +167,28 @@ operation whose argument is a single value has one fact, `id`, the record it act
 optional, and what the schema adds: its `kind`, `min`, `max` and allowed `values` (a variant's tags).
 The kinds are the named aliases of `ggg.did`:
 
-| Kind | Alias | Candid | Unit | Range |
+| Kind | Aliases | Candid | Unit | Range |
 |---|---|---|---|---|
-| `ratio` | `Ratio` | `nat` | hundred-millionths | 0 to 100 000 000 |
-| `money` | `Money` | `nat` | the token's smallest unit (`Token.decimals`) | 0 and up |
-| `timestamp` | `Timestamp` | `nat64` | nanoseconds since 1970-01-01 UTC | 0 and up |
-| `duration` | `Duration` | `nat64` | nanoseconds | 0 and up |
-| `period` | `Period` | `record { count : nat; unit : PeriodUnit }` | a count of one calendar unit | `count` 0 and up; `unit` one of `Day`, `WorkingDay`, `Month`, `Year` |
+| `ratio` | `Ratio`, `Rate` | `nat`, `nat` | hundred-millionths | `Ratio` 0 to 100 000 000 (100 %); `Rate` 0 to 10 000 000 000 (100 times that) |
+| `money` | `Money` | `nat` | the token's smallest unit (Token.decimals) | 0 to 9 007 199 254 740 991 (2^53 − 1) |
+| `timestamp` | `Timestamp` | `nat64` | nanoseconds since 1970-01-01 UTC | 0 to 9 223 372 036 854 775 807 |
+| `duration` | `Duration` | `nat64` | nanoseconds | 0 to 9 223 372 036 854 775 807 |
+| `period` | `Period` | `record { count : nat; unit : PeriodUnit }` | a count of one calendar unit | `count` 0 to 1 000 000; `unit` one of `Day`, `WorkingDay`, `Month`, `Year` |
 
-Money has no upper bound in the schema; an analysis states its own.
+A `Ratio` is a quorum, threshold, share or weight; a `Rate` is a tax rate or a coefficient, which
+legislation takes above 100 %. Every fact has a finite range: a plain `nat`, and a `nat64` outside a
+kind, run to 9 223 372 036 854 775 807, the largest Cedar `Long`, so a GOS can always bound arithmetic on
+facts (rule 9 of the `F` language). **Ranges are enforced:** a call with a value outside its fact's
+range is refused with `InvalidArgument`, and the analysis assumptions rest on that. `TaxEntry.kind` and
+`subject` are text, with documented examples and no allowed values in the schema, so a realm names its
+own; `TaxEntry.facts` is a `Value`, which a forbid cannot read, so a rule on a fact inside it is a guard.
 
 - **A fact's unit is declared by its schema entry,** never by a suffix in its name: `rate`, not
   `rate_bp`.
 - **So are its range and its allowed values,** where it has them. A Cedar schema cannot state them, so
-  a GOS's analysis tools take them from `facts.json` as assumptions about every request.
-- **Every ratio is an integer in hundred-millionths** (`Ratio`): 100 % is 100 000 000, 1 % is 1 000 000 and
+  a GOS's analysis tools take them from `facts.json` as assumptions about every request, which hold
+  because a GOS refuses a value outside its range.
+- **Every ratio is an integer in hundred-millionths** (`Ratio`, and `Rate` above 100 %): 100 % is 100 000 000, 1 % is 1 000 000 and
   0.123456 % is 123 456. One scale covers tax rates, quorum, thresholds, shares and weights alike.
   Integers inside, decimals for people: a GOS shows `0.123456 %`, and a chapter writes a rate as the
   legislation does. Integers because there is one form for every value, so checksums are stable;
