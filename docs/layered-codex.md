@@ -30,7 +30,7 @@ operations, and GGG's arguments, events and entities are the whole interface:
 
 - **Facts are arguments.** A forbid's facts are the operation's arguments, as the model defines them;
   a Cedar action is named after the operation (`tax_policy_propose`). A forbid that ranges over a list
-  (§3.2) is named after the operation and the list (`tax_policy_propose.taxes`), and its facts are the
+  (§3.2) names the Cedar action `<operation>.<list>` (`tax_policy_propose.taxes`), and its facts are the
   element's fields. The model's fact schema types each argument, so a GOS can validate the generated
   Cedar.
 - **Effects are operations.** A hook changes nothing itself. It queues GGG operations, which the GOS
