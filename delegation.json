@@ -180,6 +180,13 @@
     "delegation_revoke_all": { "tier": "member" },
     "delegation_request": { "tier": "none" },
     "delegation_request_decide": { "tier": "direct", "group": "poa", "confirm_if": "approves" },
+    "action_get": { "tier": "direct", "group": "see" },
+    "action_list": { "tier": "direct", "group": "see" },
+    "action_approve": { "tier": "member" },
+    "action_decline": { "tier": "member" },
+    "action_withdraw": { "tier": "none" },
+    "call_for": { "tier": "none" },
+    "read_for": { "tier": "none" },
 
     "department_get": { "tier": "direct", "group": "see" },
     "department_list": { "tier": "direct", "group": "see" },

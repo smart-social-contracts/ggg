@@ -102,9 +102,11 @@ method per operation:
   any record it created, or `Proposed` with the id of the proposal it filed. The proposal's action is
   the same call, `Call { method; arg }`, and replaying it applies the change. A `delegable` operation
   whose arguments carry `on_behalf_of : opt principal` is called on the grantor's behalf with it; the
-  other delegable operations are reached on a grantor's behalf through the generic call specified with
-  pending actions. A `member` operation that carries `on_behalf_of` refuses it: it is the member's own
-  act.
+  other delegable operations are reached on a grantor's behalf through `call_for` and `read_for`
+  ([Pending actions](#pending-actions)), which also file a `confirm` operation as a pending action. A
+  `confirm` operation called through its own method with `on_behalf_of` is `Forbidden`, and the message
+  says to file it through `call_for`: the method's own reply type has no place for a pending action. A
+  `member` operation that carries `on_behalf_of` refuses it: it is the member's own act.
 - **Kinds.** `Ratio`, `Rate`, `Money`, `SignedMoney`, `Area`, `Timestamp`, `Duration` and `Period` are
   named aliases, so a field's unit and range can be read off `ggg.did`. [`facts.json`](../facts.json)
   lists them for every operation's facts, with every fact's range
@@ -173,6 +175,7 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `Invite` | `id` (code hash), `profile`, `department`, `position`, `max_uses`, `uses`, `redeemed_by` (Json), `expires_at`, `revoked`, `created_by` | The code itself is never stored. | 50-use code for new clerks: profile `member`, Civil Registry, position `clerk`, expires in 30 days |
 | `Delegation` | `id`, `grantor`, `delegate`, `scope` (Json), `status`, `label`, `description`, `requires_acceptance`, `granted_by`, `accepted_at`, `starts_at`, `expires_at`, `revoked_at`, `revoked_by` | Power of attorney. `scope` names groups (`group:vote`, `group:office:health`, `group:*` for everything) or, in a grant made before groups, permissions ([Power of attorney](#power-of-attorney)). | Alice → `claude-conn`: `[group:vote, group:propose]` for 30 days, `active` |
 | `DelegationRequest` | `id`, `grantor`, `delegate`, `scope`, `label`, `description`, `starts_at`, `expires_at`, `request_expires_at` | A delegate asking a member for a grant, by group. Deleted once decided. | Claude asks Alice for `[group:vote]` for 30 days; the link is valid 1 h |
+| `PendingAction` | `id`, `grantor` → `User`, `delegate`, `grant` → `Delegation`, `call`, `summary`, `risk`, `note`, `status`, `hash`, `filed_at`, `expires_at`, `decided_at`, `result` | A `confirm` call prepared by a delegate, waiting for the grantor's own approval ([Pending actions](#pending-actions)). `summary` and `risk` are the realm's words about the call, `note` the delegate's; `hash` seals the record; `result` is the operation's reply once it ran. | `AC-12`: Claude prepares `payment_account_add` for Alice, "Token ckBTC · Address bc1q…", `pending` until tomorrow 09:31 |
 
 ### Lifecycles
 
@@ -180,6 +183,8 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 - `Identity`: `pending` → `verified` | `rejected`.
 - `Attribute.status`: `pending` → `verified` | `rejected`.
 - `Delegation.status`: `pending` → `active` → `revoked` | `expired`; `pending` → `declined`.
+- `PendingAction.status`: `pending` → `approving` → `done` | `failed`; `pending` → `declined` | `withdrawn` |
+  `expired` | `void`.
 
 ### Operations
 
@@ -211,6 +216,12 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `delegation_list`, `delegable_operations` | `self.data_view` | read, delegable | Alice's grants; the operations a permission-named grant covers: `[proposal.vote, proposal.create, …]` |
 | `delegation_groups` (the groups the caller can grant, each with its operations and their tiers) | `self.data_view` | read, delegable | Alice's Authorize page: "Vote for me", "Propose for me", "See my affairs and the realm", … |
 | `delegation_activity` (the events recorded under one grant, to its grantor or its delegate) | `self.data_view` | read, delegable | What `claude-conn` did under Alice's grant: two votes and a motion |
+| `action_get` (one pending action, to its grantor or its delegate; anyone else gets `Ok(null)`) | `self.data_view` | read, delegable | Claude reads `AC-12`: `done`, with the new account's id |
+| `action_list` (the caller's pending actions, as grantor or as delegate, optionally by status) | `self.data_view` | read, delegable | Alice's "Waiting for you": `AC-12` and `AC-13` |
+| `action_approve` (by its hash), `action_decline` | `self.confirm` | | Alice approves `AC-12`: the realm adds the payout account as her own act. Never under a grant |
+| `action_withdraw` (by the delegate, as itself) | `self.join` | | Claude withdraws `AC-13` to file it again with the right address |
+| `call_for` (one call on a grantor's behalf: a `confirm` operation files a pending action, a `direct` one runs) | `self.join` (and the carried method's, held by the grantor) | | Claude: `{method: "ggg_payment_account_add", arg: …, on_behalf_of: "alice"}` → `Pending AC-12` |
+| `read_for` (one read on a grantor's behalf) | `self.join` (and the carried method's, held by the grantor) | read | Claude reads Alice's key envelopes for her |
 
 Governed identity operations follow the policy of the department named in their `department`
 argument (it must hold that permission through its positions or grants); otherwise the root's.
@@ -284,6 +295,50 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
   grant only removes power. `delegation_revoke_all` ends every open grant the caller gave, `limit` at
   a time, and replies how many it revoked and `next` until none is left; it never runs under a grant.
 
+#### Pending actions
+
+A `confirm` operation ([§1](#operations)) is never done directly under a grant. The delegate prepares
+it, and the grantor's own approval runs it:
+
+1. **Filing.** The delegate calls `call_for` with the method, its Candid-encoded arguments,
+   `on_behalf_of` the grantor and an optional `note`. When the grant is active and covers the
+   operation's group, the grantor acting for themselves would be allowed the call now, and fewer than
+   10 actions are open between the two, the GOS stores a `PendingAction`, replies `Pending` with it and
+   notifies the grantor. Otherwise the call is refused as any delegated call would be. A `direct`
+   operation through `call_for` runs at once: `Done` with the method's own reply, Candid-encoded, or
+   `Proposed` with the proposal a governed call filed.
+2. **The record.** `call` is the exact call. `summary`, label and value lines, and `risk`, the sentence
+   of the operation's group, are the realm's own words about the call: the delegate words neither.
+   `note` is the delegate's text, shown apart. `hash` seals the record: the GOS computes it over at
+   least the realm, the id, the call, the grantor, the delegate, the grant and `expires_at`, in a
+   canonical form of its own, and a client sends it back unchanged. `expires_at` is 24 hours after
+   `filed_at`. Nothing in the record changes after filing: to change the call, the delegate withdraws
+   the action and files another.
+3. **Deciding.** The grantor approves with `action_approve { action; hash }`, which carries no
+   arguments, or declines with `action_decline`; the delegate withdraws its own with `action_withdraw`.
+   An approval succeeds only if the caller is the grantor, the hash equals the stored one, the status
+   is `pending` and `expires_at` has not passed, and the grant is still active and still covers the
+   group. The GOS then sets `approving` before it calls any other canister, runs the stored call as the
+   grantor with every check the grantor's own call would meet now (permission, guardrails, parties,
+   banned status), and stores the reply as `result`: `done`, or `failed`. A governed call becomes the
+   grantor's own proposal, with `Proposal.prepared_by` the delegate. An action left `approving` after
+   a trap ends `failed` and is never retried.
+4. **Ending otherwise.** `expired` once `expires_at` passes; `void` once its grant is revoked,
+   replaced, expires or loses the group. Unlike a proposal filed under a grant (I-ID-10), a pending
+   action does not outlive its grant.
+5. **The audit.** The filing writes an `Event` with the operation's name, `user` the grantor, `by` the
+   delegate, `grant`, and the result `{pending: id}`. The approval writes an `Event` with `user` and
+   `by` both the grantor, origin `confirmed`, `prepared_by` the delegate and `grant`.
+
+`action_get` returns an action to its grantor or its delegate, and `Ok(null)` to anyone else;
+`action_list` pages the caller's actions as grantor or as delegate, optionally by status. `read_for`
+is the query twin of `call_for`: one read on the grantor's behalf, replying the method's own reply,
+Candid-encoded. Both refuse a method that is not in `ggg.did`, an update through `read_for` or a
+query through `call_for`, themselves, a `member` or `founder` operation, and `on_behalf_of` equal to
+the caller. They are the delegate's own calls (tier `none`): the grant and the permission checked are
+the grantor's, for the method they carry. A `confirm` operation called through its own method with
+`on_behalf_of` is `Forbidden`, with a message that says to file it through `call_for` ([§1](#operations)).
+
 ### Invariants
 
 - I-ID-1: A user's `id` equals the principal that signs their calls; nobody can act as another user
@@ -310,11 +365,18 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
   grant could still make that call. A delegate does not vote on a proposal it filed. Granting or
   accepting power of attorney, approving a request for it, payout accounts, identity proofs,
   attributes, moving to another quarter and federal votes are never done directly under a grant: they
-  are `confirm` (outside setup, [§2](#power-of-attorney)).
+  are `confirm` (outside setup, [§2](#power-of-attorney)), filed as
+  [pending actions](#pending-actions).
+- I-ID-11: A pending action runs at most once, only on its grantor's own approval that sends its hash,
+  within 24 hours of filing, and only while the grant it was filed under is active and still covers
+  its group; its call never changes after filing. Neither a delegate, nor another member, nor
+  `call_for`, a codex, a replayed proposal or any caller an implementation adds can approve or decline
+  it.
 - I-ID-12: A setup grant ends at launch: `setup_launch` removes the `setup` group from every grant,
   and a grant left with no group ends. `setup_launch` itself is never done under a grant nor prepared.
 - I-ID-13: No delegate of a member votes on a proposal that any delegate of the same member filed
-  under a grant, whatever that grant's status now. The member votes on it as usual.
+  under a grant, or prepared as a pending action the member approved, whatever that grant's status
+  now. The member votes on it as usual.
 
 ## 3. Departments and organizations
 
@@ -382,7 +444,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed at creation like the action; the casting vote is the realm's, for a realm-wide proposal only, never the proposer's. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of the `eligible` seats under Infrastructure's policy |
+| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `prepared_by` (the delegate, when the proposer approved it from a pending action, §2), `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed at creation like the action; the casting vote is the realm's, for a realm-wide proposal only, never the proposer's. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of the `eligible` seats under Infrastructure's policy |
 | `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the vote ends. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
 | `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `kind`, `procedure`, `tender` → `Tender`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. `kind` (works, supplies, services) and `procedure` are the realm's words; a contract made from a tender names it and takes its kind and procedure. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, from tender `T-5`, terms `sha256:4be1…` |
@@ -975,7 +1037,7 @@ installed whole; and the paths from several sync sources must form one chain in 
 | `External` | `id`, `name`, `kind` (authority, journal, lender, …), `channel` | A body outside the realm and outside the Internet Computer. `channel` is how a dispatch reaches it: `manual`, an operator delivers it, or an https URL, a bridge does. A second `external_add` of the same id redefines it. | The statistics office: kind `authority`, channel `manual`; the provincial gazette: kind `journal` |
 | `Dispatch` | `id`, `to` → `External`, `topic`, `title`, `body` (Json), `document` → `Document`, `codex`, `queued_at`, `status` | One notice to an outside body, queued by the realm and confirmed by whoever delivered it, with the receipt that proves it. `document` is the document it carries and `codex` the codex it concerns, when either applies. A `body` that holds personal data is an encrypted `Document` reference (I-PRV-1). | To the gazette: the new ordinance's full text, `confirmed` on 12 Nov, bulletin 214 |
 | `Task` | `id`, `op`, `args` (Json), `at`, `reason`, `status`, `scheduled_by` (`Entity:id`), `event` → `Event` | One operation scheduled for a time. `event` is the operation's own `Event` once it ran. | `user_set_status` of Bob to `inactive` on 10 Mar 2028, scheduled by the codex: the registration lapses |
-| `Event` | `id`, `op`, `user`, `by` (the delegate, when delegated), `grant` (the grant a delegated act ran under), `agent` (the caller acted as an agent), `supervisor` (that agent's supervisor), `origin`, `args` (Json, secrets stripped), `result` (Json), `at` | The audit log. Append-only. | `proposal_vote` by `claude-conn` for `alice` under grant `DEL-4` at 09:31 → ok |
+| `Event` | `id`, `op`, `user`, `by` (the delegate, when delegated), `grant` (the grant a delegated act ran under), `prepared_by` (the delegate that prepared an act the member approved, origin `confirmed`), `agent` (the caller acted as an agent), `supervisor` (that agent's supervisor), `origin`, `args` (Json, secrets stripped), `result` (Json), `at` | The audit log. Append-only. | `proposal_vote` by `claude-conn` for `alice` under grant `DEL-4` at 09:31 → ok |
 
 Services are not entities: they are provided by licensed organizations. Courts stand on their own,
 without a justice-system entity above them.
@@ -1217,7 +1279,7 @@ outside the model.
 
 - Identity: `self.join`, `self.update_public_profile`, `self.update_private_data`,
   `self.change_quarter`, `self.invoice_refresh`, `self.data_view`, `self.data_manage`,
-  `self.delegate`, `user.add`, `user.edit`, `user.delete`, `user.update_status`, `user.view`,
+  `self.delegate`, `self.confirm` (every user: approving or declining a pending action), `user.add`, `user.edit`, `user.delete`, `user.update_status`, `user.view`,
   `invite.manage`, `identity.submit`, `identity.review`, `attribute.submit`, `attribute.review`,
   `role.assign`, `role.revoke`, `permission.grant`.
 - Departments: `org.create`, `org.appoint`, `org.expel`, `org.set_policy`, `org.grant_authority`,
@@ -1266,12 +1328,13 @@ There is no permission for raw database writes: everything is an operation.
   governance, codices or anything an implementation adds.
 - I-ALL-3: Nobody decides a matter they filed, that was filed on their behalf, or in which a
   department or organization they hold an appointment in is a party.
-- I-ALL-4: Every update operation is audited with the caller, the grantor (if delegated) and the
-  outcome.
+- I-ALL-4: Every update operation is audited with the caller, the grantor (if delegated), the delegate
+  that prepared it (if approved from a pending action) and the outcome.
 - I-ALL-5: Personal data never appears in clear text in public state, NFT metadata or the event log.
 - I-ALL-6: An operation that fails changes nothing.
-- I-ALL-7: A `signing` act records who signed, whether they acted as an agent, their supervisor and
-  the grantor when delegated, in its `Event` and, for an NFT, in the token's header.
+- I-ALL-7: A `signing` act records who signed, whether they acted as an agent, their supervisor, the
+  grantor when delegated and the delegate that prepared it when approved from a pending action, in
+  its `Event` and, for an NFT, in the token's header.
 
 ## 16. Decisions
 
@@ -1296,3 +1359,6 @@ There is no permission for raw database writes: everything is an operation.
 | D18 | Which vote may carry a governed call on another department's record | Decided 8 Nov 2026: a realm-wide proposal carries any call; a department's only a governed call whose governing department is that department or one below it, checked at creation and again when the action executes (I-GOV-13) |
 | D21 | Power of attorney by groups | Decided 8 Nov 2026: a grant names plain-language groups of operations ([`delegation.json`](../delegation.json)), not permissions, so a member reads what they hand over and every GOS and client show the same words; every operation has a tier, and an operation asks each time only if acting without the member would decide where their money or identity points, hand lasting power or keys to someone with no vote to follow, be their personal consent or signature, or take effect at once and be hard to undo; a grant made before groups keeps covering exactly what it did; limits are checked at use ([§2](#power-of-attorney)) |
 | D22 | How a delegate proposes a codex install | Decided 8 Nov 2026: as a `proposal_create` whose action is the `codex_install` call, which carries an action and so asks each time: the member approves the exact release before the realm votes. A member who holds `codex.install` may also let a delegate call `codex_install` itself: under `setup` during setup, direct; under `admin` after launch, a governed call filed as a proposal tied to the grant (I-ID-10). No new rule: the tiers decide |
+| D26 | The pending action's hash | Decided 8 Nov 2026: opaque. The GOS computes it over at least the realm, the id, the call, the grantor, the delegate, the grant and the expiry, in a canonical form of its own; a client sends it back unchanged, so GGG fixes no encoding and each GOS keeps its own ([§2](#pending-actions)) |
+| D27 | One generic call for a delegate | Decided 8 Nov 2026: `call_for`, and its query twin `read_for`, take a method's name and Candid-encoded arguments with `on_behalf_of`, and reply the method's own reply, the proposal a governed call filed, or the pending action a `confirm` call became; a refusal is the outer `Err`, so callers have one error path. Few argument records carry `on_behalf_of`, and a field cannot be added to the others without breaking their signatures. D7 stands: every operation keeps its typed method, and the generic call is the delegate's path alone |
+| D28 | A `confirm` operation called through its own method | Decided 8 Nov 2026: refused with `Forbidden` and a message that says to file it through `call_for`. The method's own reply type has no place for a pending action, and adding one to every `confirm` method's reply would break their signatures |

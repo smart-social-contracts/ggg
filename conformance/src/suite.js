@@ -244,6 +244,8 @@ function listTable(actor) {
       const id = needDelegation();
       return (a) => actor.ggg_delegation_activity({ ...a, delegation: id, on_behalf_of: [] });
     }),
+    list('ggg_action_list (as grantor)', () => (a) => actor.ggg_action_list({ ...a, role: { Grantor: null }, status: [] })),
+    list('ggg_action_list (as delegate)', () => (a) => actor.ggg_action_list({ ...a, role: { Delegate: null }, status: [] })),
     list('ggg_attribute_list', () => (a) => actor.ggg_attribute_list({ ...a, kind: [], on_behalf_of: [] })),
     list('ggg_department_list', () => (a) => actor.ggg_department_list(a), 'items', (items) => {
       department = items[0]?.id ?? null;
@@ -311,6 +313,7 @@ const getTable = (actor) => [
   ['ggg_request_get', (id) => actor.ggg_request_get({ id, on_behalf_of: [] })],
   ['ggg_crypto_envelope', (id) => actor.ggg_crypto_envelope(id)],
   ['ggg_document_get', (id) => actor.ggg_document_get(id)],
+  ['ggg_action_get', (id) => actor.ggg_action_get(id)],
 ];
 
 /** Update methods any caller may use, so the anonymous check skips them. */
@@ -337,6 +340,12 @@ export function updateTable() {
   return idlFactory({ IDL })
     ._fields.filter(([name, fn]) => name.startsWith('ggg_') && !fn.annotations.includes('query'))
     .map(([name, fn]) => [name, fn.argTypes.map(blank)]);
+}
+
+/** A method's arguments, Candid-encoded with its own types, as the generic call carries them. */
+export function encodeArgs(method, args) {
+  const [, fn] = idlFactory({ IDL })._fields.find(([name]) => name === method);
+  return new Uint8Array(IDL.encode(fn.argTypes, args));
 }
 
 /**
@@ -696,11 +705,15 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
   await check('GGG', 'W9', 'acting on behalf of someone without their delegation returns Forbidden', async () => {
     needMember();
     const forStranger = [Ed25519KeyIdentity.generate().getPrincipal()];
+    const profile = { nickname: ['GGG conformance'], avatar: [], language: [], on_behalf_of: [] };
     const real = [
       ['ggg_proposal_create', motion('no delegation', { on_behalf_of: forStranger })],
-      ['ggg_profile_update', { nickname: ['GGG conformance'], avatar: [], language: [], on_behalf_of: forStranger }],
+      ['ggg_profile_update', { ...profile, on_behalf_of: forStranger }],
       // The member's own act: refused under any grant, so under a stranger's too.
       ['ggg_delegation_revoke_all', { cursor: [], limit: [], on_behalf_of: forStranger }],
+      // The generic call and its query twin carry the grantor as a required principal.
+      ['ggg_call_for', { method: 'ggg_profile_update', arg: encodeArgs('ggg_profile_update', [profile]), on_behalf_of: forStranger[0], note: [] }],
+      ['ggg_read_for', { method: 'ggg_me', arg: encodeArgs('ggg_me', [{ on_behalf_of: [] }]), on_behalf_of: forStranger[0] }],
     ];
     if (created) {
       real.push(['ggg_proposal_vote', { ...vote(created.id, 'Yes'), on_behalf_of: forStranger }]);
@@ -866,6 +879,24 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     if (!weaker.length) throw new Skip('the realm has no threshold and no quorum, so nothing is weaker');
     for (const [what, extra] of weaker) await proposeAs(motion(what, extra), `ggg_proposal_create(${what})`);
     return weaker.map(([what]) => what).join(', ');
+  });
+
+  await check('GGG', 'W21', 'the generic call refuses to carry a member-only operation', async () => {
+    needMember();
+    const stranger = Ed25519KeyIdentity.generate().getPrincipal();
+    const blanks = Object.fromEntries(updateTable());
+    const memberOnly = ['ggg_action_approve', 'ggg_action_decline', 'ggg_delegation_revoke_all'];
+    for (const method of memberOnly) {
+      const result = await mine.ggg_call_for({ method, arg: encodeArgs(method, blanks[method]), on_behalf_of: stranger, note: [] });
+      err(result, ['Forbidden', 'InvalidArgument'], `ggg_call_for(${method})`);
+    }
+    return memberOnly.join(', ');
+  });
+
+  await check('GGG', 'W22', 'approving a pending action that does not exist is refused', async () => {
+    needMember();
+    const result = await mine.ggg_action_approve({ action: UNKNOWN, hash: 'ggg-conformance:no-such-hash', on_behalf_of: [] });
+    err(result, ['NotFound', 'Forbidden', 'InvalidArgument'], 'ggg_action_approve(unknown)');
   });
 
   await check('GGG', 'W20', 'a stricter rule is stored as stated', async () => {

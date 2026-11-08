@@ -5,6 +5,19 @@ module {
   public type AccessArgs = { cursor : ?Text; limit : ?Nat32; scope : Text };
   /// An ICRC-1 account.
   public type Account = { owner : Principal; subaccount : ?Blob };
+  /// The grantor's own act: never under a grant, so `on_behalf_of` is refused.
+  public type ActionApproveArgs = {
+    action : Text;
+    hash : Text;
+    on_behalf_of : ?Principal;
+  };
+  public type ActionDeclineArgs = { action : Text; on_behalf_of : ?Principal };
+  public type ActionListArgs = {
+    status : ?PendingActionStatus;
+    cursor : ?Text;
+    role : { #Delegate; #Grantor };
+    limit : ?Nat32;
+  };
   /// AllocationRule and TaxPolicy.
   public type AdoptionStatus = { #Superseded; #Draft; #Proposed; #Adopted };
   public type Allocation = { fund : Text; share : Ratio };
@@ -207,6 +220,22 @@ module {
     fiscal_period : Duration;
     custom_cycles : [Cycle];
     realm : Text;
+  };
+  /// Pending actions (model §2): a call in its confirm form, prepared by a delegate under a grant and waiting
+  /// for the grantor's own approval.
+  public type Call = { arg : Blob; method : Text };
+  /// One call on a grantor's behalf: `arg` is Candid-encoded with the method's own argument type. A confirm
+  /// operation files a pending action; a direct one runs, or files the proposal a governed call files.
+  public type CallForArgs = {
+    arg : Blob;
+    method : Text;
+    note : ?Text;
+    on_behalf_of : Principal;
+  };
+  public type CallForReply = {
+    #Done : Blob;
+    #Proposed : Text;
+    #Pending : PendingAction;
   };
   public type Case = {
     id : Text;
@@ -675,6 +704,8 @@ module {
     by : ?Principal;
     id : Text;
     op : Text;
+    /// The delegate that prepared the act, when the member approved it from a pending action (origin `confirmed`).
+    prepared_by : ?Principal;
     supervisor : ?Principal;
     result : Value;
     agent : Bool;
@@ -1440,6 +1471,36 @@ module {
     amount : ?Money;
     symbol : ?Text;
   };
+  public type PendingAction = {
+    id : Text;
+    status : PendingActionStatus;
+    /// The operation's reply once the action ran, Candid-encoded with the method's own type.
+    result : ?Blob;
+    call : Call;
+    /// Seals the record: computed by the GOS over at least the realm, the id, the call, the grantor, the
+    /// delegate, the grant and the expiry; a client sends it back unchanged.
+    hash : Text;
+    note : ?Text;
+    risk : Text;
+    delegate : Principal;
+    filed_at : Timestamp;
+    grantor : Principal;
+    summary : [SummaryLine];
+    grant : Text;
+    expires_at : Timestamp;
+    decided_at : ?Timestamp;
+  };
+  public type PendingActionPage = { next : ?Text; items : [PendingAction] };
+  public type PendingActionStatus = {
+    #Failed;
+    #Done;
+    #Void;
+    #Withdrawn;
+    #Approving;
+    #Declined;
+    #Expired;
+    #Pending;
+  };
   public type Period = { count : Nat; unit : PeriodUnit };
   /// Periods open in order: one starts no earlier than the latest ends.
   public type PeriodOpenArgs = {
@@ -1541,6 +1602,8 @@ module {
   };
   public type Proposal = {
     id : Text;
+    /// The delegate that prepared the call, when the proposer approved it from a pending action (§2).
+    prepared_by : ?Principal;
     opens_at : ?Timestamp;
     status : ProposalStatus;
     result : ?ProposalResult;
@@ -1708,6 +1771,11 @@ module {
   /// One scale for quorum, threshold, share, weight and tax rate (model §1). A Ratio is at most 100 %; a
   /// Rate, for tax rates and coefficients, which legislation takes above 100 %, is at most 100 times that.
   public type Ratio = Nat;
+  public type ReadForArgs = {
+    arg : Blob;
+    method : Text;
+    on_behalf_of : Principal;
+  };
   public type Realm = {
     id : Text;
     status : RealmStatus;
@@ -1909,6 +1977,8 @@ module {
   };
   /// What the realm's silence past a deadline means: Positive grants, Negative refuses.
   public type Silence = { #Negative; #Positive };
+  /// One line of the realm's own description of the call.
+  public type SummaryLine = { value : Text; label_ : Text };
   public type SyncSource = {
     status : LinkStatus;
     source : SyncSourceRef;
@@ -2281,6 +2351,26 @@ module {
     on_behalf_of : ?Principal;
   };
   public type Self = actor {
+    ggg_action_approve : shared ActionApproveArgs -> async {
+        #Ok : PendingAction;
+        #Err : GggError;
+      };
+    ggg_action_decline : shared ActionDeclineArgs -> async {
+        #Ok : PendingAction;
+        #Err : GggError;
+      };
+    ggg_action_get : shared query Text -> async {
+        #Ok : ?PendingAction;
+        #Err : GggError;
+      };
+    ggg_action_list : shared query ActionListArgs -> async {
+        #Ok : PendingActionPage;
+        #Err : GggError;
+      };
+    ggg_action_withdraw : shared Text -> async {
+        #Ok : PendingAction;
+        #Err : GggError;
+      };
     ggg_allocation_rule_draft : shared AllocationRuleDraftArgs -> async {
         #Ok : Governed;
         #Err : GggError;
@@ -2356,6 +2446,10 @@ module {
     ggg_budget_extend : shared Text -> async { #Ok : Nat; #Err : GggError };
     ggg_budget_propose : shared BudgetProposeArgs -> async {
         #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_call_for : shared CallForArgs -> async {
+        #Ok : CallForReply;
         #Err : GggError;
       };
     ggg_case_assign : shared CaseAssignArgs -> async {
@@ -2962,6 +3056,10 @@ module {
     ggg_quarter_secede : shared () -> async { #Ok : Governed; #Err : GggError };
     ggg_quarter_sync : shared () -> async {
         #Ok : QuarterDirectory;
+        #Err : GggError;
+      };
+    ggg_read_for : shared query ReadForArgs -> async {
+        #Ok : Blob;
         #Err : GggError;
       };
     ggg_realm_configure : shared RealmConfigureArgs -> async {

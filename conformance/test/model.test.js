@@ -65,8 +65,10 @@ test('governed operations, and only they, reply Governed', () => {
 test('an operation that takes on_behalf_of is delegable, or the member\'s own and refuses it', () => {
   const { operations: tiers } = JSON.parse(read('delegation.json'));
   const service = idlFactory({ IDL });
+  // `on_behalf_of : opt principal`. The generic call's required `on_behalf_of` names the grantor it acts
+  // for: that call is the delegate's own (tier none).
   const taking = service._fields
-    .filter(([, fn]) => fn.argTypes.length && fn.argTypes[0] instanceof IDL.RecordClass && fn.argTypes[0]._fields.some(([k]) => k === 'on_behalf_of'))
+    .filter(([, fn]) => fn.argTypes.length && fn.argTypes[0] instanceof IDL.RecordClass && fn.argTypes[0]._fields.some(([k, t]) => k === 'on_behalf_of' && t instanceof IDL.OptClass))
     .map(([name]) => name.replace(/^ggg_/, ''));
   const delegable = new Set(flagged('delegable'));
   for (const op of taking) {
