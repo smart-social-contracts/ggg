@@ -4,27 +4,29 @@
 /// policy applies at once), read the realm and manage their own profile; every other permission is
 /// held by nobody, so those operations are refused. There are four departments: the root, with a
 /// direct policy, so a governed call on a realm-wide proposal is applied at once; a council under
-/// it, deciding 2 of 3, so a governed call on one of its proposals files a proposal instead; and two
-/// committees under the council, each deciding alone, so that a proposal of the council can carry a
-/// call on a committee's records where a committee's cannot carry one on its sibling's (I-GOV-13).
+/// it, deciding 2 of 3 with a 60 % quorum, so a governed call on one of its proposals files a
+/// proposal instead; and two committees under the council, each deciding alone, so that a proposal
+/// of the council can carry a call on a committee's records where a committee's cannot carry one on
+/// its sibling's (I-GOV-13).
 /// Members may also edit a department (department_edit, governed by that department, or by the lowest
 /// department above both the old and the new parent when it moves) and delete one that has none below
 /// it (department_delete, governed by its parent), so a committee can be moved or removed while a
 /// proposal that acts on it waits; they hold org.set_policy for that, and department_set_policy is
 /// refused. They also create funds and draft and propose budget lines (fund_create, budget_draft,
 /// budget_propose, each governed by the fund's owner, or by the root for every fund's lines), with
-/// org.manage_budget; this fixture has no fiscal periods, a period is a name, and a line goes from draft
-/// to adopted when the call applies. No department has seats: their proposals are
-/// counted like any other here, by every member, and a policy only decides whether a governed call on
-/// the department's records applies at once or files a proposal. So the fixture never ends a
-/// department vote early (I-GOV-7 allows it, it does not require it): that needs seats to count and
-/// veto holders, who must hold a seat (I-ORG-5). Nor does it settle a proposal as its vote ends or run
-/// an accepted action as it finalizes (I-GOV-12): proposal_finalize records the outcome of a vote that
-/// has ended, and proposal_execute runs the action. Nobody has granted a delegation, so nobody acts on
-/// another's behalf. Every other domain is empty, which the model allows. A proposal's rule is the
-/// realm's over the votes cast unless the proposer states a stricter one, which the fixture stores and
-/// applies (I-GOV-3); the departments have no seats, so their proposals keep that rule too, while a GOS
-/// with seats sets a department proposal's threshold to the policy's m/n over the eligible seats.
+/// org.manage_budget; a period is a name that period_open records in order, budget_extend copies the
+/// previous period's adopted lines fund by fund, and transfer_create moves no money but refuses a
+/// category outside a fund's adopted budget (model §5). No department has seats: every member may vote on a
+/// department's proposal (its tally.eligible), and its threshold is measured against its policy's n
+/// (tally.seats), as I-GOV-3 says: two yes votes carry a council proposal whether two or twenty
+/// members vote. The fixture never ends a department vote early (I-GOV-7 allows it, it does not
+/// require it): that needs veto holders, who must hold a seat (I-ORG-5). Nor does it settle a
+/// proposal as its vote ends or run an accepted action as it finalizes (I-GOV-12): proposal_finalize
+/// records the outcome of a vote that has ended, and proposal_execute runs the action. Nobody has
+/// granted a delegation, so nobody acts on another's behalf. Every other domain is empty, which the
+/// model allows. A proposal's rule is its scope's, the realm's over the votes cast or a
+/// department's m/n over its policy's n, unless the proposer states a stricter one, which the
+/// fixture stores and applies (I-GOV-3).
 /// Links between realms (I-NEST-1 to 3): members vote to take legislation from a sync source and to
 /// accept a follower, which the root's direct policy applies at once; each vote records the link,
 /// then reads the realms' realm_info to refuse a cycle (Unavailable when one cannot be read), and
@@ -34,7 +36,9 @@
 /// install time too (the fixture runs no install job), so it can publish releases that name them and
 /// serve them with legislation_chapter. codex_install with a Release that the active sync sources'
 /// records list alike adds that release to this realm's record as a relayed layer, where the
-/// vouching record lists it, and installs nothing else.
+/// vouching record lists it. codex_install with a Package whose source names a checksum the realm
+/// holds makes that checksum the active codex, keeping the history, and codex_revert restores the one
+/// it replaced, or any earlier one by checksum; the fixture runs no codex.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
@@ -71,11 +75,20 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   /// proposal only.
   type Rule = { threshold : T.Ratio; quorum : T.Ratio; threshold_of : T.ThresholdBasis; casting_vote : ?Principal };
   func defaultRule() : Rule = { threshold = votingThreshold; quorum = votingQuorum; threshold_of = #Cast; casting_vote = castingVote };
-  /// The rule of the proposal a governed call files: the scope's default, with the realm's casting vote
-  /// for a realm-wide one only.
-  func scopeRule(department : T.Department) : Rule = { defaultRule() with casting_vote = if (department.is_root) castingVote else null };
+  /// The rule of a proposal of `department` (I-GOV-3): the realm's, over the votes cast and with its
+  /// casting vote, for the root; for any other, m/n of its policy, rounded down, over its n seats, with
+  /// the policy's quorum.
+  func scopeRule(department : T.Department) : Rule {
+    if (department.is_root) return defaultRule();
+    {
+      threshold = department.policy.m * WHOLE / department.policy.n;
+      quorum = department.policy.quorum;
+      threshold_of = #Eligible;
+      casting_vote = null;
+    };
+  };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
-  let NO_MORE_BUDGETING = "keeps no fiscal periods, allocation rules, payroll or loans";
+  let NO_MORE_BUDGETING = "closes no period and keeps no allocation rules, payroll or loans";
   let OUT_OF_SCOPE = "a department's proposal carries only the calls that department, or one below it, governs";
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
@@ -92,7 +105,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   let departments = Map.empty<Text, T.Department>();
   for (d in [
     department(ROOT_ID, "The realm itself.", null, DIRECT),
-    department("council", "A council under the realm, deciding 2 of 3.", ?ROOT_ID, { m = 2; n = 3; quorum = 0; veto = [] }),
+    department(
+      "council",
+      "A council under the realm, deciding 2 of 3 with a 60 % quorum.",
+      ?ROOT_ID,
+      { m = 2; n = 3; quorum = 60_000_000; veto = [] },
+    ),
     department("roads", "A committee under the council, deciding alone.", ?"council", DIRECT),
     department("parks", "A committee under the council, deciding alone.", ?"council", DIRECT),
   ].vals()) Map.add(departments, Text.compare, d.id, d);
@@ -149,6 +167,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   let funds = Map.empty<Text, T.Fund>();
   let budgets = Map.empty<Nat, T.Budget>();
   var nextBudget = 1;
+  // The periods, by name, in the order they were opened: the last is the current one.
+  var periods : [Text] = [];
 
   // Links between realms (I-NEST-1 to 3). A side's record exists once that side has voted; `theirs`
   // is learnt from the other side's notice.
@@ -170,6 +190,11 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   for ((checksum, bytes) in initChapters.vals()) Map.add(chapters, Text.compare, checksum, bytes);
   var relayed : [T.Release] = [];
   var published : [T.Release] = [];
+  // The codices installed here, by checksum, with the one each replaced; `codexHistory` in install order.
+  type Installed = { previous : ?Text; status : T.CodexStatus };
+  let codices = Map.empty<Text, Installed>();
+  var codexHistory : [Text] = [];
+  var activeCodex : ?Text = null;
   // Notices to the other side of a link that were not answered yet, sent again on a timer (I-NEST-3).
   type Notice = { capital : Principal; side : T.LinkSide; status : T.LinkStatus };
   let pending = Map.empty<Text, Notice>();
@@ -244,7 +269,16 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case "ggg_fund_create" { let a : ?T.FundCreateArgs = from_candid (arg); a != null };
       case "ggg_budget_draft" { let a : ?T.BudgetDraftArgs = from_candid (arg); a != null };
       case "ggg_budget_propose" { let a : ?T.BudgetProposeArgs = from_candid (arg); a != null };
+      case "ggg_transfer_create" { let a : ?T.TransferCreateArgs = from_candid (arg); a != null };
       case "ggg_codex_install" { let a : ?T.CodexSource = from_candid (arg); a != null };
+      case "ggg_codex_revert" {
+        let a : ?(?T.CodexRevertArgs) = from_candid (arg);
+        switch (a) {
+          case (?(?{ codex = ?_ })) true;
+          case (?_) return ?#InvalidArgument(REVERT_NAMES_CODEX);
+          case null false;
+        };
+      };
       case "ggg_profile_update" { let a : ?T.ProfileUpdateArgs = from_candid (arg); a != null };
       case _ return ?#InvalidArgument(method # " is not an update method of this canister");
     };
@@ -270,6 +304,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case "ggg_fund_create" {
         let ?args : ?T.FundCreateArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
         switch (args.department) { case (?d) d; case null ROOT_ID };
+      };
+      case "ggg_transfer_create" {
+        let ?args : ?T.TransferCreateArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        switch (fundOwner(args.fund)) { case (#Err(e)) return #Err(e); case (#Ok(d)) d };
       };
       case "ggg_budget_draft" {
         let ?args : ?T.BudgetDraftArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
@@ -389,22 +427,23 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     null;
   };
 
-  /// The rule a proposer states, checked against the scope's default: stricter is allowed, weaker is
-  /// refused (I-GOV-3). The casting vote is the realm's, for a realm-wide proposal only.
+  /// The rule a proposer states, checked against the scope's: a higher threshold or quorum, or the
+  /// eligible basis where the scope counts the votes cast, is allowed; weaker is refused (I-GOV-3). The
+  /// casting vote is the scope's.
   func statedRule(args : T.ProposalCreateArgs) : Result<Rule> {
-    let scope = defaultRule();
+    let scope = switch (args.department) {
+      case (?d) { switch (findDepartment(d)) { case (?found) scopeRule(found); case null return #Err(#NotFound) } };
+      case null defaultRule();
+    };
     let threshold = switch (args.threshold) { case (?t) t; case null scope.threshold };
     let quorum = switch (args.quorum) { case (?q) q; case null scope.quorum };
     let threshold_of = switch (args.threshold_of) { case (?b) b; case null scope.threshold_of };
-    if (threshold < scope.threshold or quorum < scope.quorum) {
-      return #Err(#InvalidArgument("the rule is weaker than the realm's: a proposer may only tighten it"));
+    let weakerBasis = threshold_of == #Cast and scope.threshold_of == #Eligible;
+    if (threshold < scope.threshold or quorum < scope.quorum or weakerBasis) {
+      return #Err(#InvalidArgument("the rule is weaker than the scope's: a proposer may only tighten it"));
     };
     if (threshold > WHOLE or quorum > WHOLE) return #Err(#InvalidArgument("a ratio is at most 100 000 000 (100 %)"));
-    let casting_vote = switch (args.department) {
-      case (?d) { switch (findDepartment(d)) { case (?found) { if (found.is_root) scope.casting_vote else null }; case null null } };
-      case null scope.casting_vote;
-    };
-    #Ok({ threshold; quorum; threshold_of; casting_vote });
+    #Ok({ threshold; quorum; threshold_of; casting_vote = scope.casting_vote });
   };
 
   /// The member a proposal was filed for: the grantor when it was filed on their behalf.
@@ -522,6 +561,9 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         "governance.update",
         "org.set_policy",
         "org.manage_budget",
+        "transfer.create",
+        "codex.install",
+        "codex.revert",
         "realm.data_view",
         "realm.monitor",
       ];
@@ -741,13 +783,31 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     let arg = to_candid (args);
     let governing = switch (governingDepartment("ggg_budget_draft", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
     if (Text.size(args.period) == 0 or Text.size(args.category) == 0) return #Err(#InvalidArgument("period and category are not empty"));
+    switch (checkDraft(args)) { case (?e) return #Err(e); case null {} };
     govern(caller, "budget_draft", governing, arg, "Draft a budget line", "Drafts a line of " # args.fund # "'s budget for " # args.period # ".", func() {
       draftBudget(caller, args);
     });
   };
 
+  /// Whether `period` already holds `category` of `fund` as a line of the other kind than `kind`, in any
+  /// status: within a fund and period a category is either revenue or expense (model §5).
+  func otherKindHeld(fund : Text, period : Text, category : Text, kind : T.BudgetKind) : Bool {
+    for (b in Map.values(budgets)) {
+      if (b.fund == fund and b.period == period and b.category == category and b.kind != kind) return true;
+    };
+    false;
+  };
+
+  func checkDraft(args : T.BudgetDraftArgs) : ?T.GggError {
+    if (otherKindHeld(args.fund, args.period, args.category, args.kind)) {
+      return ?#InvalidArgument("category " # args.category # " of " # args.fund # " in " # args.period # " is of the other kind");
+    };
+    null;
+  };
+
   func draftBudget(caller : Principal, args : T.BudgetDraftArgs) : Result<?Text> {
     if (not Map.containsKey(funds, Text.compare, args.fund)) return #Err(#NotFound);
+    switch (checkDraft(args)) { case (?e) return #Err(e); case null {} };
     let n = nextBudget;
     nextBudget += 1;
     let line : T.Budget = {
@@ -824,7 +884,104 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
     if (lines.size() == 0) return #Err(#Conflict("no line of " # args.period # " to adopt"));
     for ((n, b) in lines.vals()) Map.add(budgets, Nat.compare, n, { b with status = #Adopted });
+    // The fund's extended lines are replaced: amended, so a dropped category does not come back (D24).
+    for ((_, adopted) in lines.vals()) {
+      for ((n, b) in Iter.toArray(Map.entries(budgets)).vals()) {
+        if (b.status == #Extended and b.fund == adopted.fund and b.period == adopted.period) {
+          Map.add(budgets, Nat.compare, n, { b with status = #Amended });
+        };
+      };
+    };
     audit("budget_propose", caller, #Map([("period", #Text(args.period)), ("lines", #Nat(lines.size()))]), #Text("ok"));
+    #Ok(null);
+  };
+
+  // ---- Periods, extension and spending (model §5, D24)
+
+  func currentPeriod() : ?Text = if (periods.size() == 0) null else ?periods[periods.size() - 1];
+
+  func periodOpened(period : Text) : Bool = Array.any<Text>(periods, func(p) { p == period });
+
+  /// Governed by the root. This fixture keeps a period's name and order, nothing else.
+  public shared ({ caller }) func ggg_period_open(args : T.PeriodOpenArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "org.manage_budget")) { case (?e) return #Err(e); case null {} };
+    let ?root = findDepartment(ROOT_ID) else return #Err(#Unavailable("the realm has no root department"));
+    if (Text.size(args.period) == 0) return #Err(#InvalidArgument("period is empty"));
+    if (periodOpened(args.period)) return #Err(#Conflict("period " # args.period # " is open already"));
+    govern(caller, "period_open", root, to_candid (args), "Open period " # args.period, "Opens the period " # args.period # ".", func() {
+      if (periodOpened(args.period)) return #Err(#Conflict("period " # args.period # " is open already"));
+      periods := Array.concat(periods, [args.period]);
+      audit("period_open", caller, #Map([("period", #Text(args.period))]), #Text(args.period));
+      #Ok(?args.period);
+    });
+  };
+
+  /// The lines of `fund` in `period` with any of `statuses`.
+  func linesOf(fund : Text, period : Text, statuses : [T.BudgetStatus]) : [(Nat, T.Budget)] {
+    Iter.toArray(Iter.filter<(Nat, T.Budget)>(Map.entries(budgets), func((_, b)) {
+      b.fund == fund and b.period == period and Array.any<T.BudgetStatus>(statuses, func(s) { s == b.status });
+    }));
+  };
+
+  /// Copies the lines that stood at the previous period's end (adopted, extended or closed with it) into
+  /// `period` as extended, fund by fund, for the funds with no extended, proposed or adopted line in it
+  /// yet, leaving out a category the new period holds as the other kind (model §5). Replies how many
+  /// lines it copied.
+  public shared ({ caller }) func ggg_budget_extend(period : Text) : async Result<Nat> {
+    switch (requireMember(caller, "org.manage_budget")) { case (?e) return #Err(e); case null {} };
+    if (not periodOpened(period)) return #Err(#NotFound);
+    // The period opened just before this one.
+    var previous : ?Text = null;
+    label find for (p in periods.vals()) {
+      if (p == period) break find;
+      previous := ?p;
+    };
+    let ?earlier = previous else return #Err(#Conflict("no period before " # period));
+    var copied = 0;
+    for (f in Iter.toArray(Map.values(funds)).vals()) {
+      if (linesOf(f.id, period, [#Extended, #Proposed, #Adopted]).size() == 0) {
+        label carry for ((_, b) in linesOf(f.id, earlier, [#Adopted, #Extended, #Closed]).vals()) {
+          if (otherKindHeld(f.id, period, b.category, b.kind)) continue carry;
+          let n = nextBudget;
+          nextBudget += 1;
+          Map.add(budgets, Nat.compare, n, { b with id = "B-" # Nat.toText(n); period; status = #Extended; proposal = null });
+          copied += 1;
+        };
+      };
+    };
+    if (copied == 0) return #Err(#Conflict("no fund is left to extend into " # period));
+    audit("budget_extend", caller, #Map([("period", #Text(period)), ("lines", #Nat(copied))]), #Text("ok"));
+    #Ok(copied);
+  };
+
+  /// An adopted budget is exhaustive for its fund: in the current period, a transfer from a fund with an
+  /// adopted budget names a category with an adopted expense line; one with no category is the
+  /// category "transfer" (model §5, D24).
+  func checkSpending(args : T.TransferCreateArgs) : ?T.GggError {
+    let ?period = currentPeriod() else return null;
+    let adopted = linesOf(args.fund, period, [#Adopted]);
+    if (adopted.size() == 0) return null;
+    let named = switch (args.category) { case (?c) c; case null "transfer" };
+    let budgeted = Array.any<(Nat, T.Budget)>(adopted, func((_, b)) { b.category == named and b.kind == #Expense });
+    if (budgeted) null else ?#Conflict("the adopted budget of " # args.fund # " for " # period # " has no expense line for " # named);
+  };
+
+  /// Governed by the fund's owner (I-FIN-2). This fixture moves no money: it checks the budget and
+  /// records the transfer in the audit log.
+  public shared ({ caller }) func ggg_transfer_create(args : T.TransferCreateArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "transfer.create")) { case (?e) return #Err(e); case null {} };
+    if (args.on_behalf_of != null) return #Err(noDelegation("transfer.create"));
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_transfer_create", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    switch (checkSpending(args)) { case (?e) return #Err(e); case null {} };
+    govern(caller, "transfer_create", governing, arg, "Transfer from " # args.fund, "Transfers from the fund " # args.fund # ".", func() {
+      spend(caller, args);
+    });
+  };
+
+  func spend(caller : Principal, args : T.TransferCreateArgs) : Result<?Text> {
+    switch (checkSpending(args)) { case (?e) return #Err(e); case null {} };
+    audit("transfer_create", caller, #Map([("fund", #Text(args.fund)), ("amount", #Nat(args.amount))]), #Text("ok"));
     #Ok(null);
   };
 
@@ -937,6 +1094,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     switch (department) { case (?d) { if (d == ROOT_ID) null else ?d }; case null null };
   };
 
+  /// The policy's n of a department's proposal, what its threshold is measured against; none realm-wide.
+  func policySeats(scope : ?Text) : ?Nat {
+    let ?d = scope else return null;
+    switch (findDepartment(d)) { case (?found) ?found.policy.n; case null null };
+  };
+
   /// Files a proposal, open for voting at once. `department` is its scope; the root's is realm-wide.
   func fileProposal(
     proposer : Principal,
@@ -971,7 +1134,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       quorum = rule.quorum;
       threshold_of = rule.threshold_of;
       casting_vote = rule.casting_vote;
-      tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members) };
+      tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members); seats = policySeats(scopeOf(department)) };
       result = null;
       links;
     };
@@ -1036,11 +1199,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
   };
 
-  /// Whether the yes votes exceed the proposal's threshold of its basis (I-GOV-3, a realm-wide rule: this
-  /// fixture's department has no seats, so its proposals keep the realm's rule). A tie over the votes
-  /// cast is decided by the casting vote's yes.
+  /// Whether the yes votes reach a department proposal's threshold of its policy's seats, or exceed a
+  /// realm-wide proposal's threshold of its basis (I-GOV-3). A tie over the votes cast is decided by the
+  /// casting vote's yes.
   func thresholdMet(n : Nat, p : T.Proposal) : Bool {
-    let { yes; no; eligible } = p.tally;
+    let { yes; no; eligible; seats } = p.tally;
+    switch (seats) { case (?policySeats) return yes * WHOLE >= p.threshold * policySeats; case null {} };
     let basis = switch (p.threshold_of) {
       case (#Cast) yes + no;
       case (#Eligible) { switch (eligible) { case (?e) e; case null yes + no } };
@@ -1114,8 +1278,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
 
   /// Applies an accepted call as the realm, within the proposal's scope as the departments stand now
   /// (I-GOV-13). This fixture replays ggg_proposal_stop, ggg_department_edit, ggg_department_delete,
-  /// ggg_fund_create, ggg_budget_draft, ggg_budget_propose and ggg_codex_install, which may await
-  /// another realm.
+  /// ggg_fund_create, ggg_budget_draft, ggg_budget_propose, ggg_transfer_create, ggg_codex_install,
+  /// which may await another realm, and ggg_codex_revert.
   func replay(caller : Principal, p : T.Proposal, method : Text, arg : Blob) : async* Ran {
     func failed(e : T.GggError) : Ran = (#Failed, ?#Error(debug_show (e)));
     func undecodable() : Ran = (#Failed, ?#Error("arg does not decode"));
@@ -1145,10 +1309,22 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         let ?args : ?T.BudgetProposeArgs = from_candid (arg) else return undecodable();
         adoptBudget(caller, args, ?p.id);
       };
+      case "ggg_transfer_create" {
+        let ?args : ?T.TransferCreateArgs = from_candid (arg) else return undecodable();
+        spend(caller, args);
+      };
       case "ggg_codex_install" {
         let ?source : ?T.CodexSource = from_candid (arg) else return undecodable();
-        let (#Release({ source = id; version })) = source else return (#Failed, ?#Error(NOT_A_RELEASE));
-        switch (await* installRelease(id, version)) { case (#Err(e)) #Err(e); case (#Ok(_)) #Ok(null) };
+        switch (source) {
+          case (#Release { source = id; version }) { switch (await* installRelease(id, version)) { case (#Err(e)) #Err(e); case (#Ok(_)) #Ok(null) } };
+          case (#Package { source = checksum }) installCodex(caller, checksum);
+          case (#Registry _) #Err(#InvalidArgument(NOT_INSTALLABLE));
+        };
+      };
+      case "ggg_codex_revert" {
+        let ?args : ?(?T.CodexRevertArgs) = from_candid (arg) else return undecodable();
+        let (?{ codex = ?_ }) = args else return (#Failed, ?#Error(REVERT_NAMES_CODEX));
+        switch (revertTarget(args)) { case (#Err(e)) #Err(e); case (#Ok(target)) revertCodex(caller, target) };
       };
       case _ return (#Failed, ?#Error(method # " is not replayed by this fixture"));
     };
@@ -1443,6 +1619,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   transient let _retry = Timer.recurringTimer<system>(#seconds 60, resendNotices);
 
   let WALK_LIMIT = 32; // realms read in one cycle check
+  let PAGE_LIMIT = 32; // pages read of one record
 
   /// Whether `realm` takes legislation from `target`, directly or through other realms, over links not
   /// ended, as their realm_info says now (I-NEST-2). A realm that cannot be read, or a walk past
@@ -1688,11 +1865,14 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   };
 
   /// Every release a sync source's record lists, page by page, read bounded-wait; null when it cannot
-  /// be read.
+  /// be read, or runs past PAGE_LIMIT pages.
   func readRecord(capital : Principal) : async* ?[T.Release] {
     let all = List.empty<T.Release>();
     var cursor : ?Text = null;
+    var pages = 0;
     loop {
+      if (pages >= PAGE_LIMIT) return null;
+      pages += 1;
       let reply = try { ?(await (with timeout = CALL_TIMEOUT) peer(capital).ggg_legislation_releases({ cursor; limit = ?100 })) } catch (_) { null };
       let ?(#Ok({ items; next })) = reply else return null;
       List.addAll(all, items.vals());
@@ -1708,7 +1888,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     for (s in Iter.toArray(Map.values(sources)).vals()) {
       switch (s.source, linkStatus(s.link)) {
         case (#Realm(capital), #Active) {
-          let ?items = await* readRecord(capital) else return #Err(#Unavailable("the record of a sync source could not be read: " # Principal.toText(capital)));
+          let ?items = await* readRecord(capital) else {
+            let why = "could not be read, or ran past " # Nat.toText(PAGE_LIMIT) # " pages";
+            return #Err(#Unavailable("the record of sync source " # Principal.toText(capital) # " " # why));
+          };
           let order = Array.map<T.Release, Text>(items, func(r) { r.source });
           for (r in items.vals()) {
             if (r.source == source and r.version == version) {
@@ -1731,28 +1914,108 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     #Ok(release);
   };
 
-  let NOT_A_RELEASE = "this fixture installs a codex only as a release of a sync source's layer";
+  let NOT_INSTALLABLE = "this fixture installs a codex as a release of a sync source's layer, or as a package whose source is the checksum of bytes it holds";
 
-  /// Governed by the root, whose direct policy applies it at once (see installRelease).
+  /// Governed by the root, whose direct policy applies it at once: a Release joins the record (see
+  /// installRelease); a Package whose source names a checksum this realm holds becomes the active codex.
   public shared ({ caller }) func ggg_codex_install(source : T.CodexSource) : async Result<T.Governed> {
     switch (requireMember(caller, "codex.install")) { case (?e) return #Err(e); case null {} };
-    let (#Release({ source = id; version })) = source else return #Err(#InvalidArgument(NOT_A_RELEASE));
-    switch (await* installRelease(id, version)) {
-      case (#Err(e)) #Err(e);
-      case (#Ok(_)) {
-        audit("codex_install", caller, #Map([("source", #Text(id)), ("version", #Text(version))]), #Text("ok"));
-        #Ok(#Done(null));
+    switch (source) {
+      case (#Release { source = id; version }) {
+        switch (await* installRelease(id, version)) {
+          case (#Err(e)) #Err(e);
+          case (#Ok(_)) {
+            audit("codex_install", caller, #Map([("source", #Text(id)), ("version", #Text(version))]), #Text("ok"));
+            #Ok(#Done(null));
+          };
+        };
+      };
+      case (#Package { source = checksum }) {
+        let ?root = findDepartment(ROOT_ID) else return #Err(#Unavailable("the realm has no root department"));
+        switch (checkInstall(checksum)) { case (?e) return #Err(e); case null {} };
+        govern(caller, "codex_install", root, to_candid (source), "Install codex " # checksum, "Installs the codex " # checksum # ".", func() {
+          installCodex(caller, checksum);
+        });
+      };
+      case (#Registry _) #Err(#InvalidArgument(NOT_INSTALLABLE));
+    };
+  };
+
+  func checkInstall(checksum : Text) : ?T.GggError {
+    if (not stored(checksum)) return ?#InvalidArgument(NOT_INSTALLABLE);
+    if (Map.containsKey(codices, Text.compare, checksum)) return ?#Conflict("codex " # checksum # " is installed already");
+    null;
+  };
+
+  /// The codex becomes active, the active one inactive; it remembers which codex it replaced.
+  func installCodex(caller : Principal, checksum : Text) : Result<?Text> {
+    switch (checkInstall(checksum)) { case (?e) return #Err(e); case null {} };
+    switch (activeCodex) {
+      case (?c) { switch (Map.get(codices, Text.compare, c)) { case (?i) Map.add(codices, Text.compare, c, { i with status = #Inactive }); case null {} } };
+      case null {};
+    };
+    Map.add(codices, Text.compare, checksum, { previous = activeCodex; status = #Active });
+    codexHistory := Array.concat(codexHistory, [checksum]);
+    activeCodex := ?checksum;
+    audit("codex_install", caller, #Map([("codex", #Text(checksum))]), #Text(checksum));
+    #Ok(?checksum);
+  };
+
+  /// The codex a revert restores: the one named, or the one the active codex replaced (model §11).
+  func revertTarget(args : ?T.CodexRevertArgs) : Result<Text> {
+    let ?active = activeCodex else return #Err(#Conflict("no codex is active"));
+    let target = switch (args) {
+      case (?{ codex = ?c }) c;
+      case _ {
+        let ?i = Map.get(codices, Text.compare, active) else return #Err(#Conflict("no codex is active"));
+        let ?previous = i.previous else return #Err(#Conflict("the active codex replaced none"));
+        previous;
       };
     };
+    let ?installed = Map.get(codices, Text.compare, target) else return #Err(#NotFound);
+    if (target == active) return #Err(#Conflict("codex " # target # " is active already"));
+    if (installed.status == #Pending) return #Err(#Conflict("codex " # target # " is pending: codex_activate activates it"));
+    #Ok(target);
+  };
+
+  let REVERT_NAMES_CODEX = "a revert filed as a proposal names the codex it restores";
+
+  /// Restores `target`: it is active again, and the codex it displaces is reverted. It never runs a hook.
+  func revertCodex(caller : Principal, target : Text) : Result<?Text> {
+    switch (activeCodex) {
+      case (?c) { switch (Map.get(codices, Text.compare, c)) { case (?i) Map.add(codices, Text.compare, c, { i with status = #Reverted }); case null {} } };
+      case null {};
+    };
+    switch (Map.get(codices, Text.compare, target)) {
+      case (?i) Map.add(codices, Text.compare, target, { i with status = #Active });
+      case null return #Err(#NotFound);
+    };
+    activeCodex := ?target;
+    audit("codex_revert", caller, #Map([("codex", #Text(target))]), #Text(target));
+    #Ok(null);
+  };
+
+  /// Governed by the root, whose direct policy applies it at once (model §11).
+  public shared ({ caller }) func ggg_codex_revert(args : ?T.CodexRevertArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "codex.revert")) { case (?e) return #Err(e); case null {} };
+    let ?root = findDepartment(ROOT_ID) else return #Err(#Unavailable("the realm has no root department"));
+    let target = switch (revertTarget(args)) { case (#Err(e)) return #Err(e); case (#Ok(t)) t };
+    // A filed revert names the codex resolved now, so what is voted on is what runs (model §11).
+    let named : ?T.CodexRevertArgs = ?{ codex = ?target };
+    govern(caller, "codex_revert", root, to_candid (named), "Revert to codex " # target, "Restores the codex " # target # ".", func() {
+      switch (revertTarget(named)) { case (#Err(e)) #Err(e); case (#Ok(t)) revertCodex(caller, t) };
+    });
   };
 
   // §11
 
+  /// The active codex and the earlier ones, in install order.
   public query func ggg_codex_status(args : T.ListArgs) : async Result<T.CodexView> {
     let signing = { agents = []; delegable = []; supervision = #Required };
-    switch (none<Text>(args.cursor, args.limit)) {
+    let earlier = Iter.filter<Text>(codexHistory.vals(), func(c) { ?c != activeCodex });
+    switch (page(earlier, args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok({ checksum = null; pending = null; healthy = false; signing; history = items; next });
+      case (#Ok({ items; next })) #Ok({ checksum = activeCodex; pending = null; healthy = activeCodex != null; signing; history = items; next });
     };
   };
 
@@ -1876,15 +2139,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_treasury_configure(_ : T.TreasuryConfigureArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_token_register(_ : T.TokenRegisterArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_nft_token_register(_ : T.NFTTokenRegisterArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
-  public shared ({ caller }) func ggg_transfer_create(_ : T.TransferCreateArgs) : async Result<T.Governed> { nobody(caller, "transfer.create") };
   public shared ({ caller }) func ggg_transfer_revert(_ : T.TransferRevertArgs) : async Result<T.Governed> { nobody(caller, "transfer.delete") };
   public shared ({ caller }) func ggg_invoice_create(_ : T.InvoiceCreateArgs) : async Result<T.InvoiceCreated> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_invoice_check(_ : T.InvoiceCheckArgs) : async Result<T.Invoice> { nobody(caller, "self.invoice_refresh") };
   public shared ({ caller }) func ggg_invoice_refresh(_ : T.InvoiceRefreshArgs) : async Result<T.InvoicePage> { nobody(caller, "invoice.refresh") };
   public shared ({ caller }) func ggg_invoice_item_add(_ : T.InvoiceItemAddArgs) : async Result<T.Invoice> { nobody(caller, "treasury.manage") };
-  public shared ({ caller }) func ggg_period_open(_ : T.PeriodOpenArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_period_close(_ : Text) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
-  public shared ({ caller }) func ggg_budget_extend(_ : Text) : async Result<Nat> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_budget_amend(_ : T.BudgetAmendArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_allocation_rule_draft(_ : T.AllocationRuleDraftArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_allocation_rule_propose(_ : Text) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
@@ -1976,7 +2236,6 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
 
   // §11
   public shared ({ caller }) func ggg_codex_uninstall() : async Result<T.Governed> { nobody(caller, "codex.install") };
-  public shared ({ caller }) func ggg_codex_revert() : async Result<T.Governed> { nobody(caller, "codex.install") };
   public shared ({ caller }) func ggg_codex_activate(_ : T.CodexActivateArgs) : async Result<T.Governed> { nobody(caller, "codex.install") };
   public shared ({ caller }) func ggg_notification_read(_ : T.NotificationReadArgs) : async Result<T.NotificationsRead> { nobody(caller, "self.data_manage") };
   public shared ({ caller }) func ggg_notification_send(_ : T.NotificationSendArgs) : async Result<T.Delivery> { nobody(caller, "notification.send") };

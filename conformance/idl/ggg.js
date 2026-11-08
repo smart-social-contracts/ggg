@@ -225,6 +225,7 @@ export const idlFactory = ({ IDL }) => {
     'Release' : IDL.Record({ 'source' : IDL.Text, 'version' : IDL.Text }),
     'Registry' : IDL.Record({ 'codex' : IDL.Text, 'version' : IDL.Text }),
   });
+  const CodexRevertArgs = IDL.Record({ 'codex' : IDL.Opt(IDL.Text) });
   const ListArgs = IDL.Record({
     'cursor' : IDL.Opt(IDL.Text),
     'limit' : IDL.Opt(IDL.Nat32),
@@ -1621,6 +1622,7 @@ export const idlFactory = ({ IDL }) => {
     'no' : IDL.Nat,
     'yes' : IDL.Nat,
     'abstain' : IDL.Nat,
+    'seats' : IDL.Opt(IDL.Nat),
     'eligible' : IDL.Opt(IDL.Nat),
   });
   const Proposal = IDL.Record({
@@ -2397,7 +2399,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'ggg_codex_revert' : IDL.Func(
-        [],
+        [IDL.Opt(CodexRevertArgs)],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
