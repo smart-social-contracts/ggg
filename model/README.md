@@ -552,23 +552,23 @@ again. When a period opens, `budget_extend` copies, for each fund with no `exten
 extended twice carries over; they hold until an adopted budget of that fund replaces them, which
 makes them `amended`, so a category the adopted budget dropped does not come back at the next
 extension; a later adopted line of the same fund, period and category amends the earlier one too,
-within one adoption as well, and the spending booked against it carries over, so one line stands per
-fund, period and category and the next extension carries the newest; adopting one fund's lines
-neither blocks nor replaces another fund's extensions; when no fund is left to extend it is refused
-with `Conflict`, while `draft` lines stand in no way. An adopted budget is exhaustive for its fund:
-once a fund has an adopted budget for a period, a `transfer_create` from it in that period names a
-category with an adopted `expense` line, and any other is refused with `Conflict`; a transfer with
-no category counts as the category `transfer`; a fund with only extended lines, or with none, spends
-as before. The ledger's fee for a payment is exempt: the fee's ledger entry, which the GOS books
-itself in the category `ledger_fee`, is a mechanical cost of the payment, not a spending decision.
-`ledger_fee` is reserved: a `transfer_create` or `budget_draft` naming it is refused with
-`InvalidArgument`, budget or not, so no proposal or extension carries one; every other category, an
-uncategorised transfer and payroll included, needs a line once the fund's budget is adopted. Within
-a fund and period a category is either `revenue` or `expense`: a draft whose fund, period and
-category already have a line of the other kind is refused with `InvalidArgument`, and
-`budget_extend` leaves out a line whose category the new period already holds as the other kind. A
-`budget_propose` whose derived total, `revenue` or `expense`, is out of Money's range is refused
-with `InvalidArgument`, like any other fact.
+within one adoption as well, where the line drafted later stands, and the spending booked against
+the earlier one carries over, so one line stands per fund, period and category and the next
+extension carries the newest; adopting one fund's lines neither blocks nor replaces another fund's
+extensions; when no fund is left to extend it is refused with `Conflict`, while `draft` lines stand
+in no way. An adopted budget is exhaustive for its fund: once a fund has an adopted budget for a
+period, a `transfer_create` from it in that period names a category with an adopted `expense` line,
+and any other is refused with `Conflict`; a transfer with no category counts as the category
+`transfer`; a fund with only extended lines, or with none, spends as before. The ledger's fee for a
+payment is exempt: the fee's ledger entry, which the GOS books itself in the category `ledger_fee`,
+is a mechanical cost of the payment, not a spending decision. `ledger_fee` is reserved: a
+`transfer_create` or `budget_draft` naming it is refused with `InvalidArgument`, budget or not, so
+no proposal or extension carries one; every other category, an uncategorised transfer and payroll
+included, needs a line once the fund's budget is adopted. Within a fund and period a category is
+either `revenue` or `expense`: a draft whose fund, period and category already have a line of the
+other kind is refused with `InvalidArgument`, and `budget_extend` leaves out a line whose category
+the new period already holds as the other kind. A `budget_propose` whose derived total, `revenue` or
+`expense`, is out of Money's range is refused with `InvalidArgument`, like any other fact.
 
 ### Invariants
 
@@ -1278,4 +1278,4 @@ There is no permission for raw database writes: everything is an operation.
 | D24 | What replaces a fund's extended lines, and what an adopted budget allows | Decided 9 Nov 2026: an adopted budget that replaces a fund's extended lines makes them `amended`, so a category it dropped does not come back at the next extension (`closed` keeps meaning closed with its period); `budget_extend` carries what stood at the previous period's end, adopted, extended or closed with it, leaving out a category the new period holds as the other kind; once a fund has an adopted budget for a period, a transfer from it in a category with no adopted expense line is refused (`Conflict`), a transfer with no category counting as `transfer`, while a fund with only extended lines, or none, spends as before, and the ledger's fee for a payment is exempt; within a fund and period a category is either revenue or expense, a draft of the other kind `InvalidArgument` (§5) |
 | D25 | What `codex_revert` restores | Decided 8 Nov 2026: any earlier codex in the history, named by its checksum, or the one the active codex replaced when none is named (`opt CodexRevertArgs`, so existing callers keep working); a revert filed as a proposal names the codex it restores; the active or a pending codex is not an earlier one (`Conflict`); never `on_codex_activate`; which rule decides the vote is the GOS's (§11) |
 | D29 | How a reviewer reads a pending attribute | Decided 8 Nov 2026: `attribute_pending_list`, a read under `attribute.review`, lists the attributes awaiting review with kind and value in clear, consistent with I-PRV-1, paged by id so that deciding a page skips none; a holder of `attribute.review` on a scope reads and decides only the attributes in it, scope `kind:<kind>` for the kinds that body certifies, and held without a scope every pending attribute of the realm, `attribute_pending_list` and `attribute_review` applying the same scope; the audit events of `attribute_submit` and `attribute_review` keep the attribute's id, and for a review the decision, never its kind or value (§2) |
-| D30 | What the fee exemption covers, and what a second adopted line does | Decided 8 Nov 2026: only the fee's ledger entry, which the GOS books itself in the category `ledger_fee`, is exempt from an adopted budget; `ledger_fee` is reserved, a `transfer_create` or `budget_draft` naming it `InvalidArgument`, budget or not, so no proposal or extension carries one; a later adopted line of the same fund, period and category amends the earlier one, within one adoption too, so one line stands per fund, period and category, `budget_extend` carries the newest and the spending booked against it carries over (§5) |
+| D30 | What the fee exemption covers, and what a second adopted line does | Decided 8 Nov 2026: only the fee's ledger entry, which the GOS books itself in the category `ledger_fee`, is exempt from an adopted budget; `ledger_fee` is reserved, a `transfer_create` or `budget_draft` naming it `InvalidArgument`, budget or not, so no proposal or extension carries one; a later adopted line of the same fund, period and category amends the earlier one, within one adoption too, where the line drafted later stands, so one line stands per fund, period and category, `budget_extend` carries the newest and the spending booked against the earlier one carries over (§5) |
