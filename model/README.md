@@ -170,7 +170,7 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `GuestUser` | `id` (principal), `home_quarter`, `permissions` (Json) | A user from another quarter acting here. | Bob from South, allowed to view and transact |
 | `Human` | `id`, `user` → `User`, `date_of_birth`, `h3_index` | A verified person behind a user. At most one user per human. | Alice's verified person record: born 1990-04-12, home cell `871f1d489ffffff` |
 | `Identity` | `id`, `human` → `Human`, `kind` (`national_id`, `passport`, `residence_permit`, `driver_license`, `email`, …), `category`, `issuer`, `ref`, `status`, `verified_at`, `expires_at` | An attestation. Proof material is stored encrypted or off-chain; `ref` points to it. The standard kinds are the ones named here, and a realm may add its own; `category` is a subdivision of the kind (a long-term permit); the issuer of a national id or passport is the country, so it says the nationality. | Alice's passport: kind `passport`, issuer `ES`, verified 2026-03-02, expires 2031-03-01 |
-| `Attribute` | `id`, `human` → `Human`, `kind`, `value`, `issuer`, `ref`, `status`, `verified_at`, `expires_at` | A certified attribute of a person, which another body certifies and the realm verifies as it verifies identities: a disability, a family status, being a student. The kinds and values are legislation's; GGG records the attestation. `kind` and `value` are in clear, readable only by the person, the reviewers and the codex (I-PRV-1). | Alice's large-family title: kind `large_family`, value `general`, issued by the regional government, `verified`, expires 2028-06-30 |
+| `Attribute` | `id`, `human` → `Human`, `kind`, `value`, `issuer`, `ref`, `status`, `verified_at`, `expires_at` | A certified attribute of a person, which another body certifies and the realm verifies as it verifies identities: a disability, a family status, being a student. The kinds and values are legislation's; GGG records the attestation. `kind` and `value` are in clear, readable only by the person, by the reviewers while it awaits review and by the codex, never the audit log (I-PRV-1). | Alice's large-family title: kind `large_family`, value `general`, issued by the regional government, `verified`, expires 2028-06-30 |
 | `UserProfile` | `id` (name), `description`, `allowed_to` (Json list of permissions), `permissions` → `Permission`* | A named role. Defaults: `admin` (`all`), `member`. | `member` → `[self.join, proposal.vote, proposal.create, dispute.create, …]` |
 | `Permission` | `id` (name), `description`, `category`, `scope`, `users` → `User`*, `profiles` → `UserProfile`*, `departments` → `Department`* | A fine-grained grant of one permission to users, profiles or departments. | `transfer.create` on scope `fund:ROADS`, granted to Infrastructure |
 | `Invite` | `id` (code hash), `profile`, `department`, `position`, `max_uses`, `uses`, `redeemed_by` (Json), `expires_at`, `revoked`, `created_by` | The code itself is never stored. | 50-use code for new clerks: profile `member`, Civil Registry, position `clerk`, expires in 30 days |
@@ -204,6 +204,7 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `identity_review` | `identity.review` | signing, confirm | Dana approves Alice's passport proof |
 | `attribute_submit` | `attribute.submit` | confirm | Alice submits her large-family title |
 | `attribute_review` | `attribute.review` | signing, confirm | Dana verifies it |
+| `attribute_pending_list` (the attributes awaiting review) | `attribute.review` | read, confirm | Dana lists the attributes awaiting her review, kind and value in clear. Prepared by a delegate, it waits for Dana's approval: third parties' personal data |
 | `attribute_list` (own) | `self.data_view` | read, delegable | Alice's verified attributes |
 | `invite_create`, `invite_revoke` | `invite.manage` | delegable | Dana creates 50 clerk invites; revokes one sent to the wrong email. `invite_create` asks each time when the invite carries a profile beyond member, or a seat |
 | `invite_list` | `invite.manage` | read, delegable | Dana checks which of her invites have been used |
@@ -223,6 +224,16 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `action_withdraw` (by the delegate, as itself) | `self.join` | | Claude withdraws `AC-13` to file it again with the right address |
 | `call_for` (one call on a grantor's behalf: a `confirm` operation files a pending action, a `direct` one runs) | `self.join` (and the carried method's, held by the grantor) | | Claude: `{method: "ggg_payment_account_add", arg: …, on_behalf_of: "alice"}` → `Pending AC-12` |
 | `read_for` (one read on a grantor's behalf) | `self.join` (and the carried method's, held by the grantor) | read | Claude reads Alice's key envelopes for her |
+
+A holder of `attribute.review` reads the attributes awaiting review with `attribute_pending_list`,
+`kind` and `value` in clear, before deciding with `attribute_review` (I-PRV-1); nobody decides their
+own (I-ALL-3). Its cursor continues after the last attribute returned, so deciding a page skips none.
+A holder of `attribute.review` on a scope reads and decides only the attributes in it: scope
+`kind:<kind>` for the kinds that body certifies (Social Services on `kind:large_family`); held without
+a scope, every pending attribute of the realm. `attribute_pending_list` and `attribute_review` apply
+the same scope. Once decided, an attribute is read by its person alone, with `attribute_list`. The
+audit events of `attribute_submit` and `attribute_review` record the attribute's id, and for a review
+the decision, never its `kind` or `value`.
 
 Governed identity operations follow the policy of the department named in their `department`
 argument (it must hold that permission through its positions or grants); otherwise the root's.
@@ -261,7 +272,8 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
   several groups lasts at most the shortest. Nothing lasts more than one year (I-ID-6).
 - **Limits are checked at use**, not only at grant: a later, stricter limit binds existing grants.
 - **Signing acts** are `confirm`, in the `sign` group: the official's own approval is their signature
-  (I-ALL-7), and the delegate only drafts. The signing policy's `delegable` key
+  (I-ALL-7), and the delegate only drafts. So is the one read in that group, `attribute_pending_list`:
+  a read asks each time only when it returns third parties' personal data. The signing policy's `delegable` key
   ([§11](#signing-policy)) lets a codex make a signing permission direct instead; by default none is.
 - **Setup.** While the realm is in setup, an operation of the `setup` group runs at once under a grant
   wherever the founder's own call would: most are not governed before launch, and Launch is the
@@ -274,15 +286,17 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
   operation must be one the grant covers directly at that moment: never a `confirm`, `member` or
   `founder` operation, and never one outside the grant's groups. The task fails once the grant is
   revoked, replaced or expired (I-EXT-5).
-- **Grants made before groups.** A grant whose `scope` names permissions covers only the operations
-  that were delegable before groups, with the rules that held then: `me`, `profile_update`,
-  `attribute_list`, `zone_set`, `zone_clear`, `proposal_create` (a motion), `proposal_withdraw`,
-  `proposal_vote`, `transfer_create` (always a proposal), `invoice_check`, `my_invoices`,
-  `tax_declare`, `license_apply`, `license_renew`, `request_file`, `request_get`, `dispute_file`,
-  `dispute_withdraw`, `dispute_get`, `evidence_submit`, `appeal_file`, `bid_submit`, `bid_withdraw`,
-  `notification_list` and `notification_read`. Under such a grant a proposal with an action, a payout
-  account, an identity proof, an attribute, a quarter move and a federal vote stay refused: nothing
-  widens an old grant. A new grant may still name permissions, and then it covers these alone.
+- **Grants made before groups.** A grant whose `scope` names permissions covers only these operations,
+  with the rules that held before groups: `me`, `profile_update`, `zone_set`, `zone_clear`,
+  `proposal_create` (a motion), `proposal_withdraw`, `proposal_vote`, `transfer_create` (always a
+  proposal), `invoice_check`, `my_invoices`, `tax_declare`, `license_apply`, `license_renew`,
+  `request_file`, `request_get`, `dispute_file`, `dispute_withdraw`, `dispute_get`, `evidence_submit`,
+  `appeal_file`, `bid_submit`, `bid_withdraw`, `notification_list` and `notification_read`. Not
+  `attribute_list`, delegable then too: an attribute is I-PRV-1 data, and such a grant was consented
+  to for the member's own card, notifications and invoices; it is read under `see`. Under such a grant
+  a proposal with an action, a payout account, an identity proof, an attribute, a quarter move and a
+  federal vote stay refused: nothing widens an old grant. A new grant may still name permissions, and
+  then it covers these alone.
 - **The vocabulary.** `delegation_groups` returns the groups the caller can grant, each with its
   label, summary, risk and longest duration, whether some of its operations ask each time, and the
   caller's operations in it with their tiers, as `delegation.json` states them, so every GOS and
@@ -403,7 +417,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Department` | `id` (name), `description`, `kind`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals]}`, quorum in hundred-millionths (50 % = 50 000 000). Exactly one root department per realm. `kind` says what the body is (the realm's plenary, a committee), so legislation from another source can address a kind without naming a department. | Civil Registry: under Administration, 2-of-3 policy, head `dana`; the Council: kind `plenary` |
+| `Department` | `id` (name), `description`, `kind`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals]}`, quorum in hundred-millionths (50 % = 50 000 000); `n` is what a proposal's threshold is measured against, not the seats filled: Civil Registry decides 2 of 3 though it seats seven (I-GOV-3). Exactly one root department per realm. `kind` says what the body is (the realm's plenary, a committee), so legislation from another source can address a kind without naming a department. | Civil Registry: under Administration, 2-of-3 policy, head `dana`; the Council: kind `plenary` |
 | `Organization` | `id` (name), `description`, `status`, `admins` → `User`* | An external party. Its admins manage its representatives. | Clinic B: `active`, admin `dr-ana` |
 | `Position` | `id` (key), `department` → `Department` or `organization` → `Organization`, `title`, `profile` → `UserProfile`, `headcount`, `salary` (int), `salary_period`, `status`, `inherit_from_capital` | A seat in a department, or a representative seat in an organization. | `civil-registry.clerk`: 4 seats, 2,000 REALM/month, profile `clerk`; `clinic-b.physician`: 3 seats |
 | `Appointment` | `id`, `position` → `Position`, `user` → `User`, `kind` (`substantive`, `acting`), `agent` (bool), `supervisor` → `User`, `started_at`, `ended_at`, `status`, `source_quarter` | One user holding one seat. Agents are users with `agent = true`. | Bob holds a clerk seat since 2026-05-01; `records-bot` holds `records_agent` at Clinic B, agent, supervisor `dr-ana` |
@@ -464,7 +478,7 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `prepared_by` (the delegate, when the proposer approved it from a pending action, §2), `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed at creation like the action; the casting vote is the realm's, for a realm-wide proposal only, never the proposer's. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of the `eligible` seats under Infrastructure's policy |
+| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `prepared_by` (the delegate, when the proposer approved it from a pending action, §2), `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed when the vote opens; the casting vote is the realm's, for a realm-wide proposal only, never the proposer's. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of Infrastructure's 3 policy seats |
 | `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the vote ends. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
 | `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `kind`, `procedure`, `tender` → `Tender`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. `kind` (works, supplies, services) and `procedure` are the realm's words; a contract made from a tender names it and takes its kind and procedure. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, from tender `T-5`, terms `sha256:4be1…` |
@@ -504,24 +518,31 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 - I-GOV-2: Votes count only from users eligible for the proposal's scope when they vote.
 - I-GOV-3: A proposal is accepted only if its quorum and threshold are met when its vote ends. Its rule,
   `threshold`, `quorum`, `threshold_of` and `casting_vote`, states the one that decides it, and that rule
-  is applied; it is fixed at creation, like the action. One comparison per scope:
+  is applied; it is fixed when the vote opens, together with `tally.eligible` and `tally.seats`: at
+  creation for a proposal filed open, at `proposal_open` for a draft, which then takes, for each of
+  threshold, quorum and basis, the stricter of the rule it stated and the scope's default of that
+  moment, never a weaker one; after that it never moves, like the action. One comparison per scope:
   - A **realm-wide** proposal takes the realm's `voting_threshold` and `voting_quorum`, over the votes
     `cast`: it is accepted when the votes cast reach the quorum of the eligible voters and the yes votes
     *exceed* `threshold` of the yes and no votes. Over the `eligible` voters, the yes votes must exceed
     `threshold` of them all, so 50 % over the eligible is more than half of the members.
   - A **department's** proposal under an m-of-n policy takes `threshold` m/n, in hundred-millionths
-    rounded down (2 of 3 is 66 666 666, shown as 66.666666 %), over the `eligible` voters, who are the
-    department's n seats, and the policy's quorum: it is accepted when the yes votes *reach* `threshold`
-    of the eligible seats, m under the policy's own rule, and a veto holder's `no` rejects it whatever
-    the count (I-GOV-7). A direct policy (1 of 1) is the same rule with threshold 100 % over one seat.
+    rounded down (2 of 3 is 66 666 666, shown as 66.666666 %), over the policy's n (`tally.seats`), not
+    over the seats filled, and the policy's quorum; its `threshold_of` is `eligible`, which for a
+    department means its policy's n, and `cast` is weaker and refused. It is accepted when the yes
+    votes *reach* `threshold` of n, exactly m under the policy's own rule and the next whole number at
+    or above t·n under a stricter threshold t, and a veto holder's `no` rejects it whatever the count
+    (I-GOV-7). A direct policy (1 of 1) needs one yes. The eligible voters are the department's seated
+    members (`tally.eligible`): they drive the quorum and the end at which everyone has voted, never
+    the threshold, so a vacancy never makes a vote easier.
   - Under `cast`, when the yes votes stand exactly at `threshold` of the yes and no votes (a tie at 50 %),
     the `casting_vote` member's yes accepts; without one, or if that member did not vote yes, the tie
     rejects. The casting vote is part of the realm's default rule, set by governed configuration:
-    `Realm.casting_vote` (`governance_update`, an active member). A realm-wide proposal copies it at
-    creation; the proposer never sets it, and a department's proposals have none, since they count over
-    the seats, where no tie arises. If the member later leaves, new proposals still copy them, their
-    vote does not count on those (I-GOV-2) and ties reject, until `governance_update` names another or
-    clears it.
+    `Realm.casting_vote` (`governance_update`, an active member). A realm-wide proposal copies it
+    when its vote opens; the proposer never sets it, and a department's proposals have none, since
+    they count over the seats, where no tie arises. If the member later leaves, new proposals still
+    copy them, their vote does not count on those (I-GOV-2) and ties reject, until
+    `governance_update` names another or clears it.
   - The proposer may state a stricter rule when creating the proposal, never a weaker one
     (`InvalidArgument`): a higher threshold or quorum, or `eligible` where the default is `cast`. Each
     change narrows what the default accepts, so legislation's guards, which may require them, only ever
@@ -531,7 +552,7 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
     rule, and a guard on the governed operation may refuse the direct path, so a chapter can demand a
     larger majority for, say, the budget.
   - `tally.eligible` is counted when the vote opens: the realm's active members, or the department's
-    seats.
+    seated members; a department's `tally.seats`, its policy's n, is fixed then too.
 - I-GOV-4: A contract created under a mandate stays within the mandate's scope and term, and its
   `value` within the mandate's `max_value` in the same `symbol`.
 - I-GOV-5: A proposal may state `effective_at`, the time its action takes effect, in the future when
@@ -545,8 +566,8 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 - I-GOV-7: A proposal whose vote ends after its `effective_at` ends `expired`, whatever was decided,
   and is not executed; the proposer submits a new one. A vote ends at its `deadline`, or earlier at
   the moment every eligible member has voted. The vote of a department under an m-of-n policy may
-  also end as soon as it can only be accepted: its yes votes reach its `threshold` of the eligible seats
-  (`m` under the policy's own rule, more under a stricter one the proposer stated), every veto holder
+  also end as soon as it can only be accepted: its yes votes reach its `threshold` of its policy's n
+  seats (`m` under the policy's own rule, more under a stricter one the proposer stated), every veto holder
   has voted and none of them against (a veto holder's `no` rejects the proposal), and its quorum is met
   (I-GOV-3).
   Only an acceptance ends a department vote this early: until its deadline, or until every eligible
@@ -632,7 +653,8 @@ There is no balance entity: the ledgers are the source of truth.
 - `Trade.status`: `pending` → `completed` | `failed`.
 - `Transfer.status`: `sending` (ledger call in flight) → `completed` | `failed`; `sending` → `pending` (ledger refused) → `failed` (reverted).
 - `Budget.status`: `draft` → `proposed` → `adopted` → `amended`* → `closed`; `extended` (copied from the
-  previous period by `budget_extend`) → `closed`.
+  previous period by `budget_extend`) → `amended` (replaced by the fund's adopted budget) | `closed`
+  (with its period).
 - `FiscalPeriod.status`: `open` → `closed` → `archived`.
 - `AllocationRule.status`, `TaxPolicy.status`: `draft` → `proposed` → `adopted` → `superseded`.
 - `TaxDeclaration.status`: `filed` → `assessed` → `settled` | `disputed`.
@@ -671,7 +693,15 @@ A tax policy's `taxes` are typed entries, so legislation can check them one by o
 the entry's fields as its facts, and the same rules run when a draft is saved with `tax_policy_draft`
 ([layered codex §3.2](../docs/layered-codex.md#32-four-mechanisms)). An entry's `rate` or `amount` is
 what it charges when no codex computes it; `tax_assess` asks the active codex for each taxpayer's
-amount where it has one to give.
+amount where it has one to give. A progressive tax, a rate per bracket of the base, is the exact total
+over all its brackets, rounded once by the money rule, an exact half away from zero, to the nearest
+cent, a multiple of 10^(decimals − 2) smallest units
+([layered codex §3.3](../docs/layered-codex.md#33-the-fact-schema-units-rates-money-and-periods));
+rounding each bracket's share would move the total by up to half a cent per bracket. On a base of
+150.08 under 10 % up to 100.05 and 20 % above, the shares are 10.005 and 10.006 and the tax is 20.01,
+the total 20.011 rounded once; bracket by bracket it would be 10.01 + 10.01 = 20.02.
+[`conformance/src/money.js`](../conformance/src/money.js) is this rule as code, with the example as
+its test.
 
 A budget is proposed per period: `budget_propose` takes the draft lines of the period together, with
 `years` when the plan covers more than one period, and legislation reads the totals of the lines it
@@ -687,12 +717,23 @@ the `draft` lines left (`Conflict` when there are none), and the execution adopt
 proposal's lines. A proposal that ends without adopting them (`rejected`, `expired`, `withdrawn`,
 stopped, or `failed`) returns them to `draft`, with no proposal, so the fund's budget can be proposed
 again. When a period opens, `budget_extend` copies,
-for each fund with no `extended`, `proposed` or `adopted` line in it yet, the previous period's adopted
-lines of that fund into it as `extended`, without a vote; they hold until an adopted budget of that
-fund replaces them, and adopting one fund's lines neither blocks nor replaces another fund's
-extensions; when no fund is left to extend it is refused with `Conflict`, while `draft` lines stand in
-no way. A `budget_propose` whose derived total, `revenue` or `expense`, is out of Money's range is
-refused with `InvalidArgument`, like any other fact.
+for each fund with no `extended`, `proposed` or `adopted` line in it yet, the lines of that fund that
+stood at the previous period's end, `adopted`, `extended` or `closed` with it, into the new period as
+`extended`, without a vote, so a budget extended twice carries over; they hold until an adopted budget
+of that fund replaces them, which makes them `amended`, so a category the adopted budget dropped does
+not come back at the next extension; adopting one fund's lines neither blocks nor replaces another
+fund's extensions; when no fund is left to extend it is refused with `Conflict`, while `draft` lines
+stand in no way. An adopted budget is exhaustive for its fund: once a fund has an adopted budget for a
+period, a `transfer_create` from it in that period names a category with an adopted `expense` line,
+and any other is refused with `Conflict`; a transfer with no category counts as the category
+`transfer`; a fund with only extended lines, or with none, spends as before. The ledger's fee for a
+payment is exempt: a mechanical cost of the payment, booked as its own line, not a spending decision;
+every other category, an uncategorised transfer and payroll included, needs a line once the fund's
+budget is adopted. Within a fund and period a category is either `revenue` or `expense`: a draft whose
+fund, period and category already have a line of the other kind is refused with `InvalidArgument`,
+and `budget_extend` leaves out a line whose category the new period already holds as the other kind.
+A `budget_propose` whose derived total, `revenue` or `expense`, is out of Money's
+range is refused with `InvalidArgument`, like any other fact.
 
 ### Invariants
 
@@ -1045,15 +1086,15 @@ installed whole; and the paths from several sync sources must form one chain in 
   link. A vote records the link as `requested` before it checks, so a vote cast at the same time on
   the other side sees it.
 - I-NEST-3: Calls between realms go between the capitals of a link and nowhere else. `link_notify`
-  and `follower_report` are accepted only from the capital at the other side of a link this realm has
-  voted on, and a report only over an `active` link: any other caller is refused with `Forbidden`, a
-  report over a link that is not active with `Conflict`. Neither is delegable: the caller is the other
-  realm's capital. A notice that a link ended names its sender as `by`, at a time not ahead of the
-  receiver's clock by more than a few minutes; any other is refused with `InvalidArgument`. A side
-  whose notice is refused because
-  the other has not voted yet loses nothing: when the other side votes, its own notice completes the
-  link, and the receiver's reply, `active`, tells it so. A notice that is not answered (the call is
-  rejected or times out; a `GggError` is an answer) is sent again until it is answered.
+  and `follower_report` are accepted only from the capital at the other side of a link this realm
+  has voted on, and a report only over an `active` link: any other caller is refused with
+  `Forbidden`, a report over a link that is not active with `Conflict`. Neither is delegable: the
+  caller is the other realm's capital. A notice that a link ended names its sender as `by`, at a
+  time not ahead of the receiver's clock by more than a few minutes; any other is refused with
+  `InvalidArgument`. A side whose notice is refused because the other has not voted yet loses
+  nothing: when the other side votes, its own notice completes the link, and the receiver's reply,
+  `active`, tells it so. A notice that is not answered (the call is rejected or times out; a
+  `GggError` is an answer) is sent again until it is answered.
 
 ## 11. Codex, notifications, outside bodies, tasks and audit
 
@@ -1106,7 +1147,8 @@ supervisor, and the grantor when delegated (I-ALL-7).
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `codex_install`, `codex_uninstall`, `codex_revert` | `codex.install`, `codex.uninstall`, `codex.revert` | governed, delegable | Install agora 1.5.0 → realm-wide vote; revert to 1.4.2 if it misbehaves |
+| `codex_install`, `codex_uninstall` | `codex.install`, `codex.uninstall` | governed, delegable | Install agora 1.5.0 → realm-wide vote |
+| `codex_revert` (the codex the active one replaced, or any earlier one by its checksum) | `codex.revert` | governed, delegable | Revert to 1.4.2 when 1.5.0 misbehaves; to 1.3.0, by its checksum, when 1.4.2 does too |
 | `codex_activate` (the pending codex, by checksum) | `codex.install` | governed, delegable | Activate the pending 1.5.0 on 1 Jan |
 | `codex_status` (the active checksum, health and the signing policy; earlier checksums a page at a time) | `realm.data_view` | read, delegable | `sha256:4be1…`, healthy; agents may hold `bid.evaluate` |
 | `legislation_release_publish` | `legislation.publish` | governed, delegable | CV publishes 1.1.0: its chapters' checksums, its calendar's, the commit, in force from 1 Jan 2027 |
@@ -1127,6 +1169,18 @@ A codex may be installed before it is in force: `pending`, installed and checked
 names its checksum and makes it active at `at`, or its adopting proposal's `effective_at` does. At most
 one codex is `pending` at a time: a second install while one waits is `Conflict`. A hook on
 `codex_activate` is the realm's own entry point ([layered codex §3.2](../docs/layered-codex.md#32-four-mechanisms)).
+
+A **revert** restores any earlier codex in the realm's history: `codex_revert` names its checksum, or
+none for the one the active codex replaced. A checksum not in the history is `NotFound`; a revert with
+nothing to restore is `Conflict`, and so is naming the active codex or a pending one, which are not
+earlier codices: a pending codex is activated only by `codex_activate`. A revert filed as a proposal
+names the codex it restores, resolved when it is filed, so what is voted on is what runs; a
+`proposal_create` carrying a revert that names none is refused with `InvalidArgument`. The restored
+codex is `active` again and the one it displaces `reverted`, and a revert never runs
+`on_codex_activate`. A GOS reserves its revert operations, so no
+legislation can refuse or delay one ([layered codex §1](../docs/layered-codex.md#1-chapters-use-gggs-operations-directly)),
+and which rule decides a revert vote is the GOS's: Realms GOS applies the rule recorded with the codex
+being restored.
 
 A codex may also be installed as a **release** of a layer: `codex_install` with `Release { source;
 version }` installs that release whole, found in the record of one of the realm's active sync sources
@@ -1293,8 +1347,9 @@ is its proposal's `effective_at` (I-GOV-5).
 
 - I-PRV-1: The realm never holds private content or an unwrapped data key, only ciphertext
   references, hashes and wrapped keys. One exception: an attribute's `kind` and `value` (§2) are in
-  clear, and readable only by the person they belong to, by the holders of `attribute.review` and by the
-  codex. A request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
+  clear, and readable only by the person they belong to (`attribute_list`), by the holders of
+  `attribute.review` while it awaits review (`attribute_pending_list`) and by the codex; the audit log
+  never holds them. A request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
   `Document` reference, encrypted, never text in clear, and a published copy (`Document.public`) holds
   no personal data.
 - I-PRV-2: Only a scope's managers grant or revoke its keys, or see who holds them.
@@ -1384,13 +1439,18 @@ There is no permission for raw database writes: everything is an operation.
 | D12 | Sessions of a collegiate organ as entities, with operations to open and close one | Rejected: a proposal's `opens_at` and `deadline` are the session |
 | D13 | Holidays as realm data | Rejected: they stay in the codex, beside its chapters |
 | D14 | Outside bodies as registry entries, or as realms | Rejected: an `External` with a `Dispatch` outbox, confirmed by an operator or a bridge; what they say enters through `external_report` |
-| D15 | What a proposal's `threshold` means under a department's m-of-n policy | Decided 8 Nov 2026: it states the rule that decides the proposal and is applied, with one comparison per scope: a realm-wide proposal's yes votes *exceed* the threshold of its basis (votes cast, or all eligible members), a department's *reach* it over the eligible seats (m of n is m/n rounded down: 2 of 3 is 66 666 666); the proposer may only tighten the rule, and the casting vote is the realm's, for a realm-wide proposal only, set by governed configuration (I-GOV-3) |
+| D15 | What a proposal's `threshold` means under a department's m-of-n policy | Decided 8 Nov 2026: it states the rule that decides the proposal and is applied, with one comparison per scope: a realm-wide proposal's yes votes *exceed* the threshold of its basis (votes cast, or all eligible members), a department's *reach* it over its policy's n (D20) (m of n is m/n rounded down: 2 of 3 is 66 666 666); the proposer may only tighten the rule, and the casting vote is the realm's, for a realm-wide proposal only, set by governed configuration (I-GOV-3) |
 | D16 | Personal data in attributes, requests, dispatches and published documents | Decided 8 Nov 2026: an attribute's kind and value are in clear, readable only by the person, the reviewers and the codex; a request's or dispatch's personal content is an encrypted `Document` reference; a published copy holds no personal data (I-PRV-1) |
 | D17 | The majority of a proposal that a governed call files | Decided 8 Nov 2026: the scope's default rule; legislation that needs more requires a proposal of its own and may refuse the direct path with a guard (I-GOV-3) |
 | D18 | Which vote may carry a governed call on another department's record | Decided 8 Nov 2026: a realm-wide proposal carries any call; a department's only a governed call whose governing department is that department or one below it, checked at creation and again when the action executes (I-GOV-13) |
 | D19 | Which department governs a change of parent, `department_delete`, `fund_create` and `budget_propose` | Decided 8 Nov 2026: a change of `parent` is governed by the lowest department that is, or is above, both the old and the new parent (an unknown new parent is `NotFound`), and every other edit by the department itself; `department_delete` by the parent, the root for a top-level department, never the root (`InvalidArgument`) nor a department that owns a fund (`Conflict`); creating an owned record, `fund_create`, by the owner named; `budget_propose` by the owner of the `fund` it names, or by the root when it names none and proposes every fund's lines; its lines are fixed when it files (`proposed`, with the proposal), a later one takes only `draft` lines, its totals are the sums over the lines it proposes, and `budget_extend` and the replacement of extended lines are per fund (§1, §3, §5) |
+| D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3) |
 | D21 | Power of attorney by groups | Decided 8 Nov 2026: a grant names plain-language groups of operations ([`delegation.json`](../delegation.json)), not permissions, so a member reads what they hand over and every GOS and client show the same words; every operation has a tier, and an operation asks each time only if acting without the member would decide where their money or identity points, hand lasting power or keys to someone with no vote to follow, be their personal consent or signature, or take effect at once and be hard to undo; a grant made before groups keeps covering exactly what it did; limits are checked at use ([§2](#power-of-attorney)) |
 | D22 | How a delegate proposes a codex install | Decided 8 Nov 2026: as a `proposal_create` whose action is the `codex_install` call, which carries an action and so asks each time: the member approves the exact release before the realm votes. A member who holds `codex.install` may also let a delegate call `codex_install` itself: under `setup` during setup, direct; under `admin` after launch, a governed call filed as a proposal tied to the grant (I-ID-10). No new rule: the tiers decide |
+| D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the nearest cent (a multiple of 10^(decimals − 2) smallest units); never bracket by bracket (§5) |
+| D24 | What replaces a fund's extended lines, and what an adopted budget allows | Decided 9 Nov 2026: an adopted budget that replaces a fund's extended lines makes them `amended`, so a category it dropped does not come back at the next extension (`closed` keeps meaning closed with its period); `budget_extend` carries what stood at the previous period's end, adopted, extended or closed with it, leaving out a category the new period holds as the other kind; once a fund has an adopted budget for a period, a transfer from it in a category with no adopted expense line is refused (`Conflict`), a transfer with no category counting as `transfer`, while a fund with only extended lines, or none, spends as before, and the ledger's fee for a payment is exempt; within a fund and period a category is either revenue or expense, a draft of the other kind `InvalidArgument` (§5) |
+| D25 | What `codex_revert` restores | Decided 8 Nov 2026: any earlier codex in the history, named by its checksum, or the one the active codex replaced when none is named (`opt CodexRevertArgs`, so existing callers keep working); a revert filed as a proposal names the codex it restores; the active or a pending codex is not an earlier one (`Conflict`); never `on_codex_activate`; which rule decides the vote is the GOS's (§11) |
 | D26 | The pending action's hash | Decided 8 Nov 2026: opaque. The GOS computes it over at least the realm, the id, the call, the grantor, the delegate, the grant and the expiry, in a canonical form of its own, with sha256 or a stronger hash; a client sends it back unchanged, so GGG fixes no encoding and each GOS keeps its own ([§2](#pending-actions)) |
 | D27 | One generic call for a delegate | Decided 8 Nov 2026: `call_for`, and its query twin `read_for`, take a method's name and Candid-encoded arguments with `on_behalf_of`, and reply the method's own reply, the proposal a governed call filed, or the pending action a `confirm` call became; a refusal is the outer `Err`, so callers have one error path. Few argument records carry `on_behalf_of`, and a field cannot be added to the others without breaking their signatures. D7 stands: every operation keeps its typed method, and the generic call is the delegate's path alone |
 | D28 | A call in its confirm form through its own method | Decided 8 Nov 2026: a `confirm` operation, or a `direct` one whose condition holds, called through its own method with `on_behalf_of` is refused with `Forbidden` and a message that says to file it through `call_for`. The method's own reply type has no place for a pending action, and adding one to every such method's reply would break their signatures |
+| D29 | How a reviewer reads a pending attribute | Decided 8 Nov 2026: `attribute_pending_list`, a read under `attribute.review`, lists the attributes awaiting review with kind and value in clear, consistent with I-PRV-1, paged by id so that deciding a page skips none; a holder of `attribute.review` on a scope reads and decides only the attributes in it, scope `kind:<kind>` for the kinds that body certifies, and held without a scope every pending attribute of the realm, `attribute_pending_list` and `attribute_review` applying the same scope; the audit events of `attribute_submit` and `attribute_review` keep the attribute's id, and for a review the decision, never its kind or value (§2) |

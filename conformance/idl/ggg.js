@@ -155,6 +155,10 @@ export const idlFactory = ({ IDL }) => {
     'next' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Attribute),
   });
+  const ListArgs = IDL.Record({
+    'cursor' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+  });
   const AttributeReviewArgs = IDL.Record({
     'status' : IDL.Variant({ 'Rejected' : IDL.Null, 'Verified' : IDL.Null }),
     'attribute' : IDL.Text,
@@ -283,10 +287,7 @@ export const idlFactory = ({ IDL }) => {
     'Release' : IDL.Record({ 'source' : IDL.Text, 'version' : IDL.Text }),
     'Registry' : IDL.Record({ 'codex' : IDL.Text, 'version' : IDL.Text }),
   });
-  const ListArgs = IDL.Record({
-    'cursor' : IDL.Opt(IDL.Text),
-    'limit' : IDL.Opt(IDL.Nat32),
-  });
+  const CodexRevertArgs = IDL.Record({ 'codex' : IDL.Opt(IDL.Text) });
   const SigningPolicy = IDL.Record({
     'supervision' : IDL.Variant({
       'Required' : IDL.Null,
@@ -1680,6 +1681,7 @@ export const idlFactory = ({ IDL }) => {
     'no' : IDL.Nat,
     'yes' : IDL.Nat,
     'abstain' : IDL.Nat,
+    'seats' : IDL.Opt(IDL.Nat),
     'eligible' : IDL.Opt(IDL.Nat),
   });
   const Proposal = IDL.Record({
@@ -2411,6 +2413,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : AttributePage, 'Err' : GggError })],
         ['query'],
       ),
+    'ggg_attribute_pending_list' : IDL.Func(
+        [ListArgs],
+        [IDL.Variant({ 'Ok' : AttributePage, 'Err' : GggError })],
+        ['query'],
+      ),
     'ggg_attribute_review' : IDL.Func(
         [AttributeReviewArgs],
         [IDL.Variant({ 'Ok' : Attribute, 'Err' : GggError })],
@@ -2492,7 +2499,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'ggg_codex_revert' : IDL.Func(
-        [],
+        [IDL.Opt(CodexRevertArgs)],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),

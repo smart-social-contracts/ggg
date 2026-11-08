@@ -102,7 +102,7 @@
     {
       "id": "sign",
       "label": "Sign acts of my office",
-      "summary": "Verdicts, licence decisions, credentials, freezes, awards; every act waits for your own approval.",
+      "summary": "Verdicts, licence decisions, credentials, freezes, awards, and reading the attributes awaiting your review; every act waits for your own approval.",
       "risk": "You are personally accountable for every act you sign.",
       "longest": 31536000
     },
@@ -168,6 +168,7 @@
     "identity_review": { "tier": "confirm", "group": "sign" },
     "attribute_submit": { "tier": "confirm", "group": "identity" },
     "attribute_review": { "tier": "confirm", "group": "sign" },
+    "attribute_pending_list": { "tier": "confirm", "group": "sign" },
     "invite_create": { "tier": "direct", "group": "office", "confirm_if": "profile_or_seat" },
     "invite_revoke": { "tier": "direct", "group": "office" },
     "profile_create": { "tier": "direct", "group": "setup", "after_launch": "admin", "confirm_if": "in_setup" },

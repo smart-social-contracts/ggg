@@ -314,44 +314,51 @@ test('an install from a release is also a proposal\'s Call action, and runs once
 });
 
 test('a stop while the action runs is a Conflict, and the action runs once', async () => {
-  ok(await publish(a, publication('a', '1.2.0', CHAPTER_A)));
-  const arg = new Uint8Array(IDL.encode(argTypes('ggg_codex_install'), [release('a', '1.2.0')]));
-  const at = BigInt(await pic.getTime()) * 1_000_000n + 60n * 1_000_000_000n;
-  const id = ok(await on(c).ggg_proposal_create({
-    title: 'Install a 1.2.0',
-    description: '',
-    department: [],
-    action: { Call: { method: 'ggg_codex_install', arg } },
-    kind: [],
-    matter: [],
-    threshold: [],
-    quorum: [],
-    threshold_of: [],
-    effective_at: [at],
-    links: [],
-    on_behalf_of: [],
-  }));
-  for (const voter of [alice, bob]) ok(await on(c, voter).ggg_proposal_vote({ proposal: id, choice: { Yes: null }, on_behalf_of: [] }));
-  assert.equal(tag(ok(await on(c, bob).ggg_proposal_finalize(id)).status), 'ExecutionScheduled');
-  await wait(2);
-  // Both arrive in one round, in either order. If the execute runs first, it reads a's record while the
-  // stop arrives, and the stop is refused; if the stop runs first, the execute finds nothing scheduled.
-  // Either way exactly one wins, and the action never runs after a stop.
-  const [executed, stopped] = await together([
-    { canisterId: c, method: 'ggg_proposal_execute', args: [id], sender: bob },
-    { canisterId: c, method: 'ggg_proposal_stop', args: [id], sender: alice },
-  ]);
-  const status = tag(ok(await on(c).ggg_proposal_get({ id, ...none }))[0].proposal.status);
-  if ('Ok' in executed) {
-    assert.equal(tag(executed.Ok.status), 'Executed');
-    refusedWith(stopped, 'Conflict');
-    assert.equal(status, 'Executed');
-    assert.deepEqual(layers(await releases(c)), ['b 1.0.0', 'a 1.2.0', 'c 1.0.0']);
-  } else {
-    refusedWith(executed, 'Conflict');
-    assert.deepEqual(ok(stopped), { Done: [] });
-    assert.equal(status, 'Withdrawn');
-    assert.deepEqual(layers(await releases(c)), ['b 1.0.0', 'a 1.1.0', 'c 1.0.0']);
+  // Both calls arrive in one round, in either order, which PocketIC picks: five races make both orders
+  // likely. If the execute runs first, it reads a's record while the stop arrives, and the stop is
+  // refused; if the stop runs first, the execute finds nothing scheduled. Either way exactly one wins,
+  // and the action never runs after a stop.
+  let installed = 'a 1.1.0';
+  for (let race = 0; race < 5; race++) {
+    const version = `1.2.${race}`;
+    ok(await publish(a, publication('a', version, CHAPTER_A)));
+    const arg = new Uint8Array(IDL.encode(argTypes('ggg_codex_install'), [release('a', version)]));
+    const at = BigInt(await pic.getTime()) * 1_000_000n + 60n * 1_000_000_000n;
+    const id = ok(await on(c).ggg_proposal_create({
+      title: `Install a ${version}`,
+      description: '',
+      department: [],
+      action: { Call: { method: 'ggg_codex_install', arg } },
+      kind: [],
+      matter: [],
+      threshold: [],
+      quorum: [],
+      threshold_of: [],
+      effective_at: [at],
+      links: [],
+      on_behalf_of: [],
+    }));
+    for (const voter of [alice, bob]) {
+      ok(await on(c, voter).ggg_proposal_vote({ proposal: id, choice: { Yes: null }, on_behalf_of: [] }));
+    }
+    assert.equal(tag(ok(await on(c, bob).ggg_proposal_finalize(id)).status), 'ExecutionScheduled');
+    await wait(2);
+    const [executed, stopped] = await together([
+      { canisterId: c, method: 'ggg_proposal_execute', args: [id], sender: bob },
+      { canisterId: c, method: 'ggg_proposal_stop', args: [id], sender: alice },
+    ]);
+    const status = tag(ok(await on(c).ggg_proposal_get({ id, ...none }))[0].proposal.status);
+    if ('Ok' in executed) {
+      assert.equal(tag(executed.Ok.status), 'Executed');
+      refusedWith(stopped, 'Conflict');
+      assert.equal(status, 'Executed');
+      installed = `a ${version}`;
+    } else {
+      refusedWith(executed, 'Conflict');
+      assert.deepEqual(ok(stopped), { Done: [] });
+      assert.equal(status, 'Withdrawn');
+    }
+    assert.deepEqual(layers(await releases(c)), ['b 1.0.0', installed, 'c 1.0.0']);
   }
 });
 

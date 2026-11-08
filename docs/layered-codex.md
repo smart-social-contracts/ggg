@@ -102,9 +102,10 @@ addition is in the [model](../model/README.md) and `ggg.did`; the model's sectio
   proposal, not a forbid on `proposal_finalize`: the proposer may state a stricter rule than the realm's
   or the department's, never a weaker one, and a guard on `proposal_create` requires the majority the
   matter needs. A realm-wide proposal's yes votes exceed the threshold of the basis, a department's reach
-  it over the eligible seats; the casting vote is the realm's, for a realm-wide proposal only, set by
-  governed configuration, never the proposer's. A proposal a governed call files takes the scope's default rule, so legislation that needs
-  more requires a proposal of its own and may refuse the direct path with a guard (model I-GOV-3);
+  it over its policy's n seats, whatever seats are filled; the casting vote is the realm's, for a
+  realm-wide proposal only, set by governed configuration, never the proposer's. A proposal a governed
+  call files takes the scope's default rule, so legislation that needs more requires a proposal of its
+  own and may refuse the direct path with a guard (model I-GOV-3);
 - **outside bodies**: `External` parties with a `Dispatch` outbox (`external_add`, `dispatch_confirm`,
   `dispatch_list`). An outside body is not a realm; a dispatch to it is a plain notice that gates
   nothing, confirmed by the operator or bridge that delivered it;
@@ -233,8 +234,10 @@ A fact that is not an argument is marked `derived`, with what the GOS computes i
   becomes −2.35), as euro legislation requires (Regulation (EC) 1103/97 Art. 5). GGG states it with
   the money kind of its fact schema (`Money`), so every implementation rounds the same way. Money is
   an integer in the token's smallest unit, so a cent is 10^(decimals − 2) of them and the rounded
-  result is a multiple of it; the token's `decimals` is on `Token`, where chapters can read it. Another
-  rule is added only when a piece of legislation needs it.
+  result is a multiple of it; the token's `decimals` is on `Token`, where chapters can read it. One
+  amount computed from several rates, as a progressive tax over its brackets, is computed exactly and
+  rounded once; separate amounts, such as invoice items, are each rounded and then added (model §5,
+  D23). Another rule is added only when a piece of legislation needs it.
 - **A `Period` is a count and a unit:** `PeriodUnit = variant { Day; WorkingDay; Month; Year }`, both
   in `ggg.did` (§7 for `WorkingDay`). A deadline is a `Period`, not a `Duration` in nanoseconds: three months is
   three months, whatever the days. Periods compare only within one unit: comparing two units, such as
@@ -362,7 +365,7 @@ or the call is refused with `InvalidArgument`. The rules:
 - A vote that ends after `effective_at` does not execute: the proposal ends `Expired`, whatever was
   decided, and the proposer submits a new one. A vote ends at its deadline, or earlier at the moment
   every eligible member has voted. The vote of a department under an m-of-n policy may also end as
-  soon as it can only be accepted: its yes votes reach its threshold of the eligible seats (`m` under
+  soon as it can only be accepted: its yes votes reach its threshold of its policy's n seats (`m` under
   the policy's own rule, more under a stricter one the proposer stated), every veto holder has voted
   and none of them against, and its quorum is met. Only an acceptance ends a department vote this
   early: until its deadline, or until every eligible member has voted, a `no` can still be replaced,
