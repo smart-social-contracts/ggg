@@ -233,7 +233,7 @@ test('publishing refuses an unknown checksum, a second version once, and another
   assert.deepEqual(ok(await on(b).ggg_legislation_chapter(UNKNOWN)), []);
 });
 
-test('a follower\'s report is its own claim, over an active link, naming layers of the source\'s record', async () => {
+test('a follower\'s report is its own claim, over an active link', async () => {
   const report = { layers: [{ version: '1.0.0', checksum: CHAPTER_B }], compliance: { Compliant: null }, population: 800_000n };
   const reported = ok(await on(b, a).ggg_follower_report(report));
   assert.equal(reported.population, 800_000n);
@@ -242,8 +242,10 @@ test('a follower\'s report is its own claim, over an active link, naming layers 
   assert.deepEqual(entry.layers, report.layers);
   assert.equal(tag(entry.compliance), 'Compliant');
   assert.equal(entry.population, 800_000n);
-  // A layer the source's record does not list is refused.
-  refusedWith(await on(b, a).ggg_follower_report({ ...report, layers: [{ version: '9.9.9', checksum: UNKNOWN }] }), 'InvalidArgument');
+  // A layer the source's record does not list is the follower's claim too, kept as reported; it matches nothing.
+  const unlisted = ok(await on(b, a).ggg_follower_report({ ...report, layers: [{ version: '9.9.9', checksum: UNKNOWN }] }));
+  assert.deepEqual(unlisted.layers, [{ version: '9.9.9', checksum: UNKNOWN }]);
+  ok(await on(b, a).ggg_follower_report(report));
   // Only a follower's capital reports, and only over an active link: b accepts c, which never added b.
   refusedWith(await on(b, c).ggg_follower_report(report), 'Forbidden');
   refusedWith(await on(b, alice).ggg_follower_report(report), 'Forbidden');
@@ -311,6 +313,48 @@ test('an install from a release is also a proposal\'s Call action, and runs once
   assert.deepEqual(layers(await releases(c)), ['b 1.0.0', 'a 1.1.0', 'c 1.0.0']);
 });
 
+test('a stop while the action runs is a Conflict, and the action runs once', async () => {
+  ok(await publish(a, publication('a', '1.2.0', CHAPTER_A)));
+  const arg = new Uint8Array(IDL.encode(argTypes('ggg_codex_install'), [release('a', '1.2.0')]));
+  const at = BigInt(await pic.getTime()) * 1_000_000n + 60n * 1_000_000_000n;
+  const id = ok(await on(c).ggg_proposal_create({
+    title: 'Install a 1.2.0',
+    description: '',
+    department: [],
+    action: { Call: { method: 'ggg_codex_install', arg } },
+    kind: [],
+    matter: [],
+    threshold: [],
+    quorum: [],
+    threshold_of: [],
+    effective_at: [at],
+    links: [],
+    on_behalf_of: [],
+  }));
+  for (const voter of [alice, bob]) ok(await on(c, voter).ggg_proposal_vote({ proposal: id, choice: { Yes: null }, on_behalf_of: [] }));
+  assert.equal(tag(ok(await on(c, bob).ggg_proposal_finalize(id)).status), 'ExecutionScheduled');
+  await wait(2);
+  // Both arrive in one round, in either order. If the execute runs first, it reads a's record while the
+  // stop arrives, and the stop is refused; if the stop runs first, the execute finds nothing scheduled.
+  // Either way exactly one wins, and the action never runs after a stop.
+  const [executed, stopped] = await together([
+    { canisterId: c, method: 'ggg_proposal_execute', args: [id], sender: bob },
+    { canisterId: c, method: 'ggg_proposal_stop', args: [id], sender: alice },
+  ]);
+  const status = tag(ok(await on(c).ggg_proposal_get({ id, ...none }))[0].proposal.status);
+  if ('Ok' in executed) {
+    assert.equal(tag(executed.Ok.status), 'Executed');
+    refusedWith(stopped, 'Conflict');
+    assert.equal(status, 'Executed');
+    assert.deepEqual(layers(await releases(c)), ['b 1.0.0', 'a 1.2.0', 'c 1.0.0']);
+  } else {
+    refusedWith(executed, 'Conflict');
+    assert.deepEqual(ok(stopped), { Done: [] });
+    assert.equal(status, 'Withdrawn');
+    assert.deepEqual(layers(await releases(c)), ['b 1.0.0', 'a 1.1.0', 'c 1.0.0']);
+  }
+});
+
 test('a notice that is not answered is sent again until it is', async () => {
   const s = await install();
   const f = await install();
@@ -338,6 +382,7 @@ test('a notice that is not answered is sent again until it is', async () => {
 });
 
 test('a follower leaves, and the source\'s link_notify event carries Ended', async () => {
+  const installed = layers(await releases(c));
   assert.deepEqual(ok(await remove(c, realm(a))), { Done: [] });
   const ended = (await source(c, a)).status;
   assert.equal(tag(ended), 'Ended');
@@ -356,5 +401,5 @@ test('a follower leaves, and the source\'s link_notify event carries Ended', asy
   refusedWith(await on(a, c).ggg_follower_report({ layers: [], compliance: { Unknown: null }, population: 0n }), 'Conflict');
   refusedWith(await remove(c, realm(a)), 'Conflict');
   refusedWith(await on(a, bob).ggg_follower_remove({ follower: c }), 'Conflict');
-  assert.deepEqual(layers(await releases(c)), ['b 1.0.0', 'a 1.1.0', 'c 1.0.0']);
+  assert.deepEqual(layers(await releases(c)), installed);
 });

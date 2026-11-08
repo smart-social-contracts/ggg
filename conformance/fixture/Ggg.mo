@@ -769,8 +769,8 @@ module {
   };
   public type FollowerArgs = { follower : Principal };
   public type FollowerPage = { next : ?Text; items : [Follower] };
-  /// What a follower's capital reports to a sync source, its own claims: the layers it runs, each a
-  /// checksum of the source's record, its compliance against that source and its population.
+  /// What a follower's capital reports to a sync source, its own claims: the layers it runs, its
+  /// compliance against that source and its population. The source matches a layer by its checksum.
   public type FollowerReportArgs = {
     compliance : Compliance;
     layers : [ReportedLayer];

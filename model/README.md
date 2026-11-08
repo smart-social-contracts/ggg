@@ -381,12 +381,12 @@ Two kinds of body:
   `effective_at` the proposal is scheduled, even if its `deadline` is later, and finalized after it
   the proposal is accepted and its action executes at once.
 - I-GOV-8: `proposal_stop` ends a proposal that is `execution_scheduled`, without executing it, as
-  `withdrawn`; for any other status it is refused with `Conflict`. Its governing department is the one
-  that owns the stopped proposal (§1), so the votes that may carry it are that department's and those
-  of the departments above it (I-GOV-13). Under a policy that is not direct, calling it files a
-  proposal of that department and replies `Proposed` with the new proposal's id; under a direct policy
-  it applies at once and replies `Done` with no id, because it creates no record. A stop proposal that
-  runs after its target is no longer scheduled ends `failed`.
+  `withdrawn`; for any other status, or while its action is running, it is refused with `Conflict`.
+  Its governing department is the one that owns the stopped proposal (§1), so the votes that may carry
+  it are that department's and those of the departments above it (I-GOV-13). Under a policy that is
+  not direct, calling it files a proposal of that department and replies `Proposed` with the new
+  proposal's id; under a direct policy it applies at once and replies `Done` with no id, because it
+  creates no record. A stop proposal that runs after its target is no longer scheduled ends `failed`.
 - I-GOV-9: A proposal's links are fixed at creation, like its action: no operation edits a proposal's
   links or its action. To change a proposal, its proposer withdraws it and creates a new one that
   `replaces` it.
@@ -808,13 +808,14 @@ vote. If the quarter cannot apply it, the call fails and nothing changes.
 A realm takes legislation from the realms it chooses by vote, its **sync sources**, and each of them
 accepts it by vote; on the source's side the realm is a **follower**. There is no parent, no tier and
 no national code. A source is a realm, named by its capital, or, for a body that runs no realm, a
-stand-in record at a public URL, pinned by the checksum of its content. `sync_source_add` and
+stand-in record at a public https URL, pinned by the checksum of its content. `sync_source_add` and
 `sync_source_remove` are the follower's votes, `follower_accept` and `follower_remove` the source's.
 The side whose vote changes a link tells the other side's capital with `link_notify`, and a follower's
 capital reports with `follower_report` what it runs, a `ReportedLayer` per layer, its compliance
 against that source and its population; the source keeps the last report on the follower's entry. The
 layers, compliance and population are the follower's own report; the follower's `codex_status` remains
-the authority, and a source refuses a layer whose checksum is not in its record (`InvalidArgument`).
+the authority; the source matches each layer by its checksum in its record, and a layer its record
+does not list matches nothing.
 Which followers a source counts, for its population or a vote, its own legislation decides by reading
 its `Follower` records. A source's legislation may hook `link_notify` (`on_link_notify`, reading the
 new status, such as `ended` by the follower) but never guard or forbid it, so a side always learns
@@ -861,7 +862,8 @@ installed whole; and the paths from several sync sources must form one chain in 
   voted on, and a report only over an `active` link: any other caller is refused with `Forbidden`, a
   report over a link that is not active with `Conflict`. Neither is delegable: the caller is the other
   realm's capital. A notice that a link ended names its sender as `by`, at a time not ahead of the
-  receiver's clock; any other is refused with `InvalidArgument`. A side whose notice is refused because
+  receiver's clock by more than a few minutes; any other is refused with `InvalidArgument`. A side
+  whose notice is refused because
   the other has not voted yet loses nothing: when the other side votes, its own notice completes the
   link, and the receiver's reply, `active`, tells it so. A notice that is not answered (the call is
   rejected or times out; a `GggError` is an answer) is sent again until it is answered.
