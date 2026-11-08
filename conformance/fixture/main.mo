@@ -1,9 +1,11 @@
 /// A minimal GGG GOS, used to test the conformance suite. It implements every method of ggg.did.
 /// Members are fixed at install time. They may propose, vote, manage proposals (open, finalize,
 /// execute and stop them), set the realm's governance rule (governance_update, which the root's direct
-/// policy applies at once), read the realm and manage their own profile; every other permission is
-/// held by nobody, so those operations are refused. There are four departments: the root, with a
-/// direct policy, so a governed call on a realm-wide proposal is applied at once; a council under
+/// policy applies at once), read the realm, manage their own profile, and submit and review attributes
+/// (every member holds attribute.review here, and the audit log keeps an attribute's id, never its kind
+/// or value); every other permission is held by nobody, so those operations are refused. There are
+/// four departments: the root, with a direct policy, so a governed call on a realm-wide proposal is
+/// applied at once; a council under
 /// it, deciding 2 of 3 with a 60 % quorum, so a governed call on one of its proposals files a
 /// proposal instead; and two committees under the council, each deciding alone, so that a proposal
 /// of the council can carry a call on a committee's records where a committee's cannot carry one on
@@ -162,6 +164,9 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   /// When the last eligible member voted. A vote ends then, if its deadline has not come first.
   let everyoneVotedAt = Map.empty<Nat, T.Timestamp>();
   let events = Map.empty<Nat, T.Event>();
+  // The members' attributes (model §2) by id; a member's `human` is their principal here.
+  let attributes = Map.empty<Text, T.Attribute>();
+  var nextAttribute = 1;
   var nextProposal = 1;
   // Funds and budget lines (model §5): enough to govern a budget by its fund's owner (D19).
   let funds = Map.empty<Text, T.Fund>();
@@ -519,10 +524,21 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
   };
 
+  /// The caller's own attributes, of one kind when `kind` is given.
   public query ({ caller }) func ggg_attribute_list(args : T.AttributeListArgs) : async Result<T.AttributePage> {
     switch (requireMember(caller, "self.data_view")) { case (?e) return #Err(e); case null {} };
     if (args.on_behalf_of != null) return #Err(noDelegation("self.data_view"));
-    none(args.cursor, args.limit);
+    let mine = Iter.filter<T.Attribute>(Map.values(attributes), func(a) {
+      a.human == Principal.toText(caller) and (switch (args.kind) { case (?k) a.kind == k; case null true });
+    });
+    page(mine, args.cursor, args.limit);
+  };
+
+  /// The attributes awaiting review, kind and value in clear, for the holders of attribute.review
+  /// (model §2, I-PRV-1).
+  public query ({ caller }) func ggg_attribute_pending_list(args : T.ListArgs) : async Result<T.AttributePage> {
+    switch (requireMember(caller, "attribute.review")) { case (?e) return #Err(e); case null {} };
+    page(Iter.filter<T.Attribute>(Map.values(attributes), func(a) { a.status == #Pending }), args.cursor, args.limit);
   };
 
   public query func ggg_delegable_operations() : async Result<[T.DelegableOperation]> {
@@ -541,6 +557,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         "self.data_view",
         "self.update_public_profile",
         "self.update_private_data",
+        "attribute.submit",
+        "attribute.review",
         "proposal.create",
         "proposal.vote",
         "governance.update",
@@ -615,11 +633,41 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_identity_review(_ : T.IdentityReviewArgs) : async Result<T.Identity> {
     nobody(caller, "identity.review");
   };
-  public shared ({ caller }) func ggg_attribute_submit(_ : T.AttributeSubmitArgs) : async Result<T.Attribute> {
-    nobody(caller, "attribute.submit");
+  /// Files an attribute of the caller's, pending review. The audit event keeps its id, never its kind
+  /// or value (I-PRV-1).
+  public shared ({ caller }) func ggg_attribute_submit(args : T.AttributeSubmitArgs) : async Result<T.Attribute> {
+    switch (requireMember(caller, "attribute.submit")) { case (?e) return #Err(e); case null {} };
+    if (Text.size(args.kind) == 0 or Text.size(args.value) == 0) return #Err(#InvalidArgument("kind and value are not empty"));
+    let attribute : T.Attribute = {
+      id = "A-" # Nat.toText(nextAttribute);
+      human = Principal.toText(caller);
+      kind = args.kind;
+      value = args.value;
+      issuer = switch (args.issuer) { case (?i) i; case null "" };
+      ref = args.ref;
+      status = #Pending;
+      verified_at = null;
+      expires_at = args.expires_at;
+    };
+    nextAttribute += 1;
+    Map.add(attributes, Text.compare, attribute.id, attribute);
+    audit("attribute_submit", caller, #Map([("attribute", #Text(attribute.id))]), #Text(attribute.id));
+    #Ok(attribute);
   };
-  public shared ({ caller }) func ggg_attribute_review(_ : T.AttributeReviewArgs) : async Result<T.Attribute> {
-    nobody(caller, "attribute.review");
+
+  /// Decides a pending attribute. The audit event keeps its id and the decision, never its kind or
+  /// value (I-PRV-1).
+  public shared ({ caller }) func ggg_attribute_review(args : T.AttributeReviewArgs) : async Result<T.Attribute> {
+    switch (requireMember(caller, "attribute.review")) { case (?e) return #Err(e); case null {} };
+    let ?a = Map.get(attributes, Text.compare, args.attribute) else return #Err(#NotFound);
+    if (a.status != #Pending) return #Err(#Conflict("attribute " # a.id # " is decided already"));
+    let (reviewed, decision) = switch (args.status) {
+      case (#Verified) ({ a with status = #Verified; verified_at = ?now() }, "verified");
+      case (#Rejected) ({ a with status = #Rejected }, "rejected");
+    };
+    Map.add(attributes, Text.compare, a.id, reviewed);
+    audit("attribute_review", caller, #Map([("attribute", #Text(a.id))]), #Text(decision));
+    #Ok(reviewed);
   };
 
   public shared ({ caller }) func ggg_invite_create(_ : T.InviteCreateArgs) : async Result<T.InviteCreated> {
