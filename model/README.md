@@ -371,8 +371,10 @@ are the grantor's, for the method they carry. A call in its confirm form through
 - I-ID-10: A delegate's proposal is a motion, with no action. A delegable governed call made under a
   delegation is filed as a proposal, and the GOS records the grant it was filed under. It replays
   unless that grant was revoked or replaced, even if the grant has expired since, and only if the
-  grant could still make that call. A delegate does not vote on a proposal it filed or prepared. Granting or
-  accepting power of attorney, approving a request for it, payout accounts, identity proofs,
+  grant could still make that call. A delegate never votes on a proposal it filed or prepared,
+  whichever grantor it votes for: a delegate that holds grants from two members and filed or prepared
+  for one votes on it for neither. Granting or accepting power of attorney, approving a request for
+  it, payout accounts, identity proofs,
   attributes, moving to another quarter and federal votes are never done directly under a grant: they
   are `confirm` (outside setup, [§2](#power-of-attorney)), filed as
   [pending actions](#pending-actions).
