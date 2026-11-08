@@ -214,7 +214,10 @@ facts (rule 9 of the `F` language). **Ranges are enforced:** a call with a value
 range is refused with `InvalidArgument`, and the analysis assumptions rest on that. `TaxEntry.kind` and
 `subject` are text, with documented examples and no allowed values in the schema, so a realm names its
 own; `TaxEntry.facts` is a `Value`, which a forbid cannot read, so a rule on a fact inside it is a guard.
-A fact that is not an argument is marked `derived`, with what the GOS computes it from (§1).
+A fact that is not an argument is marked `derived`, with what the GOS computes it from (§1). A text
+fact may list `reserved` values, which the GOS keeps for what it books itself (`ledger_fee` on
+`transfer_create` and `budget_draft`): a call naming one is refused with `InvalidArgument`, so a rule
+need not forbid them.
 
 - **A fact's unit is declared by its schema entry,** never by a suffix in its name: `rate`, not
   `rate_bp`.

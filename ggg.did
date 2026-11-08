@@ -1465,7 +1465,8 @@ type NFTTokenRegisterArgs = record {
   supply_cap : opt nat;
 };
 
-// The fund must also cover the ledger fee. `symbol` defaults to the accounting currency.
+// The fund must also cover the ledger fee. `symbol` defaults to the accounting currency. `category`
+// never names `ledger_fee`, the fee's own entry, which the GOS books itself (InvalidArgument).
 type TransferCreateArgs = record {
   fund : text;
   to : Ref;
@@ -1506,6 +1507,7 @@ type InvoicePage = record { items : vec Invoice; next : opt text };
 type FundCreateArgs = record { fund : text; name : opt text; kind : opt text; department : opt text };
 // Periods open in order: one starts no earlier than the latest ends.
 type PeriodOpenArgs = record { period : text; name : opt text; starts_at : Timestamp; ends_at : Timestamp };
+// `category` never names `ledger_fee`, which the GOS books itself (InvalidArgument).
 type BudgetDraftArgs = record { fund : text; period : text; category : text; kind : BudgetKind; planned : Money };
 type BudgetAmendArgs = record { budget : text; planned : Money };
 // Proposes the draft lines of the period together: those of `fund`, under its owner's policy, or every

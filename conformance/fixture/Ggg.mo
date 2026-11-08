@@ -173,6 +173,7 @@ module {
     proposal : ?Text;
   };
   public type BudgetAmendArgs = { planned : Money; budget : Text };
+  /// `category` never names `ledger_fee`, which the GOS books itself (InvalidArgument).
   public type BudgetDraftArgs = {
     period : Text;
     fund : Text;
@@ -2096,7 +2097,8 @@ module {
     symbol : Text;
     payroll : ?Text;
   };
-  /// The fund must also cover the ledger fee. `symbol` defaults to the accounting currency.
+  /// The fund must also cover the ledger fee. `symbol` defaults to the accounting currency. `category`
+  /// never names `ledger_fee`, the fee's own entry, which the GOS books itself (InvalidArgument).
   public type TransferCreateArgs = {
     to : Ref;
     contract : ?Text;

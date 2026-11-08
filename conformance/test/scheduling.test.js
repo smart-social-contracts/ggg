@@ -596,7 +596,7 @@ test('budget lines return to draft when their proposal ends without adopting the
 
 test('an adopted budget amends the extended lines and an earlier line of the same category, and is exhaustive for its fund', async () => {
   const open = (period) => as(bob).ggg_period_open({ period, name: [], starts_at: 0n, ends_at: 0n });
-  const spend = (fund, category) => as(bob).ggg_transfer_create({
+  const transfer = (fund, category) => ({
     fund,
     to: { kind: 'User', id: alice.getPrincipal().toText() },
     amount: 10n,
@@ -606,6 +606,7 @@ test('an adopted budget amends the extended lines and an earlier line of the sam
     contract: [],
     on_behalf_of: [],
   });
+  const spend = (fund, category) => as(bob).ggg_transfer_create(transfer(fund, category));
   const expense = (fund, period, category) => ({ ...lineArgs(fund, period), category });
   const revenue = (fund, period, category) => ({ ...expense(fund, period, category), kind: { Revenue: null } });
   const draft = async (args) => ok(await as(bob).ggg_budget_draft(args));
@@ -646,13 +647,17 @@ test('an adopted budget amends the extended lines and an earlier line of the sam
   // A fund with only extended lines, and one with no budget, spend as before.
   assert.deepEqual(ok(await spend('ARCHIVE', 'anything')), { Done: [] });
   assert.deepEqual(ok(await spend('GENERAL', 'anything')), { Done: [] });
-  // Only the fee line the realm books itself is exempt: no transfer names its category, budget or not.
+  // ledger_fee, the fee entry the realm books itself, is reserved: no transfer or budget line names it,
+  // budget or not, and a proposal carrying one is refused at filing.
   refusedWith(await spend('LIBRARY', 'ledger_fee'), 'InvalidArgument');
   refusedWith(await spend('GENERAL', 'ledger_fee'), 'InvalidArgument');
+  refusedWith(await as(bob).ggg_budget_draft(expense('LIBRARY', 'P2', 'ledger_fee')), 'InvalidArgument');
+  refusedWith(await create({ action: calling('ggg_transfer_create', transfer('LIBRARY', 'ledger_fee')) }), 'InvalidArgument');
+  refusedWith(await create({ action: calling('ggg_budget_draft', expense('LIBRARY', 'P2', 'ledger_fee')) }), 'InvalidArgument');
 
-  // A later adopted books line amends the earlier one: one line stands per fund, period and category,
-  // and books is still budgeted.
-  await draft(expense('LIBRARY', 'P2', 'books'));
+  // A later adopted books line, 2 000 now, amends the earlier one: one line stands per fund, period and
+  // category, and books is still budgeted.
+  await draft({ ...expense('LIBRARY', 'P2', 'books'), planned: 2_000n });
   await adopt('P2', 'LIBRARY');
   assert.deepEqual(ok(await spend('LIBRARY', 'books')), { Done: [] });
 
@@ -662,4 +667,13 @@ test('an adopted budget amends the extended lines and an earlier line of the sam
   ok(await open('P3'));
   assert.equal(ok(await as(bob).ggg_budget_extend('P3')), 4n);
   refusedWith(await as(bob).ggg_budget_extend('P3'), 'Conflict');
+
+  // Within one adoption too: LIBRARY drafts books twice for P3, 1 000 then 2 000, and adopts them
+  // together; the later line amends the earlier one, and the adopted budget amends the three extended
+  // lines. P4's extension carries one LIBRARY line, the newest books, and ARCHIVE's storage.
+  await draft(expense('LIBRARY', 'P3', 'books'));
+  await draft({ ...expense('LIBRARY', 'P3', 'books'), planned: 2_000n });
+  await adopt('P3', 'LIBRARY');
+  ok(await open('P4'));
+  assert.equal(ok(await as(bob).ggg_budget_extend('P4')), 2n);
 });

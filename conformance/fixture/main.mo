@@ -171,6 +171,9 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   var nextProposal = 1;
   // Funds and budget lines (model §5): enough to govern a budget by its fund's owner (D19).
   let funds = Map.empty<Text, T.Fund>();
+  /// The ledger's fee, the one entry a GOS books itself and the only one exempt from an adopted budget:
+  /// reserved, so no transfer or budget line names it (model §5, D30).
+  let FEE_CATEGORY = "ledger_fee";
   let budgets = Map.empty<Nat, T.Budget>();
   var nextBudget = 1;
   // The periods, by name, in the order they were opened: the last is the current one.
@@ -273,9 +276,15 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case "ggg_department_edit" { let a : ?T.DepartmentEditArgs = from_candid (arg); a != null };
       case "ggg_department_delete" { let a : ?Text = from_candid (arg); a != null };
       case "ggg_fund_create" { let a : ?T.FundCreateArgs = from_candid (arg); a != null };
-      case "ggg_budget_draft" { let a : ?T.BudgetDraftArgs = from_candid (arg); a != null };
+      case "ggg_budget_draft" {
+        let a : ?T.BudgetDraftArgs = from_candid (arg);
+        switch (a) { case (?d) { switch (feeReserved(?d.category)) { case (?e) return ?e; case null true } }; case null false };
+      };
       case "ggg_budget_propose" { let a : ?T.BudgetProposeArgs = from_candid (arg); a != null };
-      case "ggg_transfer_create" { let a : ?T.TransferCreateArgs = from_candid (arg); a != null };
+      case "ggg_transfer_create" {
+        let a : ?T.TransferCreateArgs = from_candid (arg);
+        switch (a) { case (?t) { switch (feeReserved(t.category)) { case (?e) return ?e; case null true } }; case null false };
+      };
       case "ggg_codex_install" { let a : ?T.CodexSource = from_candid (arg); a != null };
       case "ggg_codex_revert" {
         let a : ?(?T.CodexRevertArgs) = from_candid (arg);
@@ -846,7 +855,13 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     false;
   };
 
+  /// `ledger_fee` is reserved for the fee's ledger entry, which the realm books itself (model §5, D30).
+  func feeReserved(category : ?Text) : ?T.GggError {
+    if (category == ?FEE_CATEGORY) ?#InvalidArgument("category " # FEE_CATEGORY # " is reserved for the ledger's fee, which the realm books itself") else null;
+  };
+
   func checkDraft(args : T.BudgetDraftArgs) : ?T.GggError {
+    switch (feeReserved(?args.category)) { case (?e) return ?e; case null {} };
     if (otherKindHeld(args.fund, args.period, args.category, args.kind)) {
       return ?#InvalidArgument("category " # args.category # " of " # args.fund # " in " # args.period # " is of the other kind");
     };
@@ -931,17 +946,22 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case null drafts(args);
     };
     if (lines.size() == 0) return #Err(#Conflict("no line of " # args.period # " to adopt"));
-    // The fund's extended lines, and an earlier adopted line of the same category, are replaced: amended,
-    // so a dropped category does not come back and one line stands per fund, period and category (D24,
-    // D30). The new lines are still proposed or draft here, so they are not caught.
-    for ((_, line) in lines.vals()) {
-      for ((n, b) in Iter.toArray(Map.entries(budgets)).vals()) {
-        let replaced = b.fund == line.fund and b.period == line.period and
-          (b.status == #Extended or (b.status == #Adopted and b.category == line.category));
-        if (replaced) Map.add(budgets, Nat.compare, n, { b with status = #Amended });
+    // Line by line, in the order drafted: the fund's extended lines and an earlier adopted line of the
+    // same category are amended, the spending booked against the latter carried over, then the line is
+    // adopted; so a dropped category does not come back and one line stands per fund, period and
+    // category, within one adoption too (D24, D30).
+    for ((n, line) in lines.vals()) {
+      var carried : T.Money = 0;
+      label replace for ((m, b) in Iter.toArray(Map.entries(budgets)).vals()) {
+        if (b.fund != line.fund or b.period != line.period) continue replace;
+        if (b.status == #Extended) Map.add(budgets, Nat.compare, m, { b with status = #Amended });
+        if (b.status == #Adopted and b.category == line.category) {
+          Map.add(budgets, Nat.compare, m, { b with status = #Amended });
+          carried += b.actual;
+        };
       };
+      Map.add(budgets, Nat.compare, n, { line with status = #Adopted; actual = line.actual + carried });
     };
-    for ((n, b) in lines.vals()) Map.add(budgets, Nat.compare, n, { b with status = #Adopted });
     audit("budget_propose", caller, #Map([("period", #Text(args.period)), ("lines", #Nat(lines.size()))]), #Text("ok"));
     #Ok(null);
   };
@@ -1004,15 +1024,11 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     #Ok(copied);
   };
 
-  /// The ledger's fee, the one line a GOS books itself and the only one exempt from an adopted budget: no
-  /// transfer names it (model §5, D30).
-  let FEE_CATEGORY = "ledger_fee";
-
   /// An adopted budget is exhaustive for its fund: in the current period, a transfer from a fund with an
   /// adopted budget names a category with an adopted expense line; one with no category is the
   /// category "transfer" (model §5, D24).
   func checkSpending(args : T.TransferCreateArgs) : ?T.GggError {
-    if (args.category == ?FEE_CATEGORY) return ?#InvalidArgument("category " # FEE_CATEGORY # " is the ledger's fee, booked by the realm itself");
+    switch (feeReserved(args.category)) { case (?e) return ?e; case null {} };
     let ?period = currentPeriod() else return null;
     let adopted = linesOf(args.fund, period, [#Adopted]);
     if (adopted.size() == 0) return null;
