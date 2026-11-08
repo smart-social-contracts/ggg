@@ -613,6 +613,9 @@ test('an adopted budget makes the extended lines it replaces amended, and is exh
   refusedWith(await open('P1'), 'Conflict');
   refusedWith(await as(bob).ggg_budget_extend('P1'), 'Conflict'); // no period before it
   for (const category of ['books', 'events']) ok(await as(bob).ggg_budget_draft(line('LIBRARY', 'P1', category)));
+  // Within a fund and period a category is either revenue or expense.
+  refusedWith(await as(bob).ggg_budget_draft({ ...line('LIBRARY', 'P1', 'books'), kind: { Revenue: null } }), 'InvalidArgument');
+  ok(await as(bob).ggg_budget_draft({ ...line('LIBRARY', 'P1', 'fees'), kind: { Revenue: null } }));
   ok(await as(bob).ggg_budget_propose(budget('P1', 'LIBRARY')));
   ok(await open('P2'));
   refusedWith(await as(bob).ggg_budget_extend('P9'), 'NotFound');

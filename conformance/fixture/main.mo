@@ -753,13 +753,25 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     let arg = to_candid (args);
     let governing = switch (governingDepartment("ggg_budget_draft", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
     if (Text.size(args.period) == 0 or Text.size(args.category) == 0) return #Err(#InvalidArgument("period and category are not empty"));
+    switch (checkDraft(args)) { case (?e) return #Err(e); case null {} };
     govern(caller, "budget_draft", governing, arg, "Draft a budget line", "Drafts a line of " # args.fund # "'s budget for " # args.period # ".", func() {
       draftBudget(caller, args);
     });
   };
 
+  /// Within a fund and period a category is either revenue or expense (model §5).
+  func checkDraft(args : T.BudgetDraftArgs) : ?T.GggError {
+    for (b in Map.values(budgets)) {
+      if (b.fund == args.fund and b.period == args.period and b.category == args.category and b.kind != args.kind) {
+        return ?#InvalidArgument("category " # args.category # " of " # args.fund # " in " # args.period # " is of the other kind");
+      };
+    };
+    null;
+  };
+
   func draftBudget(caller : Principal, args : T.BudgetDraftArgs) : Result<?Text> {
     if (not Map.containsKey(funds, Text.compare, args.fund)) return #Err(#NotFound);
+    switch (checkDraft(args)) { case (?e) return #Err(e); case null {} };
     let n = nextBudget;
     nextBudget += 1;
     let line : T.Budget = {
