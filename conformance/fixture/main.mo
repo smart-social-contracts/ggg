@@ -5,8 +5,11 @@
 /// direct policy, so a governed call on a realm-wide proposal is applied at once; and a council
 /// under it, deciding 2 of 3, so a governed call on one of its proposals files a proposal instead.
 /// The council has no seats: its proposals are counted like any other here, by every member, and its
-/// policy only makes a stop file a proposal instead of applying at once. Nobody has granted a
-/// delegation, so nobody acts on another's behalf. Every other domain is empty, which the model allows.
+/// policy only makes a stop file a proposal instead of applying at once. So the fixture never ends a
+/// department vote early (I-GOV-7 allows it, it does not require it): that needs seats to count and
+/// veto holders, who must hold a seat (I-ORG-5). Nor does it run an accepted action as it finalizes
+/// (I-GOV-12): proposal_execute does. Nobody has granted a delegation, so nobody acts on another's
+/// behalf. Every other domain is empty, which the model allows.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";

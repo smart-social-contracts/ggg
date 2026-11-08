@@ -267,9 +267,15 @@ or the call is refused with `InvalidArgument`. The rules:
   ends `Failed`.
 - A vote that ends after `effective_at` does not execute: the proposal ends `Expired`, whatever was
   decided, and the proposer submits a new one. A vote ends at its deadline, or earlier at the moment
-  every eligible member has voted. When it is finalized doesn't matter: a vote that ended before
-  `effective_at` does not expire. Finalized before `effective_at` the proposal is scheduled, even if its
-  `deadline` is later, and finalized after it the proposal is accepted and its action executes at once.
+  every eligible member has voted. The vote of a department under an m-of-n policy may also end as
+  soon as it can only be accepted: it has `m` approvals, every veto holder has voted and none of them
+  against, and its quorum is met. A vote never ends early with a rejection, so a `no` can be replaced
+  until the vote ends, and a veto holder who has yet to vote keeps it open; a realm-wide vote has no
+  such early end. When it is finalized doesn't matter: a vote that ended before `effective_at` does
+  not expire. Finalized before `effective_at` the proposal is scheduled, even if its `deadline` is
+  later, and finalized after it the proposal is accepted and its action executes at once. A GOS may do
+  that in the same step as `proposal_finalize`, which then replies `Executed`, or leave the proposal
+  `Accepted` for `proposal_execute`; the model allows both (I-GOV-12).
 - When several proposals are scheduled for the same moment, no order is specified.
 - Codex guards see it as a fact of `proposal_create`, so legislation can require a minimum delay. This
   is how a statutory wait is expressed: for an ordinance, a guard requires `effective_at` to lie at
