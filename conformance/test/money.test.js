@@ -23,9 +23,10 @@ test("the model's example: a progressive tax is the exact total rounded once, no
   // A base inside the first bracket pays that bracket's rate alone; one above the last pays every bracket.
   assert.equal(progressiveTax(5_000n, brackets, 2), 500n);
   assert.equal(progressiveTax(20_000n, brackets, 2), 3_000n); // 1 000.5 + 1 999 = 2 999.5, rounded once: 3 000
-  // The bounds increase and the last bracket is open.
-  assert.throws(() => progressiveTax(1n, [{ upTo: 10n, rate: 1n }, { upTo: 5n, rate: 1n }, { upTo: null, rate: 1n }]));
-  assert.throws(() => progressiveTax(1n, [{ upTo: 10n, rate: 1n }]));
+  // The bounds increase, the last bracket is open, and there is at least one.
+  assert.throws(() => progressiveTax(1n, [{ upTo: 10n, rate: 1n }, { upTo: 5n, rate: 1n }, { upTo: null, rate: 1n }], 2), /increasing bounds/);
+  assert.throws(() => progressiveTax(1n, [{ upTo: 10n, rate: 1n }], 2), /increasing bounds/);
+  assert.throws(() => progressiveTax(1n, [], 2), /at least one bracket/);
 });
 
 test('a token with eight decimals rounds to its cent, a million smallest units', () => {
