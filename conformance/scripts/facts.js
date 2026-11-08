@@ -64,8 +64,8 @@ const DERIVED = {
     published_in: { type: { vec: { name: 'text' } }, derived: "the journals of the tender's notices" },
   },
   budget_propose: {
-    revenue: { type: { name: 'Money' }, derived: "the sum of planned over the period's Revenue lines" },
-    expense: { type: { name: 'Money' }, derived: "the sum of planned over the period's Expense lines" },
+    revenue: { type: { name: 'Money' }, derived: "the sum of planned over the Revenue lines it proposes: the fund's, or every fund's" },
+    expense: { type: { name: 'Money' }, derived: "the sum of planned over the Expense lines it proposes: the fund's, or every fund's" },
   },
   // Operations between realms carry the other realm's compliance, as it last reported it (model §10).
   transfer_create: {
