@@ -479,10 +479,31 @@ test('a change of parent is governed by the lowest department above the old and 
   await approve(back);
   assert.equal(tag((await finalizeAndRun(back)).status), 'Executed');
   assert.deepEqual((await department('roads')).parent, ['council']);
+
+  // A new parent that does not exist is NotFound, directly and as a proposal's action.
+  refusedWith(await as(bob).ggg_department_edit(move('roads', 'no-such-department')), 'NotFound');
+  refusedWith(await create({ action: editing(move('roads', 'no-such-department')), department: 'council' }), 'NotFound');
+});
+
+test('the parent rule is checked again when the move executes, and moves to and from the root are the root\'s', async () => {
+  // The council files a move of roads under parks. Before it runs, the root moves roads out from under
+  // the council (the root is above both parents, and decides alone): now the move is the root's too.
+  const filedId = ok(await as(bob).ggg_department_edit(move('roads', 'parks'))).Proposed;
+  assert.deepEqual(ok(await as(bob).ggg_department_edit(move('roads', 'root'))), { Done: [] });
+  assert.deepEqual((await department('roads')).parent, ['root']);
+  await approve(filedId);
+  const ran = await finalizeAndRun(filedId);
+  assert.equal(tag(ran.status), 'Failed');
+  assert.deepEqual((await department('roads')).parent, ['root']);
+
+  // From the root back under the council is the root's as well: a council proposal cannot carry it.
+  refusedWith(await create({ action: editing(move('roads', 'council')), department: 'council' }), 'Forbidden');
+  assert.deepEqual(ok(await as(bob).ggg_department_edit(move('roads', 'council'))), { Done: [] });
+  assert.deepEqual((await department('roads')).parent, ['council']);
 });
 
 test('department_delete is governed by the parent, and a proposal of a deleted department carries nothing', async () => {
-  refusedWith(await as(bob).ggg_department_delete('root'), 'Conflict');
+  refusedWith(await as(bob).ggg_department_delete('root'), 'InvalidArgument');
   refusedWith(await as(bob).ggg_department_delete('no-such-department'), 'NotFound');
   // This fixture deletes no department with departments below it.
   refusedWith(await as(bob).ggg_department_delete('council'), 'Conflict');
@@ -523,16 +544,31 @@ test("a budget is governed by its fund's owner, or by the root for every fund's 
   assert.equal(tag((await finalizeAndRun(line)).status), 'Executed');
   refusedWith(await as(bob).ggg_budget_draft(lineArgs('NO-SUCH-FUND', 'FY2027')), 'NotFound');
 
-  // The council adopts its own fund's budget under its policy; a committee below it cannot carry that.
+  // The council proposes its own fund's budget under its policy; a committee below it cannot carry that.
   refusedWith(await create({ action: calling('ggg_budget_propose', budget('FY2027', 'COUNCIL')), department: 'roads' }), 'Forbidden');
   const adopt = ok(await as(bob).ggg_budget_propose(budget('FY2027', 'COUNCIL'))).Proposed;
   assert.deepEqual((await get(adopt)).department, ['council']);
-  await approve(adopt);
-  assert.equal(tag((await finalizeAndRun(adopt)).status), 'Executed');
+  // Its lines are fixed at the filing: a second proposal finds no draft line of the fund left.
   refusedWith(await as(bob).ggg_budget_propose(budget('FY2027', 'COUNCIL')), 'Conflict');
   refusedWith(await as(bob).ggg_budget_propose(budget('FY2027', 'NO-SUCH-FUND')), 'NotFound');
+  // A line drafted after the filing is not part of it: the vote adopts exactly the lines it filed, the
+  // late line is still a draft, and the next proposal takes it.
+  const late = ok(await as(bob).ggg_budget_draft(lineArgs('COUNCIL', 'FY2027'))).Proposed;
+  await approve(late);
+  assert.equal(tag((await finalizeAndRun(late)).status), 'Executed');
+  await approve(adopt);
+  assert.equal(tag((await finalizeAndRun(adopt)).status), 'Executed');
+  const next = ok(await as(bob).ggg_budget_propose(budget('FY2027', 'COUNCIL'))).Proposed;
+  assert.deepEqual((await get(next)).department, ['council']);
 
-  // The whole-period budget is the root's: it adopts every fund's draft lines left, at once.
+  // The whole-period budget is the root's: it adopts every fund's draft lines at once, never a line a
+  // proposal holds, so the council's next proposal still finds its line when it runs.
   assert.deepEqual(ok(await as(bob).ggg_budget_propose(budget('FY2027'))), { Done: [] });
   refusedWith(await as(bob).ggg_budget_propose(budget('FY2027')), 'Conflict');
+  await approve(next);
+  assert.equal(tag((await finalizeAndRun(next)).status), 'Executed');
+
+  // A department that owns a fund is never deleted, so no fund is left without an owner.
+  assert.deepEqual(ok(await as(bob).ggg_fund_create(fundArgs('ROADS', 'roads'))), { Done: ['ROADS'] });
+  refusedWith(await as(bob).ggg_department_delete('roads'), 'Conflict');
 });

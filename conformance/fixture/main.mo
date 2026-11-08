@@ -220,8 +220,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   };
 
   /// The department that governs a call (model §1): the owner of the proposal a stop ends; the
-  /// department an edit changes, or the lowest department above both the old and the new parent when
-  /// the edit moves it; the parent of the department a delete removes; the owner of a fund, or of the
+  /// department an edit changes, or the lowest department that is, or is above, both the old and the
+  /// new parent when the edit moves it; the parent of the department a delete removes; the owner of a fund, or of the
   /// fund a budget names, and the root for a whole-period budget; and the root for a call no department
   /// governs, which only a realm-wide proposal carries.
   func governingDepartment(method : Text, arg : Blob) : Result<T.Department> {
@@ -249,14 +249,17 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         let ?edit : ?T.DepartmentEditArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
         let ?department = findDepartment(edit.department) else return #Err(#NotFound);
         switch (edit.parent) {
-          case (?parent) { if (parent != parentOf(department)) lowestAbove(parentOf(department), parent) else department.id };
+          case (?parent) {
+            let ?_ = findDepartment(parent) else return #Err(#NotFound);
+            if (parent != parentOf(department)) lowestAbove(parentOf(department), parent) else department.id;
+          };
           case null department.id;
         };
       };
       case "ggg_department_delete" {
         let ?id : ?Text = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
         let ?department = findDepartment(id) else return #Err(#NotFound);
-        if (department.is_root) return #Err(#Conflict("the root department cannot be deleted"));
+        if (department.is_root) return #Err(#InvalidArgument("the root department is never deleted"));
         parentOf(department);
       };
       case _ ROOT_ID;
@@ -272,7 +275,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       switch (apply()) { case (#Err(e)) #Err(e); case (#Ok(id)) #Ok(#Done(id)) };
     } else {
       let call = #Call({ method = "ggg_" # op; arg });
-      let filed = fileProposal(caller, title, description, ?governing.id, null, null, call, scopeRule(governing), null, []);
+      let scope = if (governing.is_root) null else ?governing.id; // the root's proposals are realm-wide
+      let filed = fileProposal(caller, title, description, scope, null, null, call, scopeRule(governing), null, []);
       audit(op, caller, #Map([("filed", #Text(filed.id))]), #Text(filed.id));
       #Ok(#Proposed(filed.id));
     };
@@ -587,7 +591,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   };
 
   /// Edits a department: its description, kind, head and parent. Governed by that department, or by
-  /// the lowest department above both the old and the new parent when the edit moves it (model §1).
+  /// the lowest department that is, or is above, both the old and the new parent when the edit moves
+  /// it (model §1).
   public shared ({ caller }) func ggg_department_edit(args : T.DepartmentEditArgs) : async Result<T.Governed> {
     switch (requireMember(caller, "org.set_policy")) { case (?e) return #Err(e); case null {} };
     let department = switch (findDepartment(args.department)) { case null return #Err(#NotFound); case (?found) found };
@@ -610,10 +615,14 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     });
   };
 
-  /// The root stays (I-ORG-6), and this fixture deletes no department with departments below it.
+  /// The root stays (I-ORG-6), a department that owns a fund stays (model §3), and this fixture deletes
+  /// no department with departments below it.
   func checkDelete(id : Text) : ?T.GggError {
     let ?department = findDepartment(id) else return ?#NotFound;
-    if (department.is_root) return ?#Conflict("the root department cannot be deleted");
+    if (department.is_root) return ?#InvalidArgument("the root department is never deleted");
+    for (f in Map.values(funds)) {
+      if (f.department == ?id) return ?#Conflict("a department that owns a fund is not deleted");
+    };
     for (d in Map.values(departments)) {
       if (d.parent == ?id) return ?#Conflict("a department with departments below it is not deleted here");
     };
@@ -706,16 +715,27 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     switch (requireMember(caller, "org.manage_budget")) { case (?e) return #Err(e); case null {} };
     let arg = to_candid (args);
     let governing = switch (governingDepartment("ggg_budget_propose", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
-    if (drafts(args).size() == 0) return #Err(#Conflict("no draft line of " # args.period # " to propose"));
-    govern(caller, "budget_propose", governing, arg, "Budget " # args.period, "Proposes the draft budget lines of " # args.period # ".", func() {
-      proposeBudget(caller, args);
-    });
-  };
-
-  /// Adopts the lines: this fixture settles a budget when the call applies.
-  func proposeBudget(caller : Principal, args : T.BudgetProposeArgs) : Result<?Text> {
     let lines = drafts(args);
     if (lines.size() == 0) return #Err(#Conflict("no draft line of " # args.period # " to propose"));
+    let reply = govern(caller, "budget_propose", governing, arg, "Budget " # args.period, "Proposes the draft budget lines of " # args.period # ".", func() {
+      adoptBudget(caller, args, null);
+    });
+    // The lines are fixed at the filing: proposed, with the proposal, so a later budget_propose takes
+    // only the draft lines left, and the execution adopts exactly these (model §5).
+    switch (reply) {
+      case (#Ok(#Proposed(id))) { for ((n, b) in lines.vals()) Map.add(budgets, Nat.compare, n, { b with status = #Proposed; proposal = ?id }) };
+      case _ {};
+    };
+    reply;
+  };
+
+  /// Adopts the lines of `proposal`, or, applied at once, the draft lines the call names.
+  func adoptBudget(caller : Principal, args : T.BudgetProposeArgs, proposal : ?Text) : Result<?Text> {
+    let lines = switch (proposal) {
+      case (?id) Iter.toArray(Iter.filter<(Nat, T.Budget)>(Map.entries(budgets), func((_, b)) { b.status == #Proposed and b.proposal == ?id }));
+      case null drafts(args);
+    };
+    if (lines.size() == 0) return #Err(#Conflict("no line of " # args.period # " to adopt"));
     for ((n, b) in lines.vals()) Map.add(budgets, Nat.compare, n, { b with status = #Adopted });
     audit("budget_propose", caller, #Map([("period", #Text(args.period)), ("lines", #Nat(lines.size()))]), #Text("ok"));
     #Ok(null);
@@ -1029,7 +1049,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
           };
           case "ggg_budget_propose" {
             let ?args : ?T.BudgetProposeArgs = from_candid (arg) else return undecodable();
-            proposeBudget(caller, args);
+            adoptBudget(caller, args, ?p.id);
           };
           case _ return ?(#Failed, ?#Error(method # " is not replayed by this fixture"));
         };

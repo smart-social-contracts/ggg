@@ -61,7 +61,7 @@ result. Several operations may share a permission. Flags:
 |---|---|
 | `read` | Query; changes nothing; not audited. |
 | `delegable` | May be called with `on_behalf_of`: the caller acts for a grantor whose active `Delegation` covers the permission. Both principals are audited. |
-| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create` and `department_delete`, the parent; for a `department_edit` that changes the `parent`, the lowest department above both the old and the new parent) or on a record a department owns, such as a fund, budget, tender or proposal (the owner; a proposal belongs to the department it is scoped to, and a realm-wide one to the root). Identity operations name it in their `department` argument (§2). A proposal carries such a call only within its scope (I-GOV-13). |
+| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create` and `department_delete`, the parent; for a `department_edit` that changes the `parent`, the lowest department that is, or is above, both the old and the new parent) or on a record a department owns, such as a fund, budget, tender or proposal (the owner; a proposal belongs to the department it is scoped to, and a realm-wide one to the root). Identity operations name it in their `department` argument (§2). A proposal carries such a call only within its scope (I-GOV-13). |
 | `signing` | Produces an act its signer is personally accountable for: a decision, a certification, a sanction. The active codex's [signing policy](#signing-policy) says whether agents may hold the permission and whether it may be delegated. By default only non-agents sign, and nobody signs on another's behalf. |
 
 An operation either succeeds with its result or is refused with a `GggError`, and a refused
@@ -267,11 +267,13 @@ Two kinds of body:
 | `organization_get`, `organization_list` | `realm.data_view` | read | Licensed health providers in North |
 
 A department is a delegation from its parent, which decides whether it exists: `department_create` and
-`department_delete` are governed by the parent, the root for a top-level department (§1). The
-department itself governs its edits, except a change of `parent`, which the lowest department above
-both the old and the new parent governs: a department cannot leave its parent by its own vote, and a
-parent alone cannot move it under a department it does not govern. Moving Roads from Infrastructure
-to Finance is the root's to decide; moving it under a sub-department of Infrastructure, Infrastructure's.
+`department_delete` are governed by the parent, the root for a top-level department (§1); the root is
+never deleted (I-ORG-6, `InvalidArgument`), nor a department that owns a fund (`Conflict`), so no fund
+is left without an owner. The department itself governs its edits, except a change of `parent`, which
+the lowest department that is, or is above, both the old and the new parent governs: a department
+cannot leave its parent by its own vote, and a parent alone cannot move it under a department it does
+not govern. Moving Roads from Infrastructure to Finance is the root's to decide; moving it under a
+sub-department of Infrastructure, Infrastructure's. A new parent that does not exist is `NotFound`.
 
 ### Invariants
 
@@ -483,7 +485,7 @@ There is no balance entity: the ledgers are the source of truth.
 | `my_invoices` | `self.data_view` | read, delegable | Alice: `INV-301`, 120 REALM, due 31 Dec |
 | `fund_create`, `period_open`, `period_close` | `org.manage_budget` | governed | Create fund `WELFARE`; close `FY2025` |
 | `budget_draft`, `budget_propose` (the draft lines of a period together: a fund's, or every fund's), `budget_amend` | `org.manage_budget` | governed | FY2027's lines drafted, then proposed as one budget → proposal |
-| `budget_extend` | `org.manage_budget` | | FY2027 opens with no adopted budget: FY2026's adopted lines carry over as `extended`; `Conflict` once FY2027 has an extended, proposed or adopted line |
+| `budget_extend` | `org.manage_budget` | | FY2027 opens: FY2026's adopted lines carry over as `extended`, fund by fund, for the funds with no extended, proposed or adopted line in FY2027 yet; `Conflict` when none is left |
 | `allocation_rule_draft`, `allocation_rule_propose` | `org.manage_budget` | governed | Welfare share from 30% to 35% → proposal |
 | `payroll_run` | `org.manage_budget` | governed | November salaries: 23 seats, 51,200 REALM |
 | `loan_create` | `org.manage_budget` | governed | Borrow 500,000 REALM from Bank A over 10 years → proposal |
@@ -504,17 +506,22 @@ what it charges when no codex computes it; `tax_assess` asks the active codex fo
 amount where it has one to give.
 
 A budget is proposed per period: `budget_propose` takes the draft lines of the period together, with
-`years` when the plan covers more than one period, and legislation reads the period's totals, `revenue`
-and `expense`, the sums of `planned` over its `revenue` and `expense` lines, as facts of the call
-(derived facts, [layered codex §3.3](../docs/layered-codex.md#33-the-fact-schema-units-rates-money-and-periods)).
-With a `fund`, it proposes that fund's draft lines of the period, and the fund's owner governs it, under
-its own policy; without one, every fund's, and the root governs it, as it governs `loan_create`: the
-realm's budget as a whole and its borrowing are the realm's. When a period opens with no adopted
-budget, `budget_extend` copies the previous period's adopted lines into it as `extended`, without a
-vote, and they hold until an adopted budget replaces them; once the period has an `extended`,
-`proposed` or `adopted` line it is refused with `Conflict`, while `draft` lines stand in no way. A
-`budget_propose` whose derived total, `revenue` or `expense`, is out of Money's range is refused with
-`InvalidArgument`, like any other fact.
+`years` when the plan covers more than one period, and legislation reads the totals of the lines it
+proposes, `revenue` and `expense`, the sums of `planned` over their `revenue` and `expense` lines, as
+facts of the call (derived facts, [layered codex §3.3](../docs/layered-codex.md#33-the-fact-schema-units-rates-money-and-periods));
+legislation tells the two forms apart by `fund`. With a `fund`, it proposes that fund's draft lines of
+the period, and the fund's owner governs it, under its own policy; without one, every fund's, and the
+root governs it, as it governs `loan_create`: the realm's budget as a whole and its borrowing are the
+realm's. Creating an owned record is governed by its owner: `fund_create` by the department named, the
+root when none is. The lines are fixed when the proposal is filed: they are `proposed`, with the
+proposal, a later `budget_propose` takes only the `draft` lines left (`Conflict` when there are none),
+and the execution adopts exactly that proposal's lines. When a period opens, `budget_extend` copies,
+for each fund with no `extended`, `proposed` or `adopted` line in it yet, the previous period's adopted
+lines of that fund into it as `extended`, without a vote; they hold until an adopted budget of that
+fund replaces them, and adopting one fund's lines neither blocks nor replaces another fund's
+extensions; when no fund is left to extend it is refused with `Conflict`, while `draft` lines stand in
+no way. A `budget_propose` whose derived total, `revenue` or `expense`, is out of Money's range is
+refused with `InvalidArgument`, like any other fact.
 
 ### Invariants
 
@@ -1109,4 +1116,4 @@ There is no permission for raw database writes: everything is an operation.
 | D16 | Personal data in attributes, requests, dispatches and published documents | Decided 8 Nov 2026: an attribute's kind and value are in clear, readable only by the person, the reviewers and the codex; a request's or dispatch's personal content is an encrypted `Document` reference; a published copy holds no personal data (I-PRV-1) |
 | D17 | The majority of a proposal that a governed call files | Decided 8 Nov 2026: the scope's default rule; legislation that needs more requires a proposal of its own and may refuse the direct path with a guard (I-GOV-3) |
 | D18 | Which vote may carry a governed call on another department's record | Decided 8 Nov 2026: a realm-wide proposal carries any call; a department's only a governed call whose governing department is that department or one below it, checked at creation and again when the action executes (I-GOV-13) |
-| D19 | Which department governs a change of parent, `department_delete` and `budget_propose` | Decided 8 Nov 2026: a change of `parent` is governed by the lowest department above both the old and the new parent, and every other edit by the department itself; `department_delete` by the parent, the root for a top-level department; `budget_propose` by the owner of the `fund` it names, or by the root when it names none and proposes every fund's lines (§1, §3, §5) |
+| D19 | Which department governs a change of parent, `department_delete`, `fund_create` and `budget_propose` | Decided 8 Nov 2026: a change of `parent` is governed by the lowest department that is, or is above, both the old and the new parent (an unknown new parent is `NotFound`), and every other edit by the department itself; `department_delete` by the parent, the root for a top-level department, never the root (`InvalidArgument`) nor a department that owns a fund (`Conflict`); creating an owned record, `fund_create`, by the owner named; `budget_propose` by the owner of the `fund` it names, or by the root when it names none and proposes every fund's lines; its lines are fixed when it files (`proposed`, with the proposal), a later one takes only `draft` lines, its totals are the sums over the lines it proposes, and `budget_extend` and the replacement of extended lines are per fund (§1, §3, §5) |
