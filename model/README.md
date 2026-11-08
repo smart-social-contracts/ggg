@@ -470,7 +470,8 @@ There is no balance entity: the ledgers are the source of truth.
 - `Trade.status`: `pending` → `completed` | `failed`.
 - `Transfer.status`: `sending` (ledger call in flight) → `completed` | `failed`; `sending` → `pending` (ledger refused) → `failed` (reverted).
 - `Budget.status`: `draft` → `proposed` → `adopted` → `amended`* → `closed`; `extended` (copied from the
-  previous period by `budget_extend`) → `closed`.
+  previous period by `budget_extend`) → `amended` (replaced by the fund's adopted budget) | `closed`
+  (with its period).
 - `FiscalPeriod.status`: `open` → `closed` → `archived`.
 - `AllocationRule.status`, `TaxPolicy.status`: `draft` → `proposed` → `adopted` → `superseded`.
 - `TaxDeclaration.status`: `filed` → `assessed` → `settled` | `disputed`.
@@ -535,10 +536,14 @@ stopped, or `failed`) returns them to `draft`, with no proposal, so the fund's b
 again. When a period opens, `budget_extend` copies,
 for each fund with no `extended`, `proposed` or `adopted` line in it yet, the previous period's adopted
 lines of that fund into it as `extended`, without a vote; they hold until an adopted budget of that
-fund replaces them, and adopting one fund's lines neither blocks nor replaces another fund's
+fund replaces them, which makes them `amended`, so a category the adopted budget dropped does not come
+back at the next extension; adopting one fund's lines neither blocks nor replaces another fund's
 extensions; when no fund is left to extend it is refused with `Conflict`, while `draft` lines stand in
-no way. A `budget_propose` whose derived total, `revenue` or `expense`, is out of Money's range is
-refused with `InvalidArgument`, like any other fact.
+no way. An adopted budget is exhaustive for its fund: once a fund has an adopted budget for a period,
+a `transfer_create` from it in that period names a category with an adopted line, and any other is
+refused with `Conflict`; a fund with only extended lines, or with none, spends as before. A
+`budget_propose` whose derived total, `revenue` or `expense`, is out of Money's range is refused with
+`InvalidArgument`, like any other fact.
 
 ### Invariants
 
@@ -1240,3 +1245,4 @@ There is no permission for raw database writes: everything is an operation.
 | D19 | Which department governs a change of parent, `department_delete`, `fund_create` and `budget_propose` | Decided 8 Nov 2026: a change of `parent` is governed by the lowest department that is, or is above, both the old and the new parent (an unknown new parent is `NotFound`), and every other edit by the department itself; `department_delete` by the parent, the root for a top-level department, never the root (`InvalidArgument`) nor a department that owns a fund (`Conflict`); creating an owned record, `fund_create`, by the owner named; `budget_propose` by the owner of the `fund` it names, or by the root when it names none and proposes every fund's lines; its lines are fixed when it files (`proposed`, with the proposal), a later one takes only `draft` lines, its totals are the sums over the lines it proposes, and `budget_extend` and the replacement of extended lines are per fund (§1, §3, §5) |
 | D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3) |
 | D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the nearest cent (a multiple of 10^(decimals − 2) smallest units); never bracket by bracket (§5) |
+| D24 | What replaces a fund's extended lines, and what an adopted budget allows | Decided 9 Nov 2026: an adopted budget that replaces a fund's extended lines makes them `amended`, so a category it dropped does not come back at the next extension (`closed` keeps meaning closed with its period); once a fund has an adopted budget for a period, a transfer from it in a category with no adopted line is refused (`Conflict`), while a fund with only extended lines, or none, spends as before (§5) |

@@ -14,8 +14,9 @@
 /// proposal that acts on it waits; they hold org.set_policy for that, and department_set_policy is
 /// refused. They also create funds and draft and propose budget lines (fund_create, budget_draft,
 /// budget_propose, each governed by the fund's owner, or by the root for every fund's lines), with
-/// org.manage_budget; this fixture has no fiscal periods, a period is a name, and a line goes from draft
-/// to adopted when the call applies. No department has seats: every member may vote on a
+/// org.manage_budget; a period is a name that period_open records in order, budget_extend copies the
+/// previous period's adopted lines fund by fund, and transfer_create moves no money but refuses a
+/// category outside a fund's adopted budget (model §5). No department has seats: every member may vote on a
 /// department's proposal (its tally.eligible), and its threshold is measured against its policy's n
 /// (tally.seats), as I-GOV-3 says: two yes votes carry a council proposal whether two or twenty
 /// members vote. The fixture never ends a department vote early (I-GOV-7 allows it, it does not
@@ -87,7 +88,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
   };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
-  let NO_MORE_BUDGETING = "keeps no fiscal periods, allocation rules, payroll or loans";
+  let NO_MORE_BUDGETING = "closes no period and keeps no allocation rules, payroll or loans";
   let OUT_OF_SCOPE = "a department's proposal carries only the calls that department, or one below it, governs";
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
@@ -166,6 +167,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   let funds = Map.empty<Text, T.Fund>();
   let budgets = Map.empty<Nat, T.Budget>();
   var nextBudget = 1;
+  // The periods, by name, in the order they were opened: the last is the current one.
+  var periods : [Text] = [];
 
   // Links between realms (I-NEST-1 to 3). A side's record exists once that side has voted; `theirs`
   // is learnt from the other side's notice.
@@ -266,6 +269,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case "ggg_fund_create" { let a : ?T.FundCreateArgs = from_candid (arg); a != null };
       case "ggg_budget_draft" { let a : ?T.BudgetDraftArgs = from_candid (arg); a != null };
       case "ggg_budget_propose" { let a : ?T.BudgetProposeArgs = from_candid (arg); a != null };
+      case "ggg_transfer_create" { let a : ?T.TransferCreateArgs = from_candid (arg); a != null };
       case "ggg_codex_install" { let a : ?T.CodexSource = from_candid (arg); a != null };
       case "ggg_codex_revert" { let a : ?(?T.CodexRevertArgs) = from_candid (arg); a != null };
       case "ggg_profile_update" { let a : ?T.ProfileUpdateArgs = from_candid (arg); a != null };
@@ -293,6 +297,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case "ggg_fund_create" {
         let ?args : ?T.FundCreateArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
         switch (args.department) { case (?d) d; case null ROOT_ID };
+      };
+      case "ggg_transfer_create" {
+        let ?args : ?T.TransferCreateArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        switch (fundOwner(args.fund)) { case (#Err(e)) return #Err(e); case (#Ok(d)) d };
       };
       case "ggg_budget_draft" {
         let ?args : ?T.BudgetDraftArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
@@ -531,6 +539,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         "governance.update",
         "org.set_policy",
         "org.manage_budget",
+        "transfer.create",
         "codex.install",
         "codex.revert",
         "realm.data_view",
@@ -827,7 +836,99 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
     if (lines.size() == 0) return #Err(#Conflict("no line of " # args.period # " to adopt"));
     for ((n, b) in lines.vals()) Map.add(budgets, Nat.compare, n, { b with status = #Adopted });
+    // The fund's extended lines are replaced: amended, so a dropped category does not come back (D24).
+    for ((_, adopted) in lines.vals()) {
+      for ((n, b) in Iter.toArray(Map.entries(budgets)).vals()) {
+        if (b.status == #Extended and b.fund == adopted.fund and b.period == adopted.period) {
+          Map.add(budgets, Nat.compare, n, { b with status = #Amended });
+        };
+      };
+    };
     audit("budget_propose", caller, #Map([("period", #Text(args.period)), ("lines", #Nat(lines.size()))]), #Text("ok"));
+    #Ok(null);
+  };
+
+  // ---- Periods, extension and spending (model §5, D24)
+
+  func currentPeriod() : ?Text = if (periods.size() == 0) null else ?periods[periods.size() - 1];
+
+  func periodOpened(period : Text) : Bool = Array.any<Text>(periods, func(p) { p == period });
+
+  /// Governed by the root. This fixture keeps a period's name and order, nothing else.
+  public shared ({ caller }) func ggg_period_open(args : T.PeriodOpenArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "org.manage_budget")) { case (?e) return #Err(e); case null {} };
+    let ?root = findDepartment(ROOT_ID) else return #Err(#Unavailable("the realm has no root department"));
+    if (Text.size(args.period) == 0) return #Err(#InvalidArgument("period is empty"));
+    if (periodOpened(args.period)) return #Err(#Conflict("period " # args.period # " is open already"));
+    govern(caller, "period_open", root, to_candid (args), "Open period " # args.period, "Opens the period " # args.period # ".", func() {
+      if (periodOpened(args.period)) return #Err(#Conflict("period " # args.period # " is open already"));
+      periods := Array.concat(periods, [args.period]);
+      audit("period_open", caller, #Map([("period", #Text(args.period))]), #Text(args.period));
+      #Ok(?args.period);
+    });
+  };
+
+  /// The lines of `fund` in `period` with any of `statuses`.
+  func linesOf(fund : Text, period : Text, statuses : [T.BudgetStatus]) : [(Nat, T.Budget)] {
+    Iter.toArray(Iter.filter<(Nat, T.Budget)>(Map.entries(budgets), func((_, b)) {
+      b.fund == fund and b.period == period and Array.any<T.BudgetStatus>(statuses, func(s) { s == b.status });
+    }));
+  };
+
+  /// Copies the previous period's adopted lines into `period` as extended, fund by fund, for the funds
+  /// with no extended, proposed or adopted line in it yet (model §5). Replies how many lines it copied.
+  public shared ({ caller }) func ggg_budget_extend(period : Text) : async Result<Nat> {
+    switch (requireMember(caller, "org.manage_budget")) { case (?e) return #Err(e); case null {} };
+    if (not periodOpened(period)) return #Err(#NotFound);
+    // The period opened just before this one.
+    var previous : ?Text = null;
+    label find for (p in periods.vals()) {
+      if (p == period) break find;
+      previous := ?p;
+    };
+    let ?earlier = previous else return #Err(#Conflict("no period before " # period));
+    var copied = 0;
+    for (f in Iter.toArray(Map.values(funds)).vals()) {
+      if (linesOf(f.id, period, [#Extended, #Proposed, #Adopted]).size() == 0) {
+        for ((_, b) in linesOf(f.id, earlier, [#Adopted]).vals()) {
+          let n = nextBudget;
+          nextBudget += 1;
+          Map.add(budgets, Nat.compare, n, { b with id = "B-" # Nat.toText(n); period; status = #Extended; proposal = null });
+          copied += 1;
+        };
+      };
+    };
+    if (copied == 0) return #Err(#Conflict("no fund is left to extend into " # period));
+    audit("budget_extend", caller, #Map([("period", #Text(period)), ("lines", #Nat(copied))]), #Text("ok"));
+    #Ok(copied);
+  };
+
+  /// An adopted budget is exhaustive for its fund: in the current period, a transfer from a fund with an
+  /// adopted budget names a category with an adopted line (model §5, D24).
+  func checkSpending(args : T.TransferCreateArgs) : ?T.GggError {
+    let ?period = currentPeriod() else return null;
+    if (linesOf(args.fund, period, [#Adopted]).size() == 0) return null;
+    let named = switch (args.category) { case (?c) c; case null "" };
+    let budgeted = Array.any<(Nat, T.Budget)>(linesOf(args.fund, period, [#Adopted]), func((_, b)) { b.category == named });
+    if (budgeted) null else ?#Conflict("the adopted budget of " # args.fund # " for " # period # " has no line for that category");
+  };
+
+  /// Governed by the fund's owner (I-FIN-2). This fixture moves no money: it checks the budget and
+  /// records the transfer in the audit log.
+  public shared ({ caller }) func ggg_transfer_create(args : T.TransferCreateArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "transfer.create")) { case (?e) return #Err(e); case null {} };
+    if (args.on_behalf_of != null) return #Err(noDelegation("transfer.create"));
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_transfer_create", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    switch (checkSpending(args)) { case (?e) return #Err(e); case null {} };
+    govern(caller, "transfer_create", governing, arg, "Transfer from " # args.fund, "Transfers from the fund " # args.fund # ".", func() {
+      spend(caller, args);
+    });
+  };
+
+  func spend(caller : Principal, args : T.TransferCreateArgs) : Result<?Text> {
+    switch (checkSpending(args)) { case (?e) return #Err(e); case null {} };
+    audit("transfer_create", caller, #Map([("fund", #Text(args.fund)), ("amount", #Nat(args.amount))]), #Text("ok"));
     #Ok(null);
   };
 
@@ -1154,6 +1255,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case "ggg_budget_propose" {
         let ?args : ?T.BudgetProposeArgs = from_candid (arg) else return undecodable();
         adoptBudget(caller, args, ?p.id);
+      };
+      case "ggg_transfer_create" {
+        let ?args : ?T.TransferCreateArgs = from_candid (arg) else return undecodable();
+        spend(caller, args);
       };
       case "ggg_codex_install" {
         let ?source : ?T.CodexSource = from_candid (arg) else return undecodable();
@@ -1975,15 +2080,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_treasury_configure(_ : T.TreasuryConfigureArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_token_register(_ : T.TokenRegisterArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_nft_token_register(_ : T.NFTTokenRegisterArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
-  public shared ({ caller }) func ggg_transfer_create(_ : T.TransferCreateArgs) : async Result<T.Governed> { nobody(caller, "transfer.create") };
   public shared ({ caller }) func ggg_transfer_revert(_ : T.TransferRevertArgs) : async Result<T.Governed> { nobody(caller, "transfer.delete") };
   public shared ({ caller }) func ggg_invoice_create(_ : T.InvoiceCreateArgs) : async Result<T.InvoiceCreated> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_invoice_check(_ : T.InvoiceCheckArgs) : async Result<T.Invoice> { nobody(caller, "self.invoice_refresh") };
   public shared ({ caller }) func ggg_invoice_refresh(_ : T.InvoiceRefreshArgs) : async Result<T.InvoicePage> { nobody(caller, "invoice.refresh") };
   public shared ({ caller }) func ggg_invoice_item_add(_ : T.InvoiceItemAddArgs) : async Result<T.Invoice> { nobody(caller, "treasury.manage") };
-  public shared ({ caller }) func ggg_period_open(_ : T.PeriodOpenArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_period_close(_ : Text) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
-  public shared ({ caller }) func ggg_budget_extend(_ : Text) : async Result<Nat> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_budget_amend(_ : T.BudgetAmendArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_allocation_rule_draft(_ : T.AllocationRuleDraftArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_allocation_rule_propose(_ : Text) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };

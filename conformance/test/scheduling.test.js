@@ -593,3 +593,46 @@ test('budget lines return to draft when their proposal ends without adopting the
   assert.equal(tag((await finalizeAndRun(carried)).status), 'Executed');
   refusedWith(await as(bob).ggg_budget_propose(budget('FY2028', 'COUNCIL')), 'Conflict');
 });
+
+test('an adopted budget makes the extended lines it replaces amended, and is exhaustive for its fund', async () => {
+  const open = (period) => as(bob).ggg_period_open({ period, name: [], starts_at: 0n, ends_at: 0n });
+  const spend = (fund, category) => as(bob).ggg_transfer_create({
+    fund,
+    to: { kind: 'User', id: alice.getPrincipal().toText() },
+    amount: 10n,
+    symbol: [],
+    category: category ? [category] : [],
+    description: [],
+    contract: [],
+    on_behalf_of: [],
+  });
+  const line = (fund, period, category) => ({ ...lineArgs(fund, period), category });
+  // A fund of the root, so everything applies at once; two periods, the second extended from the first.
+  assert.deepEqual(ok(await as(bob).ggg_fund_create(fundArgs('LIBRARY'))), { Done: ['LIBRARY'] });
+  assert.deepEqual(ok(await open('P1')), { Done: ['P1'] });
+  refusedWith(await open('P1'), 'Conflict');
+  refusedWith(await as(bob).ggg_budget_extend('P1'), 'Conflict'); // no period before it
+  for (const category of ['books', 'events']) ok(await as(bob).ggg_budget_draft(line('LIBRARY', 'P1', category)));
+  ok(await as(bob).ggg_budget_propose(budget('P1', 'LIBRARY')));
+  ok(await open('P2'));
+  refusedWith(await as(bob).ggg_budget_extend('P9'), 'NotFound');
+  assert.equal(ok(await as(bob).ggg_budget_extend('P2')), 2n);
+  refusedWith(await as(bob).ggg_budget_extend('P2'), 'Conflict'); // every fund has its lines
+  // With only extended lines the fund spends as before, in any category.
+  assert.deepEqual(ok(await spend('LIBRARY', 'music')), { Done: [] });
+
+  // The adopted budget for P2 keeps books only: the extended lines are amended, and spending outside
+  // the adopted lines is refused.
+  ok(await as(bob).ggg_budget_draft(line('LIBRARY', 'P2', 'books')));
+  ok(await as(bob).ggg_budget_propose(budget('P2', 'LIBRARY')));
+  assert.deepEqual(ok(await spend('LIBRARY', 'books')), { Done: [] });
+  refusedWith(await spend('LIBRARY', 'events'), 'Conflict');
+  refusedWith(await spend('LIBRARY', null), 'Conflict');
+  // Another fund with no budget spends as before.
+  assert.deepEqual(ok(await spend('GENERAL', 'anything')), { Done: [] });
+
+  // The dropped category does not come back at the next extension: only books is adopted in P2.
+  ok(await open('P3'));
+  assert.equal(ok(await as(bob).ggg_budget_extend('P3')), 1n);
+  refusedWith(await as(bob).ggg_budget_extend('P3'), 'Conflict');
+});
