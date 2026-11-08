@@ -1,14 +1,38 @@
 export const idlFactory = ({ IDL }) => {
   const Value = IDL.Rec();
-  const Ratio = IDL.Nat;
-  const Allocation = IDL.Record({ 'fund' : IDL.Text, 'share' : Ratio });
-  const AllocationRuleDraftArgs = IDL.Record({
-    'source_fund' : IDL.Text,
-    'rules' : IDL.Vec(Allocation),
+  const ActionApproveArgs = IDL.Record({
+    'action' : IDL.Text,
+    'hash' : IDL.Text,
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
   });
-  const Governed = IDL.Variant({
-    'Done' : IDL.Opt(IDL.Text),
-    'Proposed' : IDL.Text,
+  const PendingActionStatus = IDL.Variant({
+    'Failed' : IDL.Null,
+    'Done' : IDL.Null,
+    'Void' : IDL.Null,
+    'Withdrawn' : IDL.Null,
+    'Approving' : IDL.Null,
+    'Declined' : IDL.Null,
+    'Expired' : IDL.Null,
+    'Pending' : IDL.Null,
+  });
+  const Call = IDL.Record({ 'arg' : IDL.Vec(IDL.Nat8), 'method' : IDL.Text });
+  const Timestamp = IDL.Nat64;
+  const SummaryLine = IDL.Record({ 'value' : IDL.Text, 'label' : IDL.Text });
+  const PendingAction = IDL.Record({
+    'id' : IDL.Text,
+    'status' : PendingActionStatus,
+    'result' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+    'call' : Call,
+    'hash' : IDL.Text,
+    'note' : IDL.Opt(IDL.Text),
+    'risk' : IDL.Text,
+    'delegate' : IDL.Principal,
+    'filed_at' : Timestamp,
+    'grantor' : IDL.Principal,
+    'summary' : IDL.Vec(SummaryLine),
+    'grant' : IDL.Text,
+    'expires_at' : Timestamp,
+    'decided_at' : IDL.Opt(Timestamp),
   });
   const GggError = IDL.Variant({
     'GenericError' : IDL.Record({
@@ -25,6 +49,30 @@ export const idlFactory = ({ IDL }) => {
     'Unauthenticated' : IDL.Null,
     'Conflict' : IDL.Text,
   });
+  const ActionDeclineArgs = IDL.Record({
+    'action' : IDL.Text,
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
+  });
+  const ActionListArgs = IDL.Record({
+    'status' : IDL.Opt(PendingActionStatus),
+    'cursor' : IDL.Opt(IDL.Text),
+    'role' : IDL.Variant({ 'Delegate' : IDL.Null, 'Grantor' : IDL.Null }),
+    'limit' : IDL.Opt(IDL.Nat32),
+  });
+  const PendingActionPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(PendingAction),
+  });
+  const Ratio = IDL.Nat;
+  const Allocation = IDL.Record({ 'fund' : IDL.Text, 'share' : Ratio });
+  const AllocationRuleDraftArgs = IDL.Record({
+    'source_fund' : IDL.Text,
+    'rules' : IDL.Vec(Allocation),
+  });
+  const Governed = IDL.Variant({
+    'Done' : IDL.Opt(IDL.Text),
+    'Proposed' : IDL.Text,
+  });
   const PenaltyKind = IDL.Variant({
     'CommunityService' : IDL.Null,
     'Fine' : IDL.Null,
@@ -36,7 +84,6 @@ export const idlFactory = ({ IDL }) => {
     'Revocation' : IDL.Null,
   });
   const Ref = IDL.Record({ 'id' : IDL.Text, 'kind' : IDL.Text });
-  const Timestamp = IDL.Nat64;
   const Money = IDL.Nat;
   const PenaltyTerms = IDL.Record({
     'kind' : PenaltyKind,
@@ -179,6 +226,17 @@ export const idlFactory = ({ IDL }) => {
   const BudgetProposeArgs = IDL.Record({
     'period' : IDL.Text,
     'years' : IDL.Opt(IDL.Nat),
+  });
+  const CallForArgs = IDL.Record({
+    'arg' : IDL.Vec(IDL.Nat8),
+    'method' : IDL.Text,
+    'note' : IDL.Opt(IDL.Text),
+    'on_behalf_of' : IDL.Principal,
+  });
+  const CallForReply = IDL.Variant({
+    'Done' : IDL.Vec(IDL.Nat8),
+    'Proposed' : IDL.Text,
+    'Pending' : PendingAction,
   });
   const CaseAssignArgs = IDL.Record({ 'case' : IDL.Text, 'judge' : IDL.Text });
   const CaseStatus = IDL.Variant({
@@ -396,6 +454,7 @@ export const idlFactory = ({ IDL }) => {
     'by' : IDL.Opt(IDL.Principal),
     'id' : IDL.Text,
     'op' : IDL.Text,
+    'prepared_by' : IDL.Opt(IDL.Principal),
     'supervisor' : IDL.Opt(IDL.Principal),
     'result' : Value,
     'agent' : IDL.Bool,
@@ -1555,6 +1614,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Proposal = IDL.Record({
     'id' : IDL.Text,
+    'prepared_by' : IDL.Opt(IDL.Principal),
     'opens_at' : IDL.Opt(Timestamp),
     'status' : ProposalStatus,
     'result' : IDL.Opt(ProposalResult),
@@ -1684,6 +1744,11 @@ export const idlFactory = ({ IDL }) => {
   const QuarterReport = IDL.Record({
     'quarter' : IDL.Text,
     'drifting' : IDL.Bool,
+  });
+  const ReadForArgs = IDL.Record({
+    'arg' : IDL.Vec(IDL.Nat8),
+    'method' : IDL.Text,
+    'on_behalf_of' : IDL.Principal,
   });
   const RealmConfigureArgs = IDL.Record({
     'timezone' : IDL.Opt(IDL.Text),
@@ -2195,6 +2260,31 @@ export const idlFactory = ({ IDL }) => {
     'on_behalf_of' : IDL.Opt(IDL.Principal),
   });
   return IDL.Service({
+    'ggg_action_approve' : IDL.Func(
+        [ActionApproveArgs],
+        [IDL.Variant({ 'Ok' : PendingAction, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_action_decline' : IDL.Func(
+        [ActionDeclineArgs],
+        [IDL.Variant({ 'Ok' : PendingAction, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_action_get' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(PendingAction), 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_action_list' : IDL.Func(
+        [ActionListArgs],
+        [IDL.Variant({ 'Ok' : PendingActionPage, 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_action_withdraw' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : PendingAction, 'Err' : GggError })],
+        [],
+      ),
     'ggg_allocation_rule_draft' : IDL.Func(
         [AllocationRuleDraftArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
@@ -2293,6 +2383,11 @@ export const idlFactory = ({ IDL }) => {
     'ggg_budget_propose' : IDL.Func(
         [BudgetProposeArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_call_for' : IDL.Func(
+        [CallForArgs],
+        [IDL.Variant({ 'Ok' : CallForReply, 'Err' : GggError })],
         [],
       ),
     'ggg_case_assign' : IDL.Func(
@@ -3029,6 +3124,11 @@ export const idlFactory = ({ IDL }) => {
         [],
         [IDL.Variant({ 'Ok' : QuarterDirectory, 'Err' : GggError })],
         [],
+      ),
+    'ggg_read_for' : IDL.Func(
+        [ReadForArgs],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : GggError })],
+        ['query'],
       ),
     'ggg_realm_configure' : IDL.Func(
         [RealmConfigureArgs],

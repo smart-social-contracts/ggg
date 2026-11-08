@@ -294,6 +294,8 @@ type Proposal = record {
   description : text;
   proposer : principal;
   on_behalf_of : opt principal;
+  // The delegate that prepared the call, when the proposer approved it from a pending action (§2).
+  prepared_by : opt principal;
   department : opt text;
   // What the proposal is (a change of legislation, a budget, a motion) and the matter it decides, in the
   // realm's own words, for legislation to read.
@@ -1060,6 +1062,8 @@ type Event = record {
   by : opt principal;
   // The grant a delegated act ran under.
   grant : opt text;
+  // The delegate that prepared the act, when the member approved it from a pending action (origin `confirmed`).
+  prepared_by : opt principal;
   agent : bool;
   supervisor : opt principal;
   origin : text;
@@ -1250,6 +1254,47 @@ type DelegationDecideArgs = record {
 // it is absent. The member's own act: with `on_behalf_of` it is Forbidden.
 type DelegationRevokeAllArgs = record { cursor : opt text; limit : opt nat32; on_behalf_of : opt principal };
 type DelegationsRevoked = record { revoked : nat; next : opt text };
+
+// Pending actions (model §2): a call in its confirm form, prepared by a delegate under a grant and waiting
+// for the grantor's own approval.
+type Call = record { method : text; arg : blob };
+type PendingActionStatus = variant { Pending; Approving; Done; Failed; Declined; Withdrawn; Expired; Void };
+// One line of the realm's own description of the call.
+type SummaryLine = record { label : text; value : text };
+type PendingAction = record {
+  id : text;
+  grantor : principal;
+  delegate : principal;
+  grant : text;
+  call : Call;
+  summary : vec SummaryLine;
+  risk : text;
+  note : opt text;
+  status : PendingActionStatus;
+  // Seals the record: computed by the GOS over at least the realm, the id, the call, the grantor, the
+  // delegate, the grant and the expiry; a client sends it back unchanged.
+  hash : text;
+  filed_at : Timestamp;
+  expires_at : Timestamp;
+  decided_at : opt Timestamp;
+  // The operation's reply once the action ran, Candid-encoded with the method's own type.
+  result : opt blob;
+};
+type PendingActionPage = record { items : vec PendingAction; next : opt text };
+type ActionListArgs = record {
+  role : variant { Grantor; Delegate };
+  status : opt PendingActionStatus;
+  cursor : opt text;
+  limit : opt nat32;
+};
+// The grantor's own act: never under a grant, so `on_behalf_of` is refused.
+type ActionApproveArgs = record { action : text; hash : text; on_behalf_of : opt principal };
+type ActionDeclineArgs = record { action : text; on_behalf_of : opt principal };
+// One call on a grantor's behalf: `arg` is Candid-encoded with the method's own argument type. A confirm
+// operation files a pending action; a direct one runs, or files the proposal a governed call files.
+type CallForArgs = record { method : text; arg : blob; on_behalf_of : principal; note : opt text };
+type CallForReply = variant { Done : blob; Proposed : text; Pending : PendingAction };
+type ReadForArgs = record { method : text; arg : blob; on_behalf_of : principal };
 
 // §3
 
@@ -2011,6 +2056,9 @@ service : {
   ggg_delegable_operations : () -> (variant { Ok : vec DelegableOperation; Err : GggError }) query;
   ggg_delegation_groups : (DelegationGroupsArgs) -> (variant { Ok : DelegationGroupPage; Err : GggError }) query;
   ggg_delegation_activity : (DelegationActivityArgs) -> (variant { Ok : EventPage; Err : GggError }) query;
+  ggg_action_get : (text) -> (variant { Ok : opt PendingAction; Err : GggError }) query;
+  ggg_action_list : (ActionListArgs) -> (variant { Ok : PendingActionPage; Err : GggError }) query;
+  ggg_read_for : (ReadForArgs) -> (variant { Ok : blob; Err : GggError }) query;
   ggg_me : (MeArgs) -> (variant { Ok : Me; Err : GggError }) query;
   ggg_realm_join : (JoinArgs) -> (variant { Ok : UserEntry; Err : GggError });
   ggg_profile_update : (ProfileUpdateArgs) -> (variant { Ok : User; Err : GggError });
@@ -2036,6 +2084,10 @@ service : {
   ggg_delegation_request : (DelegationRequestArgs) -> (variant { Ok : DelegationRequest; Err : GggError });
   ggg_delegation_request_decide : (DelegationDecideArgs) -> (variant { Ok : opt Delegation; Err : GggError });
   ggg_delegation_revoke_all : (DelegationRevokeAllArgs) -> (variant { Ok : DelegationsRevoked; Err : GggError });
+  ggg_action_approve : (ActionApproveArgs) -> (variant { Ok : PendingAction; Err : GggError });
+  ggg_action_decline : (ActionDeclineArgs) -> (variant { Ok : PendingAction; Err : GggError });
+  ggg_action_withdraw : (text) -> (variant { Ok : PendingAction; Err : GggError });
+  ggg_call_for : (CallForArgs) -> (variant { Ok : CallForReply; Err : GggError });
 
   // §3
   ggg_department_get : (GetArgs) -> (variant { Ok : opt DepartmentDetail; Err : GggError }) query;

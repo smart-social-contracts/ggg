@@ -223,6 +223,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       user = ?user;
       by = null;
       grant = null;
+      prepared_by = null;
       agent = false;
       supervisor = null;
       origin = "user";
@@ -405,6 +406,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         "org.set_policy",
         "realm.data_view",
         "realm.monitor",
+        "self.confirm",
       ];
       delegations = [];
       requests = [];
@@ -502,6 +504,54 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_delegation_request_decide(_ : T.DelegationDecideArgs) : async Result<?T.Delegation> {
     nobody(caller, "self.delegate");
   };
+  // Pending actions (model §2). Nobody delegates here, so none is ever filed.
+
+  public query ({ caller }) func ggg_action_get(_ : Text) : async Result<?T.PendingAction> {
+    switch (requireMember(caller, "self.data_view")) { case (?e) return #Err(e); case null {} };
+    #Ok(null);
+  };
+
+  public query ({ caller }) func ggg_action_list(args : T.ActionListArgs) : async Result<T.PendingActionPage> {
+    switch (requireMember(caller, "self.data_view")) { case (?e) return #Err(e); case null {} };
+    none(args.cursor, args.limit);
+  };
+
+  /// Approving or declining is the member's own act: refused under any grant before the action is looked up.
+  func decide(caller : Principal, on_behalf_of : ?Principal) : Result<T.PendingAction> {
+    switch (requireMember(caller, "self.confirm")) { case (?e) return #Err(e); case null {} };
+    if (on_behalf_of != null) {
+      return #Err(#Forbidden({ permission = ?"self.confirm"; message = "Approving or declining a pending action is the member's own act: never under a grant." }));
+    };
+    #Err(#NotFound);
+  };
+  public shared ({ caller }) func ggg_action_approve(args : T.ActionApproveArgs) : async Result<T.PendingAction> {
+    decide(caller, args.on_behalf_of);
+  };
+  public shared ({ caller }) func ggg_action_decline(args : T.ActionDeclineArgs) : async Result<T.PendingAction> {
+    decide(caller, args.on_behalf_of);
+  };
+  public shared ({ caller }) func ggg_action_withdraw(_ : Text) : async Result<T.PendingAction> {
+    if (Principal.isAnonymous(caller)) return #Err(#Unauthenticated);
+    #Err(#NotFound);
+  };
+
+  /// Why a generic call on a grantor's behalf is refused here: it must carry a method of ggg.did other than
+  /// the generic calls themselves, for someone other than the caller; and nobody has granted a delegation.
+  func noGenericCall(caller : Principal, method : Text, on_behalf_of : Principal) : T.GggError {
+    if (Principal.isAnonymous(caller)) return #Unauthenticated;
+    if (not Text.startsWith(method, #text "ggg_") or method == "ggg_call_for" or method == "ggg_read_for") {
+      return #InvalidArgument(method # " cannot be carried by the generic call");
+    };
+    if (on_behalf_of == caller) return #InvalidArgument("on_behalf_of is the caller");
+    #Forbidden({ permission = null; message = "No active delegation from that principal covers " # method # "." });
+  };
+  public shared ({ caller }) func ggg_call_for(args : T.CallForArgs) : async Result<T.CallForReply> {
+    #Err(noGenericCall(caller, args.method, args.on_behalf_of));
+  };
+  public query ({ caller }) func ggg_read_for(args : T.ReadForArgs) : async Result<Blob> {
+    #Err(noGenericCall(caller, args.method, args.on_behalf_of));
+  };
+
   /// Revoking every grant is the member's own act, refused under any grant before anything else.
   public shared ({ caller }) func ggg_delegation_revoke_all(args : T.DelegationRevokeAllArgs) : async Result<T.DelegationsRevoked> {
     switch (requireMember(caller, "self.delegate")) { case (?e) return #Err(e); case null {} };
@@ -677,6 +727,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       description;
       proposer;
       on_behalf_of = null;
+      prepared_by = null;
       department = scopeOf(department);
       kind;
       matter;

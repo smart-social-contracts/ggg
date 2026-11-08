@@ -205,6 +205,67 @@
       },
       "read": true
     },
+    "action_get": {
+      "operation": "ggg_action_get",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      },
+      "read": true
+    },
+    "action_list": {
+      "operation": "ggg_action_list",
+      "facts": {
+        "role": {
+          "type": "variant",
+          "values": [
+            "Grantor",
+            "Delegate"
+          ]
+        },
+        "status": {
+          "type": "PendingActionStatus",
+          "values": [
+            "Pending",
+            "Approving",
+            "Done",
+            "Failed",
+            "Declined",
+            "Withdrawn",
+            "Expired",
+            "Void"
+          ],
+          "optional": true
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "read_for": {
+      "operation": "ggg_read_for",
+      "facts": {
+        "method": {
+          "type": "text"
+        },
+        "arg": {
+          "type": "blob"
+        },
+        "on_behalf_of": {
+          "type": "principal"
+        }
+      },
+      "read": true
+    },
     "me": {
       "operation": "ggg_me",
       "facts": {
@@ -705,6 +766,59 @@
         },
         "on_behalf_of": {
           "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "action_approve": {
+      "operation": "ggg_action_approve",
+      "facts": {
+        "action": {
+          "type": "text"
+        },
+        "hash": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "action_decline": {
+      "operation": "ggg_action_decline",
+      "facts": {
+        "action": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "action_withdraw": {
+      "operation": "ggg_action_withdraw",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "call_for": {
+      "operation": "ggg_call_for",
+      "facts": {
+        "method": {
+          "type": "text"
+        },
+        "arg": {
+          "type": "blob"
+        },
+        "on_behalf_of": {
+          "type": "principal"
+        },
+        "note": {
+          "type": "text",
           "optional": true
         }
       }

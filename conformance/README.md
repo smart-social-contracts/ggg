@@ -13,7 +13,8 @@ Without `--writes`, the suite makes queries, plus update calls that a compliant 
 without changing anything. With `--writes` and a member's key, it also files a Motion proposal
 titled "GGG conformance check …", votes on it twice and withdraws it. Every update is also called
 anonymously, and every update that takes `on_behalf_of` on behalf of a stranger, with arguments generated from
-`ggg.did`, expecting both to be refused. Use a
+`ggg.did`, expecting both to be refused; the generic call `ggg_call_for` is tried on behalf of a stranger and
+carrying a member-only operation, expecting a refusal too. Use a
 test realm, or a realm where that is acceptable.
 
 Reads run as the member when one is given, because a GOS may refuse reads that need a model
