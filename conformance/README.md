@@ -16,8 +16,10 @@ anonymously, and every update that takes `on_behalf_of` on behalf of a stranger,
 `ggg.did`, expecting both to be refused. Use a
 test realm, or a realm where that is acceptable.
 
-Reads run as the member when one is given, because a GOS may refuse reads that need a model
-permission to anonymous callers. Every list is walked page by page and sent a malformed cursor, and
+When the member holds active grants from two members, one to propose and one to vote, the suite also
+files a motion for the first and expects a vote for the second on it to be refused: a delegate never
+votes on what it filed. Reads run as the member when one is given, because a GOS may refuse reads
+that need a model permission to anonymous callers. Every list is walked page by page and sent a malformed cursor, and
 every lookup by id is asked for an id that doesn't exist, so a realm with nothing in a domain is
 checked too.
 
