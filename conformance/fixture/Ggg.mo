@@ -1482,10 +1482,10 @@ module {
   public type PendingAction = {
     id : Text;
     status : PendingActionStatus;
-    /// The operation's reply once the action ran, Candid-encoded with the method's own type, without what
+    /// The reply of an approved update once it ran, Candid-encoded with the method's own type, without what
     /// the event log strips: a secret it returns, such as an invite code, is in the approval's own reply alone.
-    /// A confirm read of third parties' personal data keeps none: the delegate gets the reply once, at its
-    /// first action_get, and the field is then cleared.
+    /// An approved read stores nothing: the approval authorises one run, which the delegate collects with
+    /// ggg_action_collect.
     result : ?Blob;
     call : Call;
     /// Seals the record: computed by the GOS, with sha256 or a stronger hash, over at least the realm, the
@@ -1502,10 +1502,12 @@ module {
     decided_at : ?Timestamp;
   };
   public type PendingActionPage = { next : ?Text; items : [PendingAction] };
+  /// Approved: a read the grantor approved, waiting for the delegate to collect it (ggg_action_collect).
   public type PendingActionStatus = {
     #Failed;
     #Done;
     #Void;
+    #Approved;
     #Withdrawn;
     #Approving;
     #Declined;
@@ -2375,6 +2377,9 @@ module {
         #Ok : PendingAction;
         #Err : GggError;
       };
+    /// The delegate that prepared an approved read runs it once, as the grantor, at this moment: the reply,
+    /// Candid-encoded with the method's own type. A second call is Conflict, a call after expires_at too.
+    ggg_action_collect : shared Text -> async { #Ok : Blob; #Err : GggError };
     ggg_action_decline : shared ActionDeclineArgs -> async {
         #Ok : PendingAction;
         #Err : GggError;

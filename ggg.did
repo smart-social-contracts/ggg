@@ -1296,7 +1296,8 @@ type DelegationsRevoked = record { revoked : nat; next : opt text };
 // Pending actions (model §2): a call in its confirm form, prepared by a delegate under a grant and waiting
 // for the grantor's own approval.
 type Call = record { method : text; arg : blob };
-type PendingActionStatus = variant { Pending; Approving; Done; Failed; Declined; Withdrawn; Expired; Void };
+// Approved: a read the grantor approved, waiting for the delegate to collect it (ggg_action_collect).
+type PendingActionStatus = variant { Pending; Approved; Approving; Done; Failed; Declined; Withdrawn; Expired; Void };
 // One line of the realm's own description of the call.
 type SummaryLine = record { label : text; value : text };
 type PendingAction = record {
@@ -1315,10 +1316,10 @@ type PendingAction = record {
   filed_at : Timestamp;
   expires_at : Timestamp;
   decided_at : opt Timestamp;
-  // The operation's reply once the action ran, Candid-encoded with the method's own type, without what
+  // The reply of an approved update once it ran, Candid-encoded with the method's own type, without what
   // the event log strips: a secret it returns, such as an invite code, is in the approval's own reply alone.
-  // A confirm read of third parties' personal data keeps none: the delegate gets the reply once, at its
-  // first action_get, and the field is then cleared.
+  // An approved read stores nothing: the approval authorises one run, which the delegate collects with
+  // ggg_action_collect.
   result : opt blob;
 };
 type PendingActionPage = record { items : vec PendingAction; next : opt text };
@@ -2180,6 +2181,9 @@ service : {
   ggg_action_approve : (ActionApproveArgs) -> (variant { Ok : PendingAction; Err : GggError });
   ggg_action_decline : (ActionDeclineArgs) -> (variant { Ok : PendingAction; Err : GggError });
   ggg_action_withdraw : (text) -> (variant { Ok : PendingAction; Err : GggError });
+  // The delegate that prepared an approved read runs it once, as the grantor, at this moment: the reply,
+  // Candid-encoded with the method's own type. A second call is Conflict, a call after expires_at too.
+  ggg_action_collect : (text) -> (variant { Ok : blob; Err : GggError });
   ggg_call_for : (CallForArgs) -> (variant { Ok : CallForReply; Err : GggError });
 
   // §3

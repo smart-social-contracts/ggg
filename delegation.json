@@ -186,6 +186,7 @@
     "action_approve": { "tier": "member" },
     "action_decline": { "tier": "member" },
     "action_withdraw": { "tier": "none" },
+    "action_collect": { "tier": "none" },
     "call_for": { "tier": "none" },
     "read_for": { "tier": "none" },
 

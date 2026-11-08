@@ -911,6 +911,22 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     err(result, ['NotFound', 'Forbidden', 'InvalidArgument'], 'ggg_action_approve(unknown)');
   });
 
+  await check('GGG', 'W24', 'ggg_read_for refuses a read that asks each time', async () => {
+    needMember();
+    // The one read that asks each time (delegation.json): it goes through ggg_call_for, as a pending action.
+    const method = 'ggg_attribute_pending_list';
+    const bound = idlFactory({ IDL })._fields.find(([name]) => name === method);
+    if (!bound) throw new Skip(`${method} is not in this ggg.did`);
+    const stranger = Ed25519KeyIdentity.generate().getPrincipal();
+    const result = await mine.ggg_read_for({ method, arg: encodeArgs(method, bound[1].argTypes.map(blank)), on_behalf_of: stranger });
+    err(result, ['Forbidden'], `ggg_read_for(${method})`);
+  });
+
+  await check('GGG', 'W25', 'collecting a pending action that does not exist is refused', async () => {
+    needMember();
+    err(await mine.ggg_action_collect(UNKNOWN), ['NotFound', 'Forbidden'], 'ggg_action_collect(unknown)');
+  });
+
   await check('GGG', 'W23', 'a delegate never votes on a proposal it filed, whichever grantor it votes for', async () => {
     needMember();
     const grants = await walk((a) => mine.ggg_delegation_list({ ...a, role: { Delegate: null } }), (d) => d.id);

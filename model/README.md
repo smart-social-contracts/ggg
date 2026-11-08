@@ -103,11 +103,12 @@ method per operation:
   the same call, `Call { method; arg }`, and replaying it applies the change. A `delegable` operation
   whose arguments carry `on_behalf_of : opt principal` is called on the grantor's behalf with it; the
   other delegable operations are reached on a grantor's behalf through `call_for` and `read_for`
-  ([Pending actions](#pending-actions)), which also file a call in its `confirm` form (a `confirm`
-  operation, or a `direct` one whose condition holds) as a pending action. Such a call through its own
-  method with `on_behalf_of` is `Forbidden`, and the message says to file it through `call_for`: the
-  method's own reply type has no place for a pending action. A `member` operation that carries
-  `on_behalf_of` refuses it: it is the member's own act.
+  ([Pending actions](#pending-actions)). `call_for` also files a call in its `confirm` form (a `confirm`
+  operation, or a `direct` one whose condition holds), an update or a read, as a pending action;
+  `read_for` carries direct reads alone and refuses a `confirm` one. Such a call through its own method
+  with `on_behalf_of` is `Forbidden`, and the message says to file it through `call_for`: the method's
+  own reply type has no place for a pending action. A `member` operation that carries `on_behalf_of`
+  refuses it: it is the member's own act.
 - **Kinds.** `Ratio`, `Rate`, `Money`, `SignedMoney`, `Area`, `Timestamp`, `Duration` and `Period` are
   named aliases, so a field's unit and range can be read off `ggg.did`. [`facts.json`](../facts.json)
   lists them for every operation's facts, with every fact's range
@@ -184,8 +185,9 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 - `Identity`: `pending` → `verified` | `rejected`.
 - `Attribute.status`: `pending` → `verified` | `rejected`.
 - `Delegation.status`: `pending` → `active` → `revoked` | `expired`; `pending` → `declined`.
-- `PendingAction.status`: `pending` → `approving` → `done` | `failed`; `pending` → `declined` | `withdrawn` |
-  `expired` | `void`.
+- `PendingAction.status`: an update `pending` → `approving` → `done` | `failed`; a read `pending` →
+  `approved` → `done` (collected) | `expired`; either `pending` → `declined` | `withdrawn` | `expired` |
+  `void`.
 
 ### Operations
 
@@ -222,6 +224,7 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `action_list` (the caller's pending actions, as grantor or as delegate, optionally by status) | `self.join` | read, delegable | Alice's "Waiting for you": `AC-12` and `AC-13` |
 | `action_approve` (by its hash), `action_decline` | `self.confirm` | | Alice approves `AC-12`: the realm adds the payout account as her own act. Never under a grant |
 | `action_withdraw` (by the delegate, as itself) | `self.join` | | Claude withdraws `AC-13` to file it again with the right address |
+| `action_collect` (by the delegate that prepared an approved read, once, as itself) | `self.join` | | Dana approved `AC-14`; Claude collects the attributes awaiting her review, once |
 | `call_for` (one call on a grantor's behalf: a `confirm` operation files a pending action, a `direct` one runs) | `self.join` (and the carried method's, held by the grantor) | | Claude: `{method: "ggg_payment_account_add", arg: …, on_behalf_of: "alice"}` → `Pending AC-12` |
 | `read_for` (one read on a grantor's behalf) | `self.join` (and the carried method's, held by the grantor) | read | Claude reads Alice's key envelopes for her |
 
@@ -316,8 +319,8 @@ A call in its confirm form (a `confirm` operation, or a `direct` one whose condi
 [§1](#operations)) is never done directly under a grant. The delegate prepares it, and the grantor's own
 approval runs it:
 
-1. **Filing.** The delegate calls `call_for` with the method, its Candid-encoded arguments,
-   `on_behalf_of` the grantor and an optional `note`. When the grant is active and covers the
+1. **Filing.** The delegate calls `call_for` with the method, an update or a read, its Candid-encoded
+   arguments, `on_behalf_of` the grantor and an optional `note`. When the grant is active and covers the
    operation's group, the grantor acting for themselves would be allowed the call now, and fewer than
    10 actions are open between the two, the GOS stores a `PendingAction`, replies `Pending` with it and
    notifies the grantor. Otherwise the call is refused as any delegated call would be. A call in its
@@ -340,13 +343,17 @@ approval runs it:
    decoded at filing, as the grantor, with every check the grantor's own call would meet now
    (permission, guardrails, parties, banned status), and stores the reply as `result`, without what the
    event log strips (a secret the operation returns, such as an invite code, is in the approval's own
-   reply alone): `done`, or `failed`. A `confirm` read that returns third parties' personal data keeps
-   no `result` at all: the approved action gives the reply once to the delegate that prepared it, at
-   its first `action_get`, and `result` is then cleared (I-PRV-1). A governed call goes as the
-   grantor's own call would: at once where the governing department decides directly, else as the
-   grantor's own proposal, with
+   reply alone): `done`, or `failed`. A governed call goes as the grantor's own call would: at once
+   where the governing department decides directly, else as the grantor's own proposal, with
    `Proposal.prepared_by` the delegate. An action left `approving` after a trap ends `failed` and is
    never retried.
+   **A read is approved, then collected.** Approving a `confirm` read stores nothing: it authorises
+   exactly one run, and the action is `approved`. The delegate that prepared it calls `action_collect`
+   once, before `expires_at`: the GOS runs the stored read as the grantor at that moment, returns the
+   reply, Candid-encoded with the method's own type, and marks the action `done`. A second call is
+   `Conflict`, a call after `expires_at` is `Conflict` and the action reads `expired`, and a call by
+   anyone else is `Forbidden`. `result` stays empty, `action_get` and `action_list` never carry the
+   data, and what was decided between approval and collection is no longer returned (I-PRV-1).
 4. **Ending otherwise.** `expired` once `expires_at` passes; `void` once its grant is revoked,
    replaced, expires or loses the group. Unlike a proposal filed under a grant (I-ID-10), a pending
    action does not outlive its grant.
@@ -356,12 +363,13 @@ approval runs it:
 
 `action_get` returns an action to its grantor or its delegate, and `Ok(null)` to anyone else;
 `action_list` pages the caller's actions as grantor or as delegate, optionally by status. `read_for`
-is the query twin of `call_for`: one read on the grantor's behalf, replying the method's own reply,
-Candid-encoded. Both carry only a `direct` or `confirm` operation, and refuse a method that is not in
-`ggg.did`, an update through `read_for` or a query through `call_for`, themselves, a `member`,
-`founder` or `none` operation, `on_behalf_of` equal to the caller, and an `arg` whose own
-`on_behalf_of` is set and differs from the outer one (`InvalidArgument`: there is no chaining through
-another grant). They are the delegate's own calls (tier `none`): the grant and the permission checked
+is the query twin of `call_for`: one direct read on the grantor's behalf, replying the method's own
+reply, Candid-encoded; a `confirm` read through it is `Forbidden`, with a message that says to file it
+through `call_for`, which files it as a pending action. Both carry only a `direct` or `confirm`
+operation, and refuse a method that is not in `ggg.did`, an update through `read_for` or a direct
+read through `call_for`, themselves, a `member`, `founder` or `none` operation, `on_behalf_of` equal
+to the caller, and an `arg` whose own `on_behalf_of` is set and differs from the outer one
+(`InvalidArgument`: there is no chaining through another grant). They are the delegate's own calls (tier `none`): the grant and the permission checked
 are the grantor's, for the method they carry. A call in its confirm form through its own method with
 `on_behalf_of` is `Forbidden`, with a message that says to file it through `call_for` ([§1](#operations)).
 
@@ -1351,9 +1359,9 @@ is its proposal's `effective_at` (I-GOV-5).
 - I-PRV-1: The realm never holds private content or an unwrapped data key, only ciphertext
   references, hashes and wrapped keys. One exception: an attribute's `kind` and `value` (§2) are in
   clear, and readable only by the person they belong to (`attribute_list`), by the holders of
-  `attribute.review` while it awaits review (`attribute_pending_list`), by the codex and, once, by the
-  delegate whose approved action read them ([§2](#pending-actions)); the audit log never holds them. A
-  request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
+  `attribute.review` while it awaits review (`attribute_pending_list`), by the codex and, once and at
+  collection, by the delegate of an approved read ([§2](#pending-actions)); the audit log never holds
+  them. A request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
   `Document` reference, encrypted, never text in clear, and a published copy (`Document.public`) holds
   no personal data.
 - I-PRV-2: Only a scope's managers grant or revoke its keys, or see who holds them.

@@ -59,7 +59,9 @@ under one grant; `ggg_delegation_revoke_all` ends every grant the member gave. T
 in [`delegation.json`](../delegation.json). A delegate acts through `ggg_call_for` (and reads through
 `ggg_read_for`): a direct operation runs, and an operation that asks the member each time comes back
 `Pending`, with the action's id and hash. The client gives the member the realm's link to it, and reads
-the outcome with `ggg_action_get` once the member has approved or declined it in the realm.
+the outcome with `ggg_action_get` once the member has approved or declined it in the realm. An approved
+read stores nothing: the client collects it once with `ggg_action_collect`, which runs the read at that
+moment and returns the reply.
 
 ### State
 
