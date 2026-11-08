@@ -1478,11 +1478,12 @@ module {
   public type PendingAction = {
     id : Text;
     status : PendingActionStatus;
-    /// The operation's reply once the action ran, Candid-encoded with the method's own type.
+    /// The operation's reply once the action ran, Candid-encoded with the method's own type, without what
+    /// the event log strips: a secret it returns, such as an invite code, is in the approval's own reply alone.
     result : ?Blob;
     call : Call;
-    /// Seals the record: computed by the GOS over at least the realm, the id, the call, the grantor, the
-    /// delegate, the grant and the expiry; a client sends it back unchanged.
+    /// Seals the record: computed by the GOS, with sha256 or a stronger hash, over at least the realm, the
+    /// id, the call, the grantor, the delegate, the grant and the expiry; a client sends it back unchanged.
     hash : Text;
     note : ?Text;
     risk : Text;
