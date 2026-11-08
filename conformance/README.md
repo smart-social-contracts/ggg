@@ -59,6 +59,6 @@ path.
   decides (model I-GOV-3): over the eligible voters a tie rejects, a majority accepts, absentees count
   against.
 - `fixture/Ggg.mo` holds the Motoko types generated from `ggg.did`.
-- `fixture/main.mo` is a minimal Motoko GOS: members and proposals, and every other domain empty. The build checks its interface against `ggg.did` with
+- `fixture/main.mo` is a minimal Motoko GOS: members, four departments and proposals, and every other domain empty. The build checks its interface against `ggg.did` with
   `didc check`, and the tests expect it to pass every check.
 - `fixture/broken.mo` breaks GGG on purpose, and the tests expect the checks to fail.

@@ -1,4 +1,5 @@
-// The life of a proposal with an effective_at, driven on PocketIC with its own clock.
+// The life of a proposal with an effective_at, driven on PocketIC with its own clock, and which
+// proposal may carry a call on another's records (I-GOV-13).
 // The fixture decides a vote after its deadline (7 days), or earlier once both members have voted, so
 // the tests move the clock forward.
 //
@@ -62,13 +63,12 @@ const motion = { Motion: null };
 const stopping = (id) => ({ Call: { method: 'ggg_proposal_stop', arg: new Uint8Array(IDL.encode([IDL.Text], [id])) } });
 
 /**
- * Files a proposal as Alice, with Alice voting yes, and Bob too when `everyone` is set (then every
- * eligible member has voted). `days` is when it takes effect, counted from now. `department` is the
- * proposal's scope.
+ * Files a proposal as Alice and returns the reply. `days` is when it takes effect, counted from now.
+ * `department` is the proposal's scope.
  */
-async function file({ action = motion, days = null, everyone = false, department = null } = {}) {
+async function create({ action = motion, days = null, department = null } = {}) {
   const effective_at = days === null ? [] : [(await nowNs()) + BigInt(days * DAY_MS) * 1_000_000n];
-  const id = ok(await as(alice).ggg_proposal_create({
+  return as(alice).ggg_proposal_create({
     title: 'A proposal',
     description: '',
     department: department ? [department] : [],
@@ -81,12 +81,34 @@ async function file({ action = motion, days = null, everyone = false, department
     effective_at,
     links: [],
     on_behalf_of: [],
-  }));
+  });
+}
+
+/**
+ * Files a proposal as Alice, with Alice voting yes, and Bob too when `everyone` is set (then every
+ * eligible member has voted).
+ */
+async function file({ everyone = false, ...proposal } = {}) {
+  const id = ok(await create(proposal));
   for (const voter of everyone ? [alice, bob] : [alice]) {
     ok(await as(voter).ggg_proposal_vote({ proposal: id, choice: { Yes: null }, on_behalf_of: [] }));
   }
   return id;
 }
+
+/**
+ * An action a department's proposal may carry (I-GOV-13): a stop of one of that department's own
+ * proposals, here one that is never run. A realm-wide proposal may carry a stop of anything, even of
+ * a proposal that does not exist, so those use stopping('0').
+ */
+const ownStop = async (department) => stopping(await file({ department }));
+
+/** The department_edit arguments that move a department under `parent`. */
+const move = (department, parent) => ({ department, parent: [parent], description: [], kind: [], head: [] });
+const parentOf = async (department) => {
+  const detail = ok(await as(alice).ggg_department_get({ id: department, cursor: [], limit: [] }));
+  return detail[0].department.parent;
+};
 
 const get = async (id) => ok(await as(alice).ggg_proposal_get({ id, cursor: [], limit: [] }))[0].proposal;
 const status = async (id) => tag((await get(id)).status);
@@ -315,7 +337,7 @@ test('a proposal decided before effective_at is scheduled, though its deadline i
 test('proposal_stop follows the policy of the department that owns the proposal', async () => {
   // The root decides alone, so a stop of a realm-wide proposal applies at once (above). The council
   // decides 2 of 3, so a stop of one of its proposals files a proposal of the council instead.
-  const target = await file({ action: stopping('0'), days: 40, everyone: true, department: 'council' });
+  const target = await file({ action: await ownStop('council'), days: 40, everyone: true, department: 'council' });
   await wait(1);
   assert.equal(await finalize(target), 'ExecutionScheduled');
 
@@ -348,8 +370,8 @@ test('a stop proposal that runs after its target executed, or was withdrawn, end
   };
 
   // The target takes effect before the stop proposal is finalized. Everything here is a council
-  // proposal, so no council vote has to stop a realm-wide proposal (ggg#15).
-  const far = await file({ action: stopping('0'), days: 60, everyone: true, department: 'council' });
+  // proposal: a council vote may not stop a realm-wide one (I-GOV-13).
+  const far = await file({ action: await ownStop('council'), days: 60, everyone: true, department: 'council' });
   const executing = await file({ action: stopping(far), days: 3, everyone: true, department: 'council' });
   await wait(1);
   await finalize(far);
@@ -362,7 +384,7 @@ test('a stop proposal that runs after its target executed, or was withdrawn, end
   assert.equal(await status(executing), 'Executed');
 
   // Another stop proposal ended the target first.
-  const target = await file({ action: stopping('0'), days: 40, everyone: true, department: 'council' });
+  const target = await file({ action: await ownStop('council'), days: 40, everyone: true, department: 'council' });
   assert.equal(await finalize(target), 'ExecutionScheduled');
   const first = await stopProposal(target);
   const second = await stopProposal(target);
@@ -372,4 +394,52 @@ test('a stop proposal that runs after its target executed, or was withdrawn, end
   assert.equal(await status(target), 'Withdrawn');
   await failed(second);
   assert.equal(await status(target), 'Withdrawn');
+});
+
+test("a department's proposal cannot carry a stop of a realm-wide scheduled proposal", async () => {
+  // The council's vote is a few seats', not the realm's (I-GOV-13).
+  const realmWide = await file({ action: stopping('0'), days: 40, everyone: true });
+  await wait(1);
+  assert.equal(await finalize(realmWide), 'ExecutionScheduled');
+  refusedWith(await create({ action: stopping(realmWide), department: 'council' }), 'Forbidden');
+  assert.equal(await status(realmWide), 'ExecutionScheduled');
+});
+
+test("a realm-wide proposal stops a department's scheduled proposal", async () => {
+  const target = await file({ action: await ownStop('council'), days: 40, everyone: true, department: 'council' });
+  await wait(1);
+  assert.equal(await finalize(target), 'ExecutionScheduled');
+  const stopper = await file({ action: stopping(target), everyone: true });
+  assert.equal(tag((await finalizeAndRun(stopper)).status), 'Executed');
+  assert.equal(await status(target), 'Withdrawn');
+});
+
+test("a parent department's proposal stops a scheduled proposal of a department below it; a sibling's cannot", async () => {
+  // Roads and parks are committees under the council.
+  const target = await file({ action: await ownStop('roads'), days: 40, everyone: true, department: 'roads' });
+  await wait(1);
+  assert.equal(await finalize(target), 'ExecutionScheduled');
+  refusedWith(await create({ action: stopping(target), department: 'parks' }), 'Forbidden');
+  const stopper = await file({ action: stopping(target), everyone: true, department: 'council' });
+  assert.equal(tag((await finalizeAndRun(stopper)).status), 'Executed');
+  assert.equal(await status(target), 'Withdrawn');
+});
+
+test('a proposal whose department no longer governs its call when it runs ends Failed', async () => {
+  const target = await file({ action: await ownStop('roads'), days: 40, everyone: true, department: 'roads' });
+  const stopper = await file({ action: stopping(target), days: 3, everyone: true, department: 'council' });
+  await wait(1);
+  assert.equal(await finalize(target), 'ExecutionScheduled');
+  assert.equal(await finalize(stopper), 'ExecutionScheduled');
+  // Roads moves out from under the council before the stop runs: the council's vote no longer reaches it.
+  assert.deepEqual(ok(await as(bob).ggg_department_edit(move('roads', 'root'))), { Done: [] });
+  assert.deepEqual(await parentOf('roads'), ['root']);
+  await wait(2.5);
+  const ran = await runScheduled(stopper);
+  assert.equal(tag(ran.status), 'Failed');
+  assert.deepEqual(ran.result.map(tag), ['Error']);
+  assert.equal(await status(target), 'ExecutionScheduled');
+  // Back under the council, for the tests that follow.
+  ok(await as(bob).ggg_department_edit(move('roads', 'council')));
+  assert.deepEqual(await parentOf('roads'), ['council']);
 });

@@ -2,19 +2,23 @@
 /// Members are fixed at install time. They may propose, vote, manage proposals (open, finalize,
 /// execute and stop them), set the realm's governance rule (governance_update, which the root's direct
 /// policy applies at once), read the realm and manage their own profile; every other permission is
-/// held by nobody, so those operations are refused. There are two departments: the root, with a
-/// direct policy, so a governed call on a realm-wide proposal is applied at once; and a council
-/// under it, deciding 2 of 3, so a governed call on one of its proposals files a proposal instead.
-/// The council has no seats: its proposals are counted like any other here, by every member, and its
-/// policy only makes a stop file a proposal instead of applying at once. So the fixture never ends a
+/// held by nobody, so those operations are refused. There are four departments: the root, with a
+/// direct policy, so a governed call on a realm-wide proposal is applied at once; a council under
+/// it, deciding 2 of 3, so a governed call on one of its proposals files a proposal instead; and two
+/// committees under the council, each deciding alone, so that a proposal of the council can carry a
+/// call on a committee's records where a committee's cannot carry one on its sibling's (I-GOV-13).
+/// Members may also edit a department (department_edit, governed by that department), so a committee
+/// can be moved while a proposal that acts on it waits. No department has seats: their proposals are
+/// counted like any other here, by every member, and a policy only decides whether a governed call on
+/// the department's records applies at once or files a proposal. So the fixture never ends a
 /// department vote early (I-GOV-7 allows it, it does not require it): that needs seats to count and
 /// veto holders, who must hold a seat (I-ORG-5). Nor does it settle a proposal as its vote ends or run
 /// an accepted action as it finalizes (I-GOV-12): proposal_finalize records the outcome of a vote that
 /// has ended, and proposal_execute runs the action. Nobody has granted a delegation, so nobody acts on
 /// another's behalf. Every other domain is empty, which the model allows. A proposal's rule is the
 /// realm's over the votes cast unless the proposer states a stricter one, which the fixture stores and
-/// applies (I-GOV-3); its department has no seats, so its proposals keep that rule too, while a GOS with
-/// seats sets a department proposal's threshold to the policy's m/n over the eligible seats.
+/// applies (I-GOV-3); the departments have no seats, so their proposals keep that rule too, while a GOS
+/// with seats sets a department proposal's threshold to the policy's m/n over the eligible seats.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
@@ -48,38 +52,43 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   /// proposal only.
   type Rule = { threshold : T.Ratio; quorum : T.Ratio; threshold_of : T.ThresholdBasis; casting_vote : ?Principal };
   func defaultRule() : Rule = { threshold = votingThreshold; quorum = votingQuorum; threshold_of = #Cast; casting_vote = castingVote };
+  /// The rule of the proposal a governed call files: the scope's default, with the realm's casting vote
+  /// for a realm-wide one only.
+  func scopeRule(department : T.Department) : Rule = { defaultRule() with casting_vote = if (department.is_root) castingVote else null };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
+  let OUT_OF_SCOPE = "a department's proposal carries only the calls that department, or one below it, governs";
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
 
-  let ROOT : T.Department = {
-    id = "root";
-    description = "The realm itself.";
-    kind = null;
-    parent = null;
-    is_root = true;
-    head = null;
-    policy = { m = 1; n = 1; quorum = 0; veto = [] };
-    target_policy = null;
-    fund = null;
+  let ROOT_ID = "root";
+  let DIRECT : T.Policy = { m = 1; n = 1; quorum = 0; veto = [] };
+
+  func department(id : Text, description : Text, parent : ?Text, policy : T.Policy) : T.Department = {
+    id; description; kind = null; parent; is_root = parent == null; head = null; policy; target_policy = null; fund = null;
   };
 
-  /// It has no seats: its proposals are counted like any other (by every member), and its policy
-  /// only decides whether a governed call on one of them applies at once or files a proposal.
-  let COUNCIL : T.Department = {
-    id = "council";
-    description = "A council under the realm, deciding 2 of 3.";
-    kind = null;
-    parent = ?ROOT.id;
-    is_root = false;
-    head = null;
-    policy = { m = 2; n = 3; quorum = 0; veto = [] };
-    target_policy = null;
-    fund = null;
-  };
+  /// The root decides alone; the council under it, 2 of 3; the two committees under the council, alone.
+  /// department_edit may move a department, so the tree is read as it stands at each check.
+  let departments = Map.empty<Text, T.Department>();
+  for (d in [
+    department(ROOT_ID, "The realm itself.", null, DIRECT),
+    department("council", "A council under the realm, deciding 2 of 3.", ?ROOT_ID, { m = 2; n = 3; quorum = 0; veto = [] }),
+    department("roads", "A committee under the council, deciding alone.", ?"council", DIRECT),
+    department("parks", "A committee under the council, deciding alone.", ?"council", DIRECT),
+  ].vals()) Map.add(departments, Text.compare, d.id, d);
 
-  func findDepartment(id : Text) : ?T.Department {
-    if (id == ROOT.id) ?ROOT else if (id == COUNCIL.id) ?COUNCIL else null;
+  func findDepartment(id : Text) : ?T.Department = Map.get(departments, Text.compare, id);
+
+  func direct(policy : T.Policy) : Bool = policy.m == 1 and policy.n == 1;
+
+  /// Whether department `id` is `ancestor` or lies below it, as the departments stand now.
+  func within(id : Text, ancestor : Text) : Bool {
+    var at = ?id;
+    loop {
+      let ?d = at else return false;
+      if (d == ancestor) return true;
+      at := switch (findDepartment(d)) { case (?found) found.parent; case null null };
+    };
   };
 
   let createdAt = now();
@@ -160,10 +169,42 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       case "ggg_proposal_vote" { let a : ?T.ProposalVoteArgs = from_candid (arg); a != null };
       case "ggg_proposal_withdraw" { let a : ?T.ProposalWithdrawArgs = from_candid (arg); a != null };
       case "ggg_proposal_stop" { let a : ?Text = from_candid (arg); a != null };
+      case "ggg_department_edit" { let a : ?T.DepartmentEditArgs = from_candid (arg); a != null };
       case "ggg_profile_update" { let a : ?T.ProfileUpdateArgs = from_candid (arg); a != null };
       case _ return ?#InvalidArgument(method # " is not an update method of this canister");
     };
     if (decodes) null else ?#InvalidArgument("arg does not decode as the arguments of " # method);
+  };
+
+  /// The department a proposal belongs to: the one it is scoped to, the root for a realm-wide one.
+  func ownerId(p : T.Proposal) : Text = switch (p.department) { case (?d) d; case null ROOT_ID };
+
+  /// The department that governs a call (model §1): the owner of the proposal a stop ends, the
+  /// department an edit changes, and the root for a call no department governs, which only a
+  /// realm-wide proposal carries.
+  func governingDepartment(method : Text, arg : Blob) : Result<T.Department> {
+    let id = switch (method) {
+      case "ggg_proposal_stop" {
+        let ?target : ?Text = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        switch (findProposal(target)) { case null return #Err(#NotFound); case (?(_, p)) ownerId(p) };
+      };
+      case "ggg_department_edit" {
+        let ?edit : ?T.DepartmentEditArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        edit.department;
+      };
+      case _ ROOT_ID;
+    };
+    switch (findDepartment(id)) { case null #Err(#NotFound); case (?found) #Ok(found) };
+  };
+
+  /// A department's proposal carries only the calls that department or one below it governs; a
+  /// realm-wide one (scope null) carries any (I-GOV-13). Checked at creation and again at execution.
+  func checkScope(scope : ?Text, method : Text, arg : Blob) : ?T.GggError {
+    let ?department = scope else return null;
+    switch (governingDepartment(method, arg)) {
+      case (#Err(e)) ?e;
+      case (#Ok(governing)) { if (within(governing.id, department)) null else ?#Forbidden({ permission = null; message = OUT_OF_SCOPE }) };
+    };
   };
 
   func audit(op : Text, user : Principal, args : T.Value, result : T.Value) {
@@ -449,19 +490,66 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   };
 
   public query func ggg_department_list(args : T.ListArgs) : async Result<T.DepartmentPage> {
-    page([ROOT, COUNCIL].vals(), args.cursor, args.limit);
+    page(Map.values(departments), args.cursor, args.limit);
   };
 
   public query func ggg_department_chart(args : T.ChartArgs) : async Result<T.Chart> {
-    let department = switch (args.department) {
-      case (?d) { switch (findDepartment(d)) { case null return #Err(#NotFound); case (?found) found } };
-      case null ROOT;
-    };
-    let below = if (department.id == ROOT.id) [COUNCIL] else [];
-    switch (page(below.vals(), args.cursor, args.limit)) {
+    let id = switch (args.department) { case (?d) d; case null ROOT_ID };
+    let department = switch (findDepartment(id)) { case null return #Err(#NotFound); case (?found) found };
+    let below = Iter.filter<T.Department>(Map.values(departments), func(d) { d.parent == ?department.id });
+    switch (page(below, args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
       case (#Ok({ items; next })) #Ok({ department; positions = 0; seats = 0; filled = 0; children = items; next });
     };
+  };
+
+  /// Edits a department: its description, kind, head and parent. Governed by that department (model
+  /// §1): a direct policy applies the edit at once, any other files a proposal of that department.
+  public shared ({ caller }) func ggg_department_edit(args : T.DepartmentEditArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "org.set_policy")) { case (?e) return #Err(e); case null {} };
+    let department = switch (findDepartment(args.department)) { case null return #Err(#NotFound); case (?found) found };
+    if (direct(department.policy)) {
+      switch (editDepartment(caller, args)) { case (#Err(e)) #Err(e); case (#Ok(_)) #Ok(#Done(null)) };
+    } else {
+      switch (checkEdit(department, args)) { case (?e) return #Err(e); case null {} };
+      let call = #Call({ method = "ggg_department_edit"; arg = to_candid (args) });
+      let filed = fileProposal(caller, "Edit department " # department.id, "Edits the department " # department.id # ".", ?department.id, null, null, call, scopeRule(department), null, []);
+      audit("department_edit", caller, #Map([("department", #Text(department.id))]), #Text(filed.id));
+      #Ok(#Proposed(filed.id));
+    };
+  };
+
+  /// The root keeps no parent, and a department never moves under itself or a department below it.
+  func checkEdit(department : T.Department, args : T.DepartmentEditArgs) : ?T.GggError {
+    switch (args.parent) {
+      case null {};
+      case (?parent) {
+        if (department.is_root) return ?#InvalidArgument("the root has no parent");
+        switch (findDepartment(parent)) { case null return ?#NotFound; case (?_) {} };
+        if (within(parent, department.id)) return ?#InvalidArgument("a department cannot move under itself or a department below it");
+      };
+    };
+    switch (args.head) {
+      case (?#Set(head)) { if (requireMember(head, "org.set_policy") != null) return ?#InvalidArgument("the head names a principal who is not an active member") };
+      case _ {};
+    };
+    null;
+  };
+
+  /// Applies an edit, checked against the departments as they stand now.
+  func editDepartment(caller : Principal, args : T.DepartmentEditArgs) : Result<T.Department> {
+    let department = switch (findDepartment(args.department)) { case null return #Err(#NotFound); case (?found) found };
+    switch (checkEdit(department, args)) { case (?e) return #Err(e); case null {} };
+    let edited = {
+      department with
+      description = switch (args.description) { case (?d) d; case null department.description };
+      kind = switch (args.kind) { case (?k) ?k; case null department.kind };
+      head = switch (args.head) { case (?#Set(h)) ?h; case (?#Clear) null; case null department.head };
+      parent = switch (args.parent) { case (?p) ?p; case null department.parent };
+    };
+    Map.add(departments, Text.compare, edited.id, edited);
+    audit("department_edit", caller, #Map([("department", #Text(edited.id))]), #Text(edited.id));
+    #Ok(edited);
   };
 
   public query func ggg_organization_get(_ : T.GetArgs) : async Result<?T.OrganizationDetail> {
@@ -515,6 +603,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       };
       case (#Call { method; arg }) {
         switch (checkCall(method, arg)) { case (?e) return #Err(e); case null {} };
+        switch (checkScope(scopeOf(args.department), method, arg)) { case (?e) return #Err(e); case null {} };
       };
     };
     let links = switch (args.links) { case (?l) l; case null [] };
@@ -527,6 +616,11 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     let p = fileProposal(caller, args.title, args.description, args.department, args.kind, args.matter, args.action, rule, args.effective_at, links);
     audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
     #Ok(p.id);
+  };
+
+  /// A proposal's scope as stored: the department's id, or null for a realm-wide one (the root's).
+  func scopeOf(department : ?Text) : ?Text {
+    switch (department) { case (?d) { if (d == ROOT_ID) null else ?d }; case null null };
   };
 
   /// Files a proposal, open for voting at once. `department` is its scope; the root's is realm-wide.
@@ -551,7 +645,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       description;
       proposer;
       on_behalf_of = null;
-      department = switch (department) { case (?d) { if (d == ROOT.id) null else ?d }; case null null };
+      department = scopeOf(department);
       kind;
       matter;
       action;
@@ -698,18 +792,31 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     #Ok(stopped);
   };
 
-  /// Applies an accepted action as the realm, or returns null for a motion, which has nothing to
-  /// execute. This fixture replays ggg_proposal_stop only.
-  func replay(caller : Principal, action : T.ProposalAction) : ?(T.ProposalStatus, ?T.ProposalResult) {
-    switch (action) {
+  /// Applies an accepted action as the realm, within the proposal's scope as the departments stand now
+  /// (I-GOV-13), or returns null for a motion, which has nothing to execute. This fixture replays
+  /// ggg_proposal_stop and ggg_department_edit only.
+  func replay(caller : Principal, p : T.Proposal) : ?(T.ProposalStatus, ?T.ProposalResult) {
+    func failed(e : T.GggError) : ?(T.ProposalStatus, ?T.ProposalResult) = ?(#Failed, ?#Error(debug_show (e)));
+    switch (p.action) {
       case (#Motion) null;
       case (#Code _) ?(#Failed, ?#Error("this fixture installs no codex"));
       case (#Call { method; arg }) {
-        if (method != "ggg_proposal_stop") return ?(#Failed, ?#Error(method # " is not replayed by this fixture"));
-        let ?id : ?Text = from_candid (arg) else return ?(#Failed, ?#Error("arg does not decode"));
-        switch (stopProposal(caller, id)) {
-          case (#Err(e)) ?(#Failed, ?#Error(debug_show (e)));
-          case (#Ok(_)) {
+        switch (checkScope(p.department, method, arg)) { case (?e) return failed(e); case null {} };
+        let error : ?T.GggError = switch (method) {
+          case "ggg_proposal_stop" {
+            let ?id : ?Text = from_candid (arg) else return ?(#Failed, ?#Error("arg does not decode"));
+            switch (stopProposal(caller, id)) { case (#Err(e)) ?e; case (#Ok(_)) null };
+          };
+          case "ggg_department_edit" {
+            let ?edit : ?T.DepartmentEditArgs = from_candid (arg) else return ?(#Failed, ?#Error("arg does not decode"));
+            switch (editDepartment(caller, edit)) { case (#Err(e)) ?e; case (#Ok(_)) null };
+          };
+          case _ return ?(#Failed, ?#Error(method # " is not replayed by this fixture"));
+        };
+        switch (error) {
+          case (?e) failed(e);
+          case null {
+            // What either call replies when it applies at once: Done, with no id.
             let reply : Result<T.Governed> = #Ok(#Done(null));
             ?(#Executed, ?#Reply(to_candid (reply)));
           };
@@ -728,7 +835,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       case (?e) { if (e > now()) return #Err(#Conflict("this proposal takes effect at " # Nat64.toText(e))) };
       case null {};
     };
-    let ?(status, result) = replay(caller, p.action) else return #Err(#Conflict("a motion has nothing to execute"));
+    let ?(status, result) = replay(caller, p) else return #Err(#Conflict("a motion has nothing to execute"));
     let executed = { p with status; result };
     Map.add(proposals, Nat.compare, n, executed);
     audit("proposal_execute", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (status)));
@@ -741,18 +848,15 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     switch (requireMember(caller, "proposal.manage")) { case (?e) return #Err(e); case null {} };
     let (_, target) = switch (findProposal(id)) { case null return #Err(#NotFound); case (?found) found };
     if (target.status != #ExecutionScheduled) return #Err(#Conflict(NOT_SCHEDULED));
-    let owner = switch (target.department) {
-      case (?d) { switch (findDepartment(d)) { case (?found) found; case null ROOT } };
-      case null ROOT;
-    };
-    if (owner.policy.m == 1 and owner.policy.n == 1) {
+    let owner = switch (findDepartment(ownerId(target))) { case null return #Err(#NotFound); case (?found) found };
+    if (direct(owner.policy)) {
       switch (stopProposal(caller, id)) {
         case (#Err(e)) #Err(e);
         case (#Ok(_)) #Ok(#Done(null));
       };
     } else {
       let call = #Call({ method = "ggg_proposal_stop"; arg = to_candid (id) });
-      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, null, null, call, { defaultRule() with casting_vote = if (owner.is_root) castingVote else null }, null, []);
+      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, null, null, call, scopeRule(owner), null, []);
       audit("proposal_stop", caller, #Map([("proposal", #Text(id))]), #Text(filed.id));
       #Ok(#Proposed(filed.id));
     };
@@ -1008,7 +1112,6 @@ persistent actor class GggFixture(initMembers : [Principal]) {
 
   // §3
   public shared ({ caller }) func ggg_department_create(_ : T.DepartmentCreateArgs) : async Result<T.Governed> { nobody(caller, "org.create") };
-  public shared ({ caller }) func ggg_department_edit(_ : T.DepartmentEditArgs) : async Result<T.Governed> { nobody(caller, "org.set_policy") };
   public shared ({ caller }) func ggg_department_delete(_ : Text) : async Result<T.Governed> { nobody(caller, "org.set_policy") };
   public shared ({ caller }) func ggg_department_set_policy(_ : T.DepartmentPolicyArgs) : async Result<T.Governed> { nobody(caller, "org.set_policy") };
   public shared ({ caller }) func ggg_position_create(_ : T.PositionCreateArgs) : async Result<T.Governed> { nobody(caller, "org.manage_members") };
