@@ -2300,19 +2300,23 @@
           "max": "9223372036854775807",
           "optional": true
         },
+        "fund": {
+          "type": "text",
+          "optional": true
+        },
         "revenue": {
           "type": "nat",
           "kind": "money",
           "min": 0,
           "max": 9007199254740991,
-          "derived": "the sum of planned over the period's Revenue lines"
+          "derived": "the sum of planned over the Revenue lines it proposes: the fund's, or every fund's"
         },
         "expense": {
           "type": "nat",
           "kind": "money",
           "min": 0,
           "max": 9007199254740991,
-          "derived": "the sum of planned over the period's Expense lines"
+          "derived": "the sum of planned over the Expense lines it proposes: the fund's, or every fund's"
         }
       }
     },

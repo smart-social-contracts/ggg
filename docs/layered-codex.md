@@ -35,8 +35,8 @@ operations, and GGG's arguments, events and entities are the whole interface:
   Cedar. A few facts are not arguments: a GOS computes each from its own records when the operation is
   called, deterministically, and the fact schema (§3.3) declares it as `derived`, with what it is:
   `published_in` of `tender_award`, the journals of the tender's notices; `revenue` and `expense` of
-  `budget_propose`, the period's totals; `follower_compliance` of `transfer_create` and
-  `quarter_report`, the compliance the other realm last reported (§4).
+  `budget_propose`, the totals of the lines it proposes; `follower_compliance` of `transfer_create`
+  and `quarter_report`, the compliance the other realm last reported (§4).
 - **Effects are operations.** A hook changes nothing itself. It queues GGG operations, which the GOS
   runs as the realm, under the same permissions as any caller.
 - **Entity reads are read-only.** A chapter may read entities (`Member`, `Land`, `TaxPolicy`); it
@@ -148,8 +148,9 @@ addition is in the [model](../model/README.md) and `ggg.did`; the model's sectio
 - the **basis and facts of a share** of personal data: `basis {legal_basis, purpose, legislation,
   special_category}`, `recipient` (a reference to any entity) and `facts` on `document_share`, and
   `Document.facts`. Legal bases are documented text, not an enumeration of the model;
-- **budget totals and years**: `budget_propose` proposes a period's lines together, with `years`; the
-  totals `revenue` and `expense` are derived facts of the call (§1); `budget_extend` and
+- **budget totals and years**: `budget_propose` proposes a period's lines together, a fund's or every
+  fund's, with `years`; the totals `revenue` and `expense` of the lines it proposes are derived facts of
+  the call (§1); `budget_extend` and
   `ReportIssueArgs.adjustments` are added; the stability report and `net_lending` stay codex
   conventions.
 

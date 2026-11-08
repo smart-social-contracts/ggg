@@ -225,6 +225,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const BudgetProposeArgs = IDL.Record({
     'period' : IDL.Text,
+    'fund' : IDL.Opt(IDL.Text),
     'years' : IDL.Opt(IDL.Nat),
   });
   const CallForArgs = IDL.Record({
