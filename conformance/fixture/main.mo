@@ -267,7 +267,14 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case "ggg_budget_draft" { let a : ?T.BudgetDraftArgs = from_candid (arg); a != null };
       case "ggg_budget_propose" { let a : ?T.BudgetProposeArgs = from_candid (arg); a != null };
       case "ggg_codex_install" { let a : ?T.CodexSource = from_candid (arg); a != null };
-      case "ggg_codex_revert" { let a : ?(?T.CodexRevertArgs) = from_candid (arg); a != null };
+      case "ggg_codex_revert" {
+        let a : ?(?T.CodexRevertArgs) = from_candid (arg);
+        switch (a) {
+          case (?(?{ codex = ?_ })) true;
+          case (?_) return ?#InvalidArgument(REVERT_NAMES_CODEX);
+          case null false;
+        };
+      };
       case "ggg_profile_update" { let a : ?T.ProfileUpdateArgs = from_candid (arg); a != null };
       case _ return ?#InvalidArgument(method # " is not an update method of this canister");
     };
@@ -1124,8 +1131,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
 
   /// Applies an accepted call as the realm, within the proposal's scope as the departments stand now
   /// (I-GOV-13). This fixture replays ggg_proposal_stop, ggg_department_edit, ggg_department_delete,
-  /// ggg_fund_create, ggg_budget_draft, ggg_budget_propose and ggg_codex_install, which may await
-  /// another realm.
+  /// ggg_fund_create, ggg_budget_draft, ggg_budget_propose, ggg_codex_install, which may await another
+  /// realm, and ggg_codex_revert.
   func replay(caller : Principal, p : T.Proposal, method : Text, arg : Blob) : async* Ran {
     func failed(e : T.GggError) : Ran = (#Failed, ?#Error(debug_show (e)));
     func undecodable() : Ran = (#Failed, ?#Error("arg does not decode"));
@@ -1165,6 +1172,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       };
       case "ggg_codex_revert" {
         let ?args : ?(?T.CodexRevertArgs) = from_candid (arg) else return undecodable();
+        let (?{ codex = ?_ }) = args else return (#Failed, ?#Error(REVERT_NAMES_CODEX));
         switch (revertTarget(args)) { case (#Err(e)) #Err(e); case (#Ok(target)) revertCodex(caller, target) };
       };
       case _ return (#Failed, ?#Error(method # " is not replayed by this fixture"));
@@ -1813,10 +1821,13 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         previous;
       };
     };
-    if (not Map.containsKey(codices, Text.compare, target)) return #Err(#NotFound);
+    let ?installed = Map.get(codices, Text.compare, target) else return #Err(#NotFound);
     if (target == active) return #Err(#Conflict("codex " # target # " is active already"));
+    if (installed.status == #Pending) return #Err(#Conflict("codex " # target # " is pending: codex_activate activates it"));
     #Ok(target);
   };
+
+  let REVERT_NAMES_CODEX = "a revert filed as a proposal names the codex it restores";
 
   /// Restores `target`: it is active again, and the codex it displaces is reverted. It never runs a hook.
   func revertCodex(caller : Principal, target : Text) : Result<?Text> {
@@ -1838,8 +1849,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     switch (requireMember(caller, "codex.revert")) { case (?e) return #Err(e); case null {} };
     let ?root = findDepartment(ROOT_ID) else return #Err(#Unavailable("the realm has no root department"));
     let target = switch (revertTarget(args)) { case (#Err(e)) return #Err(e); case (#Ok(t)) t };
-    govern(caller, "codex_revert", root, to_candid (args), "Revert to codex " # target, "Restores the codex " # target # ".", func() {
-      switch (revertTarget(args)) { case (#Err(e)) #Err(e); case (#Ok(t)) revertCodex(caller, t) };
+    // A filed revert names the codex resolved now, so what is voted on is what runs (model §11).
+    let named : ?T.CodexRevertArgs = ?{ codex = ?target };
+    govern(caller, "codex_revert", root, to_candid (named), "Revert to codex " # target, "Restores the codex " # target # ".", func() {
+      switch (revertTarget(named)) { case (#Err(e)) #Err(e); case (#Ok(t)) revertCodex(caller, t) };
     });
   };
 
