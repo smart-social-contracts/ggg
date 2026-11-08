@@ -227,9 +227,10 @@ power of attorney. The flags `delegable` and `confirm` ([§1](#operations)) mark
 `direct` operation with a condition asks each time when the condition holds: `proposal_create` with an
 action, `invite_create` with a profile beyond member or a seat, `setup_step` for the infrastructure and
 trust-policy steps, `document_store` with keys for others, `organization_edit` when it changes the
-admins, `delegation_request_decide` when it approves, and `appoint`, `appoint_acting`, `role_assign`,
-`profile_create`, `profile_edit`, `authority_grant`, `judge_appoint` and `realm_configure_trust_policy`
-while the realm is in setup, where they would take effect without a vote.
+admins, `delegation_request_decide` when it approves, and, while the realm is in setup, where they would
+give someone power without a vote, `appoint`, `appoint_acting`, `role_assign`, `profile_create`,
+`profile_edit`, `authority_grant`, `judge_appoint`, `realm_configure_trust_policy`, `department_edit`
+when it names a head and `department_set_policy` when it names veto holders.
 
 A grant names **groups**: the 17 of `delegation.json`, each a plain-language set of operations: `see`,
 `profile`, `vote`, `propose`, `filings`, `justice`, `money`, `payout`, `identity`, `keys`, `poa`,
@@ -250,6 +251,17 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
 - **Signing acts** are `confirm`, in the `sign` group: the official's own approval is their signature
   (I-ALL-7), and the delegate only drafts. The signing policy's `delegable` key
   ([§11](#signing-policy)) lets a codex make a signing permission direct instead; by default none is.
+- **Setup.** While the realm is in setup, an operation of the `setup` group runs at once under a grant
+  wherever the founder's own call would: most are not governed before launch, and Launch is the
+  founder's review. After launch it is governed, and a delegate's call files a proposal tied to the
+  grant (I-ID-10). Money (`transfer_create`, `payroll_run`) is always a proposal, and giving someone
+  power without a vote asks each time.
+- **Inboxes.** Under `see` a delegate reads the grantor's own inbox only. A department's or an
+  organization's inbox is read only under `office:<department>` or `orgs:<organization>`.
+- **Tasks.** A task scheduled or rescheduled under a grant is tied to that grant. When it runs, its
+  operation must be one the grant covers directly at that moment: never a `confirm`, `member` or
+  `founder` operation, and never one outside the grant's groups. The task fails once the grant is
+  revoked, replaced or expired (I-EXT-5).
 - **Grants made before groups.** A grant whose `scope` names permissions covers only the operations
   that were delegable before groups, with the rules that held then: `me`, `profile_update`,
   `attribute_list`, `zone_set`, `zone_clear`, `proposal_create` (a motion), `proposal_withdraw`,
@@ -295,9 +307,10 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
 - I-ID-10: A delegate's proposal is a motion, with no action. A delegable governed call made under a
   delegation is filed as a proposal, and the GOS records the grant it was filed under. It replays
   unless that grant was revoked or replaced, even if the grant has expired since, and only if the
-  grant could still make that call. A delegate does not vote on a proposal it filed. Power of
-  attorney itself, payout accounts, identity proofs, attributes, moving to another quarter and
-  federal votes are never done directly under a grant: they are `confirm`.
+  grant could still make that call. A delegate does not vote on a proposal it filed. Granting or
+  accepting power of attorney, approving a request for it, payout accounts, identity proofs,
+  attributes, moving to another quarter and federal votes are never done directly under a grant: they
+  are `confirm`.
 - I-ID-12: A setup grant ends at launch: `setup_launch` removes the `setup` group from every grant,
   and a grant left with no group ends. `setup_launch` itself is never done under a grant nor prepared.
 - I-ID-13: No delegate of a member votes on a proposal that any delegate of the same member filed
@@ -334,8 +347,8 @@ Two kinds of body:
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
 | `department_create` | `org.create` | governed, delegable | Create department Health under the root → proposal `P-12` |
-| `department_edit`, `department_delete` | `org.set_policy` | governed, delegable | Move Roads under Infrastructure; make `dana` head of Civil Registry; mark the Council as the `plenary` |
-| `department_set_policy` | `org.set_policy` | governed, delegable | Infrastructure goes from 1-of-1 to 2-of-3 with 50% quorum |
+| `department_edit`, `department_delete` | `org.set_policy` | governed, delegable | Move Roads under Infrastructure; make `dana` head of Civil Registry; mark the Council as the `plenary`. During setup `department_edit` asks each time when it names a head |
+| `department_set_policy` | `org.set_policy` | governed, delegable | Infrastructure goes from 1-of-1 to 2-of-3 with 50% quorum. During setup it asks each time when the policy names veto holders |
 | `department_get`, `department_list`, `department_chart` | `realm.data_view` | read, delegable | Civil Registry's chart: 3 positions, 7 of 9 seats filled |
 | `position_create`, `position_edit`, `position_close` | `org.manage_members` | governed, delegable | Open 2 `inspector` seats in Infrastructure at 2,400 REALM/month |
 | `appoint`, `appoint_acting`, `appointment_end` | `org.appoint` | governed, delegable | Appoint Carla planning officer; Bob acts as head while Dana is on leave. During setup an appointment asks each time |
@@ -399,7 +412,7 @@ Two kinds of body:
 | `proposal_linked_from` | `realm.data_view` | read, delegable | The proposals that link to `P-7`: `P-9` replaces it, `P-11` and `P-12` relate to it |
 | `mandate_create`, `mandate_revoke` | `mandate.create` | governed, delegable | Grant Infrastructure the road-works mandate (via `P-4`) |
 | `mandate_assign_executor` | `mandate.assign_executor` | governed, delegable | Make Infrastructure the mandate's executor |
-| `contract_create` | `contract.create_under_mandate` | delegable | Sign `C-9` with BuildCo under the road-works mandate |
+| `contract_create` | `contract.create_under_mandate` | confirm | Sign `C-9` with BuildCo under the road-works mandate. Prepared by a delegate, it waits for the member's approval: it binds the realm to an outside party at once |
 | `contract_terminate` | `contract.terminate` | signing, confirm | End `C-9` after BuildCo misses two milestones (court order) |
 | `governance_update` (the realm's voting window, threshold, quorum and casting vote) | `governance.update` | governed, delegable | Voting window from 7 to 5 days; Dana's vote decides ties |
 
@@ -1006,7 +1019,7 @@ supervisor, and the grantor when delegated (I-ALL-7).
 | `codex_status` (the active checksum, health and the signing policy; earlier checksums a page at a time) | `realm.data_view` | read, delegable | `sha256:4be1…`, healthy; agents may hold `bid.evaluate` |
 | `legislation_release_publish` | `legislation.publish` | governed, delegable | CV publishes 1.1.0: its chapters' checksums, its calendar's, the commit, in force from 1 Jan 2027 |
 | `legislation_releases` (the published record, a page at a time), `legislation_chapter` (the bytes of a chapter, by checksum) | — (public) | read | CV's record: Spain's 2.4.0 as CV installed it, then CV's own 1.0.0 and 1.1.0 |
-| `notification_list` (one recipient a page at a time) | `self.data_view` | read, delegable | Alice's notifications, then Civil Registry's |
+| `notification_list` (one recipient a page at a time) | `self.data_view` | read, delegable | Alice's notifications, then Civil Registry's. Under a grant, the grantor's own; an office's only under that office's group |
 | `notification_read` (mark as read) | `self.data_manage` | delegable | Alice marks "P-7 passed" as read |
 | `notification_send` (to a user, department or organization a `Notification`; to an `External` a `Dispatch`; with `translations`, each reader gets their language) | `notification.send` | delegable | Justice notifies Mallory of her fine; Civil Registry tells the statistics office of Bob's registration |
 | `external_add` | `external.manage` | governed, delegable | Register the statistics office and the provincial gazette |
@@ -1014,7 +1027,7 @@ supervisor, and the grantor when delegated (I-ALL-7).
 | `external_report` | `external.report` | delegable | A clerk enters the statistics office's report of a duplicate registration, with the file as evidence |
 | `dispatch_confirm` (one outcome: confirmed, with when and the receipt, or failed, with the reason; a second is `Conflict`) | `dispatch.confirm` | delegable | The clerk confirms the gazette published the ordinance, bulletin 214 |
 | `dispatch_list` | `dispatch.confirm` | read, delegable | The outbox: what is queued for delivery |
-| `task_schedule`, `task_reschedule`, `task_cancel` | `task.schedule` | delegable | Schedule Bob's lapse for 10 Mar 2028; cancel it when he leaves |
+| `task_schedule`, `task_reschedule`, `task_cancel` | `task.schedule` | delegable | Schedule Bob's lapse for 10 Mar 2028; cancel it when he leaves. A task scheduled under a grant runs only what the grant covers directly, and fails once the grant ends |
 | `task_list` | `realm.monitor` | read, delegable | What is scheduled for next month |
 | `events` (newest first, and where archived events are kept) | `realm.monitor` | read, delegable | The last 100 audited calls |
 
@@ -1054,7 +1067,8 @@ the realm only through `external_report`, entered by whoever received it, with t
 received is legislation's.
 
 A `Task` runs one operation at `at`, with the authority of whoever scheduled it (`scheduled_by`: a
-user, a department, the codex), never as the realm's controller. Every guard and rule runs again when
+user, a department, the codex), never as the realm's controller, and within the grant it was scheduled
+under, if any ([§2](#power-of-attorney)). Every guard and rule runs again when
 it does, so a task scheduled under old legislation obeys the legislation in force on its date, and one
 that is then refused ends `failed`. The run writes the operation's own `Event`, with origin `task`, which
 the task's `event` names; a hook on the operation sees it and reads the origin. There is no `task_run`
@@ -1068,7 +1082,8 @@ operation, and no hook of that name.
 - I-EXT-4: The `Event` log is append-only: no event is edited or deleted. A GOS may move old events
   to archive canisters, as ICRC-3 ledgers do; `events` names them, and each answers `ggg_events` for
   the events it holds.
-- I-EXT-5: A task runs with its scheduler's authority and under the legislation in force when it runs;
+- I-EXT-5: A task runs with its scheduler's authority (under a grant, [§2](#power-of-attorney)) and
+  under the legislation in force when it runs;
   a refused one ends `failed` and changes nothing.
 - I-EXT-6: A dispatch is confirmed only by a holder of `dispatch.confirm`, and a report from outside
   enters only through `external_report`: the realm never takes an outside body's word without a
