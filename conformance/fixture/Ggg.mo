@@ -1512,8 +1512,8 @@ module {
     tally : Tally;
     title : Text;
     action : ProposalAction;
-    /// The rule that decides it (I-GOV-3): the yes votes exceed (realm-wide) or reach (a department) the
-    /// threshold of the basis, with the quorum met.
+    /// The rule that decides it (I-GOV-3), fixed when the vote opens: the yes votes exceed (realm-wide)
+    /// or reach (a department, of `tally.seats`) the threshold of the basis, with the quorum met.
     threshold : Ratio;
     /// When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
     effective_at : ?Timestamp;
@@ -1888,7 +1888,15 @@ module {
   };
   /// A Record is the same source when its url is the same, whatever the checksum.
   public type SyncSourceRemoveArgs = { source : SyncSourceRef };
-  public type Tally = { no : Nat; yes : Nat; abstain : Nat; eligible : ?Nat };
+  /// `eligible`: who may vote, counted when the vote opens. `seats`: a department's policy n, what its
+  /// threshold is measured against (I-GOV-3); absent for a realm-wide proposal.
+  public type Tally = {
+    no : Nat;
+    yes : Nat;
+    abstain : Nat;
+    seats : ?Nat;
+    eligible : ?Nat;
+  };
   /// One operation scheduled for a time. It runs with the authority of whoever scheduled it, never as the
   /// realm's controller, and every guard and rule runs again when it does, so a task scheduled under old
   /// legislation obeys the legislation in force on its date. The run writes the operation's own Event, with
@@ -2041,7 +2049,8 @@ module {
     #Cancelled;
     #Contracted;
   };
-  /// What a threshold is measured against: the yes and no votes cast, or every eligible voter.
+  /// What a threshold is measured against: the yes and no votes cast, or the eligible voters; for a
+  /// department, Eligible means its policy's n (`tally.seats`), and Cast is weaker and refused.
   public type ThresholdBasis = { #Cast; #Eligible };
   /// Nanoseconds since 1970-01-01 UTC, as returned by ic0.time.
   public type Timestamp = Nat64;

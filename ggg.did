@@ -283,10 +283,13 @@ type ProposalResult = variant {
 type ProposalLinkKind = variant { Replaces; RelatesTo };
 type ProposalLink = record { kind : ProposalLinkKind; proposal : text };
 
-// What a threshold is measured against: the yes and no votes cast, or every eligible voter.
+// What a threshold is measured against: the yes and no votes cast, or the eligible voters; for a
+// department, Eligible means its policy's n (`tally.seats`), and Cast is weaker and refused.
 type ThresholdBasis = variant { Cast; Eligible };
 
-type Tally = record { yes : nat; no : nat; abstain : nat; eligible : opt nat };
+// `eligible`: who may vote, counted when the vote opens. `seats`: a department's policy n, what its
+// threshold is measured against (I-GOV-3); absent for a realm-wide proposal.
+type Tally = record { yes : nat; no : nat; abstain : nat; eligible : opt nat; seats : opt nat };
 
 type Proposal = record {
   id : text;
@@ -305,8 +308,8 @@ type Proposal = record {
   deadline : opt Timestamp;
   // When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
   effective_at : opt Timestamp;
-  // The rule that decides it (I-GOV-3): the yes votes exceed (realm-wide) or reach (a department) the
-  // threshold of the basis, with the quorum met.
+  // The rule that decides it (I-GOV-3), fixed when the vote opens: the yes votes exceed (realm-wide)
+  // or reach (a department, of `tally.seats`) the threshold of the basis, with the quorum met.
   threshold : Ratio;
   quorum : Ratio;
   threshold_of : ThresholdBasis;
