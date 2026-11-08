@@ -880,5 +880,28 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     });
   });
 
+  await check('GGG', 'W23', 'a delegate never votes on a proposal it filed, whichever grantor it votes for', async () => {
+    needMember();
+    const grants = await walk((a) => mine.ggg_delegation_list({ ...a, role: { Delegate: null } }), (d) => d.id);
+    refused(grants.err, 'ggg_delegation_list');
+    if (grants.err) throw new Error(`ggg_delegation_list returned Err ${show(grants.err)}`);
+    // A grant covers an operation by its permission (a grant made before groups) or by its group.
+    const covers = (grant, permission, group) => grant.scope.some((s) => [permission, `group:${group}`, 'group:*'].includes(s));
+    const active = grants.items.filter((d) => tag(d.status) === 'Active');
+    const filer = active.find((d) => covers(d, 'proposal.create', 'propose'));
+    const voter = filer && active.find((d) => covers(d, 'proposal.vote', 'vote') && d.grantor.toText() !== filer.grantor.toText());
+    if (!voter) throw new Skip('the member holds no two active grants: one to propose, and one from another member to vote');
+    const filed = await mine.ggg_proposal_create(motion('filed by a delegate for one grantor', { on_behalf_of: [filer.grantor] }));
+    if ('Err' in filed && tag(filed.Err) === 'Forbidden') throw new Skip('the grant does not let this delegate propose');
+    const id = ok(filed, 'ggg_proposal_create(on behalf of the first grantor)');
+    try {
+      const result = await mine.ggg_proposal_vote({ ...vote(id, 'Yes'), on_behalf_of: [voter.grantor] });
+      err(result, ['Forbidden'], 'ggg_proposal_vote(on behalf of the second grantor, on a proposal the delegate filed)');
+    } finally {
+      await mine.ggg_proposal_withdraw({ proposal: id, on_behalf_of: [filer.grantor] });
+    }
+    return `filed for ${filer.grantor.toText()}, refused for ${voter.grantor.toText()}`;
+  });
+
   return results;
 }
