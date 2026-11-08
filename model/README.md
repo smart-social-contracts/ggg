@@ -506,7 +506,14 @@ A tax policy's `taxes` are typed entries, so legislation can check them one by o
 the entry's fields as its facts, and the same rules run when a draft is saved with `tax_policy_draft`
 ([layered codex §3.2](../docs/layered-codex.md#32-four-mechanisms)). An entry's `rate` or `amount` is
 what it charges when no codex computes it; `tax_assess` asks the active codex for each taxpayer's
-amount where it has one to give.
+amount where it has one to give. A progressive tax, a rate per bracket of the base, is the exact total
+over all its brackets, rounded once by the money rule, an exact half away from zero, to the token's
+smallest unit ([layered codex §3.3](../docs/layered-codex.md#33-the-fact-schema-units-rates-money-and-periods));
+rounding each bracket's share would move the total by up to a cent per bracket. On a base of 150.08
+under 10 % up to 100.05 and 20 % above, the shares are 10.005 and 10.006 and the tax is 20.01, the
+total 20.011 rounded once; bracket by bracket it would be 10.01 + 10.01 = 20.02.
+[`conformance/scripts/money.js`](../conformance/scripts/money.js) is this rule as code, with the
+example as its test.
 
 A budget is proposed per period: `budget_propose` takes the draft lines of the period together, with
 `years` when the plan covers more than one period, and legislation reads the totals of the lines it
@@ -1219,3 +1226,4 @@ There is no permission for raw database writes: everything is an operation.
 | D18 | Which vote may carry a governed call on another department's record | Decided 8 Nov 2026: a realm-wide proposal carries any call; a department's only a governed call whose governing department is that department or one below it, checked at creation and again when the action executes (I-GOV-13) |
 | D19 | Which department governs a change of parent, `department_delete`, `fund_create` and `budget_propose` | Decided 8 Nov 2026: a change of `parent` is governed by the lowest department that is, or is above, both the old and the new parent (an unknown new parent is `NotFound`), and every other edit by the department itself; `department_delete` by the parent, the root for a top-level department, never the root (`InvalidArgument`) nor a department that owns a fund (`Conflict`); creating an owned record, `fund_create`, by the owner named; `budget_propose` by the owner of the `fund` it names, or by the root when it names none and proposes every fund's lines; its lines are fixed when it files (`proposed`, with the proposal), a later one takes only `draft` lines, its totals are the sums over the lines it proposes, and `budget_extend` and the replacement of extended lines are per fund (§1, §3, §5) |
 | D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3) |
+| D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the token's smallest unit; never bracket by bracket (§5) |

@@ -60,6 +60,8 @@ path.
   against.
 - `test/sync.test.js` runs three fixtures that take legislation from one another and checks the links
   between realms (model I-NEST-1 to 3) and the published record (model §11).
+- `scripts/money.js` is the money rule as code (model §5, layered codex §3.3): a GOS can check its own
+  arithmetic against it; `test/money.test.js` runs the model's progressive-tax example.
 - `fixture/Ggg.mo` holds the Motoko types generated from `ggg.did`.
 - `fixture/main.mo` is a minimal Motoko GOS: members, four departments, proposals, links between realms and a published record, and every other domain empty. The build checks its interface against `ggg.did` with
   `didc check`, and the tests expect it to pass every check.
