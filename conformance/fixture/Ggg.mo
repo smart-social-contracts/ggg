@@ -2285,7 +2285,8 @@ module {
         #Ok : AttributePage;
         #Err : GggError;
       };
-    /// The attributes awaiting review, for the holders of attribute.review (I-PRV-1).
+    /// The attributes awaiting review, for the holders of attribute.review (I-PRV-1); the cursor continues
+    /// after the last attribute returned, so deciding a page skips none.
     ggg_attribute_pending_list : shared query ListArgs -> async {
         #Ok : AttributePage;
         #Err : GggError;
