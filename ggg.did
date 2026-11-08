@@ -20,6 +20,15 @@ type Duration = nat64;
 type PeriodUnit = variant { Day; WorkingDay; Month; Year };
 type Period = record { count : nat; unit : PeriodUnit };
 
+// A ratio in hundred-millionths: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456.
+// One scale for quorum, threshold, share, weight and tax rate (model §1). A Ratio is at most 100 %; a
+// Rate, for tax rates and coefficients, which legislation takes above 100 %, is at most 100 times that.
+type Ratio = nat;
+type Rate = nat;
+// Money in the token's smallest unit (Token.decimals). Money computed from a Ratio is rounded to the
+// nearest cent, an exact half away from zero (model §1).
+type Money = nat;
+
 // The ICRC-3 generic value, for structured data whose shape the model leaves open.
 type Value = variant {
   Nat : nat;
@@ -151,8 +160,8 @@ type DelegationRequest = record {
 
 // ---- §3 Departments and organizations
 
-// m of n approvals; quorum in hundred-millionths (100 000 000 = 100 %).
-type Policy = record { m : nat; n : nat; quorum : nat; veto : vec principal };
+// m of n approvals.
+type Policy = record { m : nat; n : nat; quorum : Ratio; veto : vec principal };
 
 type Department = record {
   id : text;
@@ -183,7 +192,7 @@ type Position = record {
   title : text;
   profile : opt text;
   headcount : nat;
-  salary : nat;
+  salary : Money;
   salary_period : opt Duration;
   status : PositionStatus;
   inherit_from_capital : bool;
@@ -254,9 +263,8 @@ type Proposal = record {
   deadline : opt Timestamp;
   // When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
   effective_at : opt Timestamp;
-  // Both in hundred-millionths (100 000 000 = 100 %).
-  threshold : nat;
-  quorum : nat;
+  threshold : Ratio;
+  quorum : Ratio;
   tally : Tally;
   result : opt ProposalResult;
   links : vec ProposalLink;
@@ -279,7 +287,7 @@ type Mandate = record {
   id : text;
   title : text;
   scope : Value;
-  max_value : opt nat;
+  max_value : opt Money;
   symbol : opt text;
   executor : opt text;
   proposal : opt text;
@@ -294,7 +302,7 @@ type Contract = record {
   title : text;
   parties : vec Ref;
   mandate : opt text;
-  value : nat;
+  value : Money;
   symbol : text;
   terms_ref : text;
   terms_hash : text;
@@ -319,7 +327,7 @@ type Token = record {
   ledger : principal;
   indexer : opt principal;
   decimals : nat8;
-  fee : nat;
+  fee : Money;
 };
 
 type NFTToken = record {
@@ -333,7 +341,7 @@ type NFTToken = record {
   total_supply : nat;
 };
 
-type Balance = record { symbol : text; amount : nat };
+type Balance = record { symbol : text; amount : Money };
 
 type Fund = record {
   id : text;
@@ -364,8 +372,8 @@ type Budget = record {
   period : text;
   category : text;
   kind : text;
-  planned : nat;
-  actual : nat;
+  planned : Money;
+  actual : Money;
   status : BudgetStatus;
   proposal : opt text;
 };
@@ -373,8 +381,7 @@ type Budget = record {
 // AllocationRule and TaxPolicy.
 type AdoptionStatus = variant { Draft; Proposed; Adopted; Superseded };
 
-// share in hundred-millionths.
-type Allocation = record { fund : text; share : nat };
+type Allocation = record { fund : text; share : Ratio };
 
 type AllocationRule = record {
   id : text;
@@ -392,8 +399,8 @@ type LedgerEntry = record {
   transaction : text;
   kind : LedgerKind;
   category : text;
-  debit : nat;
-  credit : nat;
+  debit : Money;
+  credit : Money;
   symbol : text;
   fund : opt text;
   period : opt text;
@@ -414,7 +421,7 @@ type InvoiceStatus = variant { Pending; Paid; Overdue; Cancelled };
 type Invoice = record {
   id : text;
   payer : Ref;
-  amount : nat;
+  amount : Money;
   symbol : text;
   due_at : opt Timestamp;
   status : InvoiceStatus;
@@ -430,7 +437,7 @@ type Transfer = record {
   sender : Ref;
   to : Ref;
   symbol : text;
-  amount : nat;
+  amount : Money;
   ledger_tx : opt nat;
   invoice : opt text;
   status : TransferStatus;
@@ -469,6 +476,20 @@ type FinancialReport = record {
   supersedes : opt text;
 };
 
+// One tax, fee or charge of a policy. `kind` is the realm's word (e.g. `tax`, `fee`, `surcharge`);
+// `subject` names the entity each assessment walks (e.g. `Land`, `User`, `Organization`); `rate` or
+// `amount` is what the entry charges when no codex computes it; `facts` is what legislation reads about
+// the entry beyond these. A rule on tax_policy_propose or tax_policy_draft ranges over the policy's
+// entries, one request per entry (layered-codex §3.2).
+type TaxEntry = record {
+  code : text;
+  kind : text;
+  subject : text;
+  rate : opt Rate;
+  amount : opt Money;
+  facts : Value;
+};
+
 type TaxPolicy = record {
   id : text;
   status : AdoptionStatus;
@@ -476,6 +497,7 @@ type TaxPolicy = record {
   description : text;
   proposal : opt text;
   adopted_at : opt Timestamp;
+  taxes : vec TaxEntry;
 };
 
 type TaxDeclarationStatus = variant { Filed; Assessed; Settled; Disputed };
@@ -485,7 +507,7 @@ type TaxDeclaration = record {
   declarant : Ref;
   period : text;
   base : text;
-  amount : nat;
+  amount : Money;
   status : TaxDeclarationStatus;
   invoice : opt text;
 };
@@ -638,7 +660,7 @@ type Penalty = record {
   verdict : text;
   target : Ref;
   kind : PenaltyKind;
-  amount : opt nat;
+  amount : opt Money;
   symbol : opt text;
   status : PenaltyStatus;
   due_at : opt Timestamp;
@@ -650,8 +672,7 @@ type Penalty = record {
 
 type TenderStatus = variant { Draft; Open; Closed; Evaluation; Awarded; Contracted; Cancelled };
 
-// weight in hundred-millionths.
-type Criterion = record { criterion : text; weight : nat };
+type Criterion = record { criterion : text; weight : Ratio };
 
 type Tender = record {
   id : text;
@@ -674,7 +695,7 @@ type Bid = record {
   sealed : bool;
   payload_ref : text;
   payload_hash : text;
-  price : opt nat;
+  price : opt Money;
   score : opt nat;
 };
 
@@ -709,9 +730,9 @@ type Realm = record {
   trusted_principals : vec principal;
   require_marketplace_approval : bool;
   trusted_approvers : vec text;
-  // In hundred-millionths, for realm-wide proposals.
-  voting_threshold : nat;
-  voting_quorum : nat;
+  // For realm-wide proposals.
+  voting_threshold : Ratio;
+  voting_quorum : Ratio;
   open_registration : bool;
   logo_url : opt text;
   background_image_url : opt text;
@@ -996,7 +1017,7 @@ type PositionCreateArgs = record {
   position : text;
   title : text;
   headcount : opt nat;
-  salary : opt nat;
+  salary : opt Money;
   salary_period : opt Duration;
   profile : opt text;
 };
@@ -1006,7 +1027,7 @@ type PositionEditArgs = record {
   status : opt variant { Open; Frozen };
   headcount : opt nat;
   title : opt text;
-  salary : opt nat;
+  salary : opt Money;
   salary_period : opt Duration;
   profile : opt text;
 };
@@ -1070,7 +1091,7 @@ type ProposalWithdrawArgs = record { proposal : text; on_behalf_of : opt princip
 type MandateCreateArgs = record {
   title : text;
   scope : Value;
-  max_value : opt nat;
+  max_value : opt Money;
   symbol : opt text;
   executor : opt text;
   expires_at : opt Timestamp;
@@ -1082,7 +1103,7 @@ type ContractCreateArgs = record {
   title : text;
   parties : vec Ref;
   mandate : opt text;
-  value : nat;
+  value : Money;
   symbol : text;
   terms_ref : text;
   terms_hash : text;
@@ -1090,11 +1111,10 @@ type ContractCreateArgs = record {
   ends_at : opt Timestamp;
 };
 
-// Threshold and quorum in hundred-millionths.
 type GovernanceUpdateArgs = record {
   voting_window : opt Duration;
-  voting_threshold : opt nat;
-  voting_quorum : opt nat;
+  voting_threshold : opt Ratio;
+  voting_quorum : opt Ratio;
 };
 
 // §5
@@ -1153,7 +1173,7 @@ type NFTTokenRegisterArgs = record {
 type TransferCreateArgs = record {
   fund : text;
   to : Ref;
-  amount : nat;
+  amount : Money;
   symbol : opt text;
   category : opt text;
   description : opt text;
@@ -1164,7 +1184,7 @@ type TransferRevertArgs = record { transfer : text; reason : opt text };
 
 type InvoiceCreateArgs = record {
   payer : Ref;
-  amount : nat;
+  amount : Money;
   symbol : opt text;
   due_at : opt Timestamp;
   reason : opt Ref;
@@ -1184,15 +1204,16 @@ type InvoicePage = record { items : vec Invoice; next : opt text };
 type FundCreateArgs = record { fund : text; name : opt text; kind : opt text; department : opt text };
 // Periods open in order: one starts no earlier than the latest ends.
 type PeriodOpenArgs = record { period : text; name : opt text; starts_at : Timestamp; ends_at : Timestamp };
-type BudgetDraftArgs = record { fund : text; period : text; category : text; kind : opt text; planned : nat };
-type BudgetAmendArgs = record { budget : text; planned : nat };
-// Shares in hundred-millionths, adding up to at most 100 000 000.
+type BudgetDraftArgs = record { fund : text; period : text; category : text; kind : opt text; planned : Money };
+type BudgetAmendArgs = record { budget : text; planned : Money };
+// Shares add up to at most 100 000 000 (100 %).
 type AllocationRuleDraftArgs = record { source_fund : text; rules : vec Allocation };
 // Pays each active, non-agent appointee once per period label.
 type PayrollRunArgs = record { department : text; period : text; symbol : opt text };
 type ReportIssueArgs = record { period : text; kind : opt text };
 
-type TaxPolicyDraftArgs = record { document : Value; description : opt text };
+// The entries are checked as they are when the policy is proposed (layered-codex §3.2).
+type TaxPolicyDraftArgs = record { document : Value; description : opt text; taxes : vec TaxEntry };
 // Bills one batch of taxpayers for the period; those already billed are skipped.
 type TaxAssessArgs = record { period : text; tax : opt text; cursor : opt text; limit : opt nat32 };
 type TaxAssessPage = record { items : vec Invoice; skipped : nat; next : opt text };
@@ -1200,7 +1221,7 @@ type TaxAssessPage = record { items : vec Invoice; skipped : nat; next : opt tex
 type TaxDeclareArgs = record {
   base : text;
   period : text;
-  amount : nat;
+  amount : Money;
   organization : opt text;
   on_behalf_of : opt principal;
 };
@@ -1217,7 +1238,7 @@ type PaymentAccountAddArgs = record {
 type PaymentAccountRemoveArgs = record { account : text; organization : opt text; on_behalf_of : opt principal };
 
 // By court order.
-type ForceTransferArgs = record { symbol : text; from : principal; to : principal; amount : nat; reason : opt text };
+type ForceTransferArgs = record { symbol : text; from : principal; to : principal; amount : Money; reason : opt text };
 type FreezeArgs = record { symbol : text; account : principal; frozen : bool; reason : opt text };
 
 // §6
@@ -1334,7 +1355,7 @@ type EvidenceEvaluateArgs = record { case : text; evidence : text; admitted : bo
 type PenaltyTerms = record {
   kind : PenaltyKind;
   target : Ref;
-  amount : opt nat;
+  amount : opt Money;
   symbol : opt text;
   due_at : opt Timestamp;
 };
@@ -1378,7 +1399,7 @@ type TenderPage = record { items : vec Tender; next : opt text };
 // A sealed bid shows no price or score.
 type TenderDetail = record { tender : Tender; bids : vec Bid; next : opt text };
 
-// Weights in hundred-millionths, adding up to 100 000 000.
+// Weights add up to 100 000 000 (100 %).
 type TenderCreateArgs = record {
   requester : text;
   title : text;
@@ -1396,7 +1417,7 @@ type BidSubmitArgs = record {
   on_behalf_of : opt principal;
 };
 type BidWithdrawArgs = record { bid : text; on_behalf_of : opt principal };
-type BidOpening = record { bid : text; price : nat; nonce : text };
+type BidOpening = record { bid : text; price : Money; nonce : text };
 type BidsRevealArgs = record { tender : text; openings : vec BidOpening };
 // Marks from 0 to 10 per rubric criterion; scoring again replaces the caller's marks.
 type BidScoreArgs = record { bid : text; scores : vec record { criterion : text; score : nat } };

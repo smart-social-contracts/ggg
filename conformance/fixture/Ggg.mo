@@ -7,8 +7,7 @@ module {
   public type Account = { owner : Principal; subaccount : ?Blob };
   /// AllocationRule and TaxPolicy.
   public type AdoptionStatus = { #Superseded; #Draft; #Proposed; #Adopted };
-  /// share in hundred-millionths.
-  public type Allocation = { fund : Text; share : Nat };
+  public type Allocation = { fund : Text; share : Ratio };
   public type AllocationRule = {
     id : Text;
     status : AdoptionStatus;
@@ -16,7 +15,7 @@ module {
     proposal : ?Text;
     rules : [Allocation];
   };
-  /// Shares in hundred-millionths, adding up to at most 100 000 000.
+  /// Shares add up to at most 100 000 000 (100 %).
   public type AllocationRuleDraftArgs = {
     source_fund : Text;
     rules : [Allocation];
@@ -86,19 +85,19 @@ module {
     operations : [Text];
     department : Text;
   };
-  public type Balance = { amount : Nat; symbol : Text };
+  public type Balance = { amount : Money; symbol : Text };
   public type Bid = {
     id : Text;
     sealed : Bool;
     score : ?Nat;
     vendor : Text;
     payload_ref : Text;
-    price : ?Nat;
+    price : ?Money;
     tender : Text;
     submitted_at : Timestamp;
     payload_hash : Text;
   };
-  public type BidOpening = { bid : Text; nonce : Text; price : Nat };
+  public type BidOpening = { bid : Text; nonce : Text; price : Money };
   public type BidScore = {
     id : Text;
     bid : Text;
@@ -126,20 +125,20 @@ module {
   public type Budget = {
     id : Text;
     status : BudgetStatus;
-    actual : Nat;
+    actual : Money;
     period : Text;
     fund : Text;
     kind : Text;
-    planned : Nat;
+    planned : Money;
     category : Text;
     proposal : ?Text;
   };
-  public type BudgetAmendArgs = { planned : Nat; budget : Text };
+  public type BudgetAmendArgs = { planned : Money; budget : Text };
   public type BudgetDraftArgs = {
     period : Text;
     fund : Text;
     kind : ?Text;
-    planned : Nat;
+    planned : Money;
     category : Text;
   };
   public type BudgetStatus = { #Closed; #Draft; #Proposed; #Amended; #Adopted };
@@ -225,7 +224,7 @@ module {
     title : Text;
     mandate : ?Text;
     starts_at : ?Timestamp;
-    value : Nat;
+    value : Money;
     ends_at : ?Timestamp;
     terms_hash : Text;
     terms_ref : Text;
@@ -236,7 +235,7 @@ module {
     title : Text;
     mandate : ?Text;
     starts_at : ?Timestamp;
-    value : Nat;
+    value : Money;
     ends_at : ?Timestamp;
     terms_hash : Text;
     terms_ref : Text;
@@ -302,8 +301,7 @@ module {
   };
   /// The token's ggg: header as read from the ledger, and its frozen flag.
   public type CredentialVerifyArgs = { frozen : Bool; header : [(Text, Text)] };
-  /// weight in hundred-millionths.
-  public type Criterion = { weight : Nat; criterion : Text };
+  public type Criterion = { weight : Ratio; criterion : Text };
   public type Cycle = { name : Text; every : Duration };
   public type DelegableOperation = { permission : Text; operation : Text };
   public type Delegation = {
@@ -584,7 +582,7 @@ module {
   public type ForceTransferArgs = {
     to : Principal;
     from : Principal;
-    amount : Nat;
+    amount : Money;
     symbol : Text;
     reason : ?Text;
   };
@@ -628,11 +626,10 @@ module {
     #Unauthenticated;
     #Conflict : Text;
   };
-  /// Threshold and quorum in hundred-millionths.
   public type GovernanceUpdateArgs = {
     voting_window : ?Duration;
-    voting_quorum : ?Nat;
-    voting_threshold : ?Nat;
+    voting_quorum : ?Ratio;
+    voting_threshold : ?Ratio;
   };
   /// The change was applied, with the id of any record it created, or a proposal was filed to make it.
   public type Governed = { #Done : ?Text; #Proposed : Text };
@@ -714,7 +711,7 @@ module {
     due_at : ?Timestamp;
     paid_at : ?Timestamp;
     payer : Ref;
-    amount : Nat;
+    amount : Money;
     payment : ?Value;
     symbol : Text;
     reason : ?Ref;
@@ -723,7 +720,7 @@ module {
   public type InvoiceCreateArgs = {
     due_at : ?Timestamp;
     payer : Ref;
-    amount : Nat;
+    amount : Money;
     symbol : ?Text;
     reason : ?Ref;
   };
@@ -829,11 +826,11 @@ module {
     transaction : Text;
     user : ?Principal;
     description : Text;
-    credit : Nat;
+    credit : Money;
     appeal : ?Text;
     category : Text;
     organization : ?Text;
-    debit : Nat;
+    debit : Money;
     transfer : ?Text;
     symbol : Text;
   };
@@ -898,7 +895,7 @@ module {
     id : Text;
     status : MandateStatus;
     title : Text;
-    max_value : ?Nat;
+    max_value : ?Money;
     scope : Value;
     proposal : ?Text;
     executor : ?Text;
@@ -908,7 +905,7 @@ module {
   /// A replayed proposal records itself as the mandate's proposal.
   public type MandateCreateArgs = {
     title : Text;
-    max_value : ?Nat;
+    max_value : ?Money;
     scope : Value;
     executor : ?Text;
     expires_at : ?Timestamp;
@@ -933,6 +930,9 @@ module {
     joined_at : ?Timestamp;
   };
   public type MemberStatus = { #Inactive; #Active; #Suspended; #Banned };
+  /// Money in the token's smallest unit (Token.decimals). Money computed from a Ratio is rounded to the
+  /// nearest cent, an exact half away from zero (model §1).
+  public type Money = Nat;
   public type Monitor = {
     memory : Nat;
     status : RealmStatus;
@@ -1073,7 +1073,7 @@ module {
     verdict : Text;
     target : Ref;
     due_at : ?Timestamp;
-    amount : ?Nat;
+    amount : ?Money;
     symbol : ?Text;
   };
   public type PenaltyExecuteArgs = { penalty : Text; due_at : ?Timestamp };
@@ -1092,7 +1092,7 @@ module {
     kind : PenaltyKind;
     target : Ref;
     due_at : ?Timestamp;
-    amount : ?Nat;
+    amount : ?Money;
     symbol : ?Text;
   };
   public type Period = { count : Nat; unit : PeriodUnit };
@@ -1119,14 +1119,14 @@ module {
     category : Text;
     profiles : [Text];
   };
-  /// m of n approvals; quorum in hundred-millionths (100 000 000 = 100 %).
-  public type Policy = { m : Nat; n : Nat; veto : [Principal]; quorum : Nat };
+  /// m of n approvals.
+  public type Policy = { m : Nat; n : Nat; veto : [Principal]; quorum : Ratio };
   public type Position = {
     id : Text;
     status : PositionStatus;
     title : Text;
     salary_period : ?Duration;
-    salary : Nat;
+    salary : Money;
     headcount : Nat;
     organization : ?Text;
     department : ?Text;
@@ -1136,7 +1136,7 @@ module {
   public type PositionCreateArgs = {
     title : Text;
     salary_period : ?Duration;
-    salary : ?Nat;
+    salary : ?Money;
     headcount : ?Nat;
     department : Text;
     position : Text;
@@ -1147,7 +1147,7 @@ module {
     status : ?{ #Open; #Frozen };
     title : ?Text;
     salary_period : ?Duration;
-    salary : ?Nat;
+    salary : ?Money;
     headcount : ?Nat;
     position : Text;
     profile : ?Text;
@@ -1179,8 +1179,7 @@ module {
     tally : Tally;
     title : Text;
     action : ProposalAction;
-    /// Both in hundred-millionths (100 000 000 = 100 %).
-    threshold : Nat;
+    threshold : Ratio;
     /// When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
     effective_at : ?Timestamp;
     description : Text;
@@ -1189,7 +1188,7 @@ module {
     on_behalf_of : ?Principal;
     proposer : Principal;
     department : ?Text;
-    quorum : Nat;
+    quorum : Ratio;
   };
   public type ProposalAction = {
     /// One update call the realm makes to itself once accepted; `arg` is Candid-encoded.
@@ -1305,6 +1304,11 @@ module {
     #Suspended;
     #Merging;
   };
+  public type Rate = Nat;
+  /// A ratio in hundred-millionths: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456.
+  /// One scale for quorum, threshold, share, weight and tax rate (model §1). A Ratio is at most 100 %; a
+  /// Rate, for tax rates and coefficients, which legislation takes above 100 %, is at most 100 times that.
+  public type Ratio = Nat;
   public type Realm = {
     id : Text;
     status : RealmStatus;
@@ -1328,10 +1332,10 @@ module {
     trusted_approvers : [Text];
     /// Its members; on a capital, with its quarters' as they last reported.
     member_count : Nat;
-    voting_quorum : Nat;
+    voting_quorum : Ratio;
     background_image_url : ?Text;
-    /// In hundred-millionths, for realm-wide proposals.
-    voting_threshold : Nat;
+    /// For realm-wide proposals.
+    voting_threshold : Ratio;
     installed_version : Text;
     treasury : ?Text;
     accounting_currency : ?Text;
@@ -1439,7 +1443,7 @@ module {
     base : Text;
     invoice : ?Text;
     declarant : Ref;
-    amount : Nat;
+    amount : Money;
   };
   public type TaxDeclarationStatus = { #Disputed; #Filed; #Assessed; #Settled };
   /// For the caller, or an organization they administer.
@@ -1448,21 +1452,40 @@ module {
     base : Text;
     on_behalf_of : ?Principal;
     organization : ?Text;
-    amount : Nat;
+    amount : Money;
   };
   public type TaxDeclared = {
     invoice : ?Invoice;
     declaration : TaxDeclaration;
   };
+  /// One tax, fee or charge of a policy. `kind` is the realm's word (e.g. `tax`, `fee`, `surcharge`);
+  /// `subject` names the entity each assessment walks (e.g. `Land`, `User`, `Organization`); `rate` or
+  /// `amount` is what the entry charges when no codex computes it; `facts` is what legislation reads about
+  /// the entry beyond these. A rule on tax_policy_propose or tax_policy_draft ranges over the policy's
+  /// entries, one request per entry (layered-codex §3.2).
+  public type TaxEntry = {
+    subject : Text;
+    code : Text;
+    kind : Text;
+    rate : ?Rate;
+    amount : ?Money;
+    facts : Value;
+  };
   public type TaxPolicy = {
     id : Text;
     status : AdoptionStatus;
+    taxes : [TaxEntry];
     adopted_at : ?Timestamp;
     description : Text;
     document : Value;
     proposal : ?Text;
   };
-  public type TaxPolicyDraftArgs = { description : ?Text; document : Value };
+  /// The entries are checked as they are when the policy is proposed (layered-codex §3.2).
+  public type TaxPolicyDraftArgs = {
+    taxes : [TaxEntry];
+    description : ?Text;
+    document : Value;
+  };
   public type Tender = {
     id : Text;
     opens_at : ?Timestamp;
@@ -1481,7 +1504,7 @@ module {
     justification : ?Text;
     tender : Text;
   };
-  /// Weights in hundred-millionths, adding up to 100 000 000.
+  /// Weights add up to 100 000 000 (100 %).
   public type TenderCreateArgs = {
     opens_at : ?Timestamp;
     title : Text;
@@ -1511,7 +1534,7 @@ module {
   public type Timestamp = Nat64;
   public type Token = {
     id : Text;
-    fee : Nat;
+    fee : Money;
     decimals : Nat8;
     ledger : Principal;
     indexer : ?Principal;
@@ -1543,7 +1566,7 @@ module {
     invoice : ?Text;
     sender : Ref;
     ledger_tx : ?Nat;
-    amount : Nat;
+    amount : Money;
     symbol : Text;
     payroll : ?Text;
   };
@@ -1555,7 +1578,7 @@ module {
     description : ?Text;
     category : ?Text;
     on_behalf_of : ?Principal;
-    amount : Nat;
+    amount : Money;
     symbol : ?Text;
   };
   public type TransferRevertArgs = { transfer : Text; reason : ?Text };

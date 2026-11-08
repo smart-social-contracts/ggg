@@ -102,7 +102,8 @@ model lacks. Each is added at the scope below; some are narrowed, and some stay 
 - **certified attributes** on a person;
 - **typed tax entries**: a saved `TaxPolicy` holds a `taxes` list, so a forbid on `tax_policy_propose`
   can range over the policy's entries. The same forbids run when a draft is saved with
-  `tax_policy_draft`;
+  `tax_policy_draft`, whose `taxes` is required (a breaking change of 0.2.0: a draft states its entries;
+  the brackets of a progressive tax go in an entry's `facts` and the codex computes each amount);
 - **invoice items**;
 - a contract's and a tender's **kind**;
 - **requests**, and the **access-to-information request**;
@@ -144,7 +145,8 @@ No layer of legislation names a department of a lower layer.
   concerns each entry of the saved policy. The forbid is evaluated once per element, with the element's
   fields as facts, and the Cedar engine sees one request per element, on the Cedar action
   `<operation>.<list>` (`tax_policy_propose.taxes`), whose facts are the element's type. The same forbids
-  run when a draft is saved, on `tax_policy_draft.taxes`.
+  run when a draft is saved, on `tax_policy_draft.taxes`. The element is a `TaxEntry`: `code`, `kind`,
+  `subject`, `rate`, `amount` and `facts`; the fact schema (§3.3) lists both actions with those facts.
 - **`CodexStatus` `Pending` and `codex_activate`.** A codex can be installed, checked and ready
   before it is in force: `Pending`. `ggg_codex_activate { codex; at }` makes it active, and its hook
   `on_codex_activate` is the realm's own entry point (§1). With `effective_at` on proposals (§6) the
@@ -154,11 +156,39 @@ No layer of legislation names a department of a lower layer.
 
 ### 3.3 The fact schema: units, rates, money and periods
 
+**The fact schema is [`facts.json`](../facts.json),** released with `ggg.did` and generated from it
+(`npm run facts` in `conformance/`; a conformance test keeps the two equal). It has one entry per Cedar
+action: every operation, named as the operation, with its facts, which are the operation's arguments as
+`ggg.did` types them; and every list of records among those arguments as an action of its own,
+`<operation>.<list>`, whose facts are the element's fields (§3.2). `tax_policy_propose.taxes` ranges
+over the saved policy's entries, since that operation's own argument is only the policy's id. An
+operation whose argument is a single value has one fact, `id`, the record it acts on (`user`, `scope`,
+`data` or `transport_key` where the value is not an id). Each fact gives its Candid type, whether it is
+optional, and what the schema adds: its `kind`, `min`, `max` and allowed `values` (a variant's tags).
+The kinds are the named aliases of `ggg.did`:
+
+| Kind | Aliases | Candid | Unit | Range |
+|---|---|---|---|---|
+| `ratio` | `Ratio`, `Rate` | `nat`, `nat` | hundred-millionths | `Ratio` 0 to 100 000 000 (100 %); `Rate` 0 to 10 000 000 000 (100 times that) |
+| `money` | `Money` | `nat` | the token's smallest unit (Token.decimals) | 0 to 9 007 199 254 740 991 (2^53 − 1) |
+| `timestamp` | `Timestamp` | `nat64` | nanoseconds since 1970-01-01 UTC | 0 to 9 223 372 036 854 775 807 |
+| `duration` | `Duration` | `nat64` | nanoseconds | 0 to 9 223 372 036 854 775 807 |
+| `period` | `Period` | `record { count : nat; unit : PeriodUnit }` | a count of one calendar unit | `count` 0 to 1 000 000; `unit` one of `Day`, `WorkingDay`, `Month`, `Year` |
+
+A `Ratio` is a quorum, threshold, share or weight; a `Rate` is a tax rate or a coefficient, which
+legislation takes above 100 %. Every fact has a finite range: a plain `nat`, and a `nat64` outside a
+kind, run to 9 223 372 036 854 775 807, the largest Cedar `Long`, so a GOS can always bound arithmetic on
+facts (rule 9 of the `F` language). **Ranges are enforced:** a call with a value outside its fact's
+range is refused with `InvalidArgument`, and the analysis assumptions rest on that. `TaxEntry.kind` and
+`subject` are text, with documented examples and no allowed values in the schema, so a realm names its
+own; `TaxEntry.facts` is a `Value`, which a forbid cannot read, so a rule on a fact inside it is a guard.
+
 - **A fact's unit is declared by its schema entry,** never by a suffix in its name: `rate`, not
   `rate_bp`.
 - **So are its range and its allowed values,** where it has them. A Cedar schema cannot state them, so
-  a GOS's analysis tools take them from here as assumptions about every request.
-- **Every ratio is an integer in hundred-millionths:** 100 % is 100 000 000, 1 % is 1 000 000 and
+  a GOS's analysis tools take them from `facts.json` as assumptions about every request, which hold
+  because a GOS refuses a value outside its range.
+- **Every ratio is an integer in hundred-millionths** (`Ratio`, and `Rate` above 100 %): 100 % is 100 000 000, 1 % is 1 000 000 and
   0.123456 % is 123 456. One scale covers tax rates, quorum, thresholds, shares and weights alike.
   Integers inside, decimals for people: a GOS shows `0.123456 %`, and a chapter writes a rate as the
   legislation does. Integers because there is one form for every value, so checksums are stable;
@@ -169,8 +199,10 @@ No layer of legislation names a department of a lower layer.
 - **Money is rounded by one rule:** wherever money is computed from a rate, the result is rounded to
   the nearest cent, and an exact half is rounded away from zero (2.345 becomes 2.35, and −2.345
   becomes −2.35), as euro legislation requires (Regulation (EC) 1103/97 Art. 5). GGG states it with
-  the money kind of its fact schema, so every implementation rounds the same way. Another rule is
-  added only when a piece of legislation needs it.
+  the money kind of its fact schema (`Money`), so every implementation rounds the same way. Money is
+  an integer in the token's smallest unit, so a cent is 10^(decimals − 2) of them and the rounded
+  result is a multiple of it; the token's `decimals` is on `Token`, where chapters can read it. Another
+  rule is added only when a piece of legislation needs it.
 - **A `Period` is a count and a unit:** `PeriodUnit = variant { Day; WorkingDay; Month; Year }`, both
   in `ggg.did` (§7 for `WorkingDay`). A deadline is a `Period`, not a `Duration` in nanoseconds: three months is
   three months, whatever the days. Periods compare only within one unit: comparing two units, such as

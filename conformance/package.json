@@ -17,6 +17,7 @@
   },
   "scripts": {
     "idl": "sh scripts/idl.sh",
+    "facts": "node scripts/facts.js",
     "build:fixture": "sh fixture/build.sh",
     "test": "npm run build:fixture && node --test --test-concurrency=1 test/*.test.js"
   },

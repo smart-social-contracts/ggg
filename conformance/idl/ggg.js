@@ -1,6 +1,7 @@
 export const idlFactory = ({ IDL }) => {
   const Value = IDL.Rec();
-  const Allocation = IDL.Record({ 'fund' : IDL.Text, 'share' : IDL.Nat });
+  const Ratio = IDL.Nat;
+  const Allocation = IDL.Record({ 'fund' : IDL.Text, 'share' : Ratio });
   const AllocationRuleDraftArgs = IDL.Record({
     'source_fund' : IDL.Text,
     'rules' : IDL.Vec(Allocation),
@@ -36,11 +37,12 @@ export const idlFactory = ({ IDL }) => {
   });
   const Ref = IDL.Record({ 'id' : IDL.Text, 'kind' : IDL.Text });
   const Timestamp = IDL.Nat64;
+  const Money = IDL.Nat;
   const PenaltyTerms = IDL.Record({
     'kind' : PenaltyKind,
     'target' : Ref,
     'due_at' : IDL.Opt(Timestamp),
-    'amount' : IDL.Opt(IDL.Nat),
+    'amount' : IDL.Opt(Money),
     'symbol' : IDL.Opt(IDL.Text),
   });
   const AppealDecideArgs = IDL.Record({
@@ -97,7 +99,7 @@ export const idlFactory = ({ IDL }) => {
     'score' : IDL.Opt(IDL.Nat),
     'vendor' : IDL.Text,
     'payload_ref' : IDL.Text,
-    'price' : IDL.Opt(IDL.Nat),
+    'price' : IDL.Opt(Money),
     'tender' : IDL.Text,
     'submitted_at' : Timestamp,
     'payload_hash' : IDL.Text,
@@ -116,21 +118,21 @@ export const idlFactory = ({ IDL }) => {
   const BidOpening = IDL.Record({
     'bid' : IDL.Text,
     'nonce' : IDL.Text,
-    'price' : IDL.Nat,
+    'price' : Money,
   });
   const BidsRevealArgs = IDL.Record({
     'tender' : IDL.Text,
     'openings' : IDL.Vec(BidOpening),
   });
   const BudgetAmendArgs = IDL.Record({
-    'planned' : IDL.Nat,
+    'planned' : Money,
     'budget' : IDL.Text,
   });
   const BudgetDraftArgs = IDL.Record({
     'period' : IDL.Text,
     'fund' : IDL.Text,
     'kind' : IDL.Opt(IDL.Text),
-    'planned' : IDL.Nat,
+    'planned' : Money,
     'category' : IDL.Text,
   });
   const CaseAssignArgs = IDL.Record({ 'case' : IDL.Text, 'judge' : IDL.Text });
@@ -195,7 +197,7 @@ export const idlFactory = ({ IDL }) => {
     'title' : IDL.Text,
     'mandate' : IDL.Opt(IDL.Text),
     'starts_at' : IDL.Opt(Timestamp),
-    'value' : IDL.Nat,
+    'value' : Money,
     'ends_at' : IDL.Opt(Timestamp),
     'terms_hash' : IDL.Text,
     'terms_ref' : IDL.Text,
@@ -215,7 +217,7 @@ export const idlFactory = ({ IDL }) => {
     'title' : IDL.Text,
     'mandate' : IDL.Opt(IDL.Text),
     'starts_at' : IDL.Opt(Timestamp),
-    'value' : IDL.Nat,
+    'value' : Money,
     'ends_at' : IDL.Opt(Timestamp),
     'terms_hash' : IDL.Text,
     'terms_ref' : IDL.Text,
@@ -379,7 +381,7 @@ export const idlFactory = ({ IDL }) => {
     'm' : IDL.Nat,
     'n' : IDL.Nat,
     'veto' : IDL.Vec(IDL.Principal),
-    'quorum' : IDL.Nat,
+    'quorum' : Ratio,
   });
   const Department = IDL.Record({
     'id' : IDL.Text,
@@ -452,7 +454,7 @@ export const idlFactory = ({ IDL }) => {
     'status' : PositionStatus,
     'title' : IDL.Text,
     'salary_period' : IDL.Opt(Duration),
-    'salary' : IDL.Nat,
+    'salary' : Money,
     'headcount' : IDL.Nat,
     'organization' : IDL.Opt(IDL.Text),
     'department' : IDL.Opt(IDL.Text),
@@ -666,8 +668,8 @@ export const idlFactory = ({ IDL }) => {
   });
   const GovernanceUpdateArgs = IDL.Record({
     'voting_window' : IDL.Opt(Duration),
-    'voting_quorum' : IDL.Opt(IDL.Nat),
-    'voting_threshold' : IDL.Opt(IDL.Nat),
+    'voting_quorum' : IDL.Opt(Ratio),
+    'voting_threshold' : IDL.Opt(Ratio),
   });
   const HostInfrastructure = IDL.Record({
     'file_registry' : IDL.Opt(IDL.Principal),
@@ -759,7 +761,7 @@ export const idlFactory = ({ IDL }) => {
     'due_at' : IDL.Opt(Timestamp),
     'paid_at' : IDL.Opt(Timestamp),
     'payer' : Ref,
-    'amount' : IDL.Nat,
+    'amount' : Money,
     'payment' : IDL.Opt(Value),
     'symbol' : IDL.Text,
     'reason' : IDL.Opt(Ref),
@@ -767,7 +769,7 @@ export const idlFactory = ({ IDL }) => {
   const InvoiceCreateArgs = IDL.Record({
     'due_at' : IDL.Opt(Timestamp),
     'payer' : Ref,
-    'amount' : IDL.Nat,
+    'amount' : Money,
     'symbol' : IDL.Opt(IDL.Text),
     'reason' : IDL.Opt(Ref),
   });
@@ -897,11 +899,11 @@ export const idlFactory = ({ IDL }) => {
     'transaction' : IDL.Text,
     'user' : IDL.Opt(IDL.Principal),
     'description' : IDL.Text,
-    'credit' : IDL.Nat,
+    'credit' : Money,
     'appeal' : IDL.Opt(IDL.Text),
     'category' : IDL.Text,
     'organization' : IDL.Opt(IDL.Text),
-    'debit' : IDL.Nat,
+    'debit' : Money,
     'transfer' : IDL.Opt(IDL.Text),
     'symbol' : IDL.Text,
   });
@@ -979,7 +981,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const MandateCreateArgs = IDL.Record({
     'title' : IDL.Text,
-    'max_value' : IDL.Opt(IDL.Nat),
+    'max_value' : IDL.Opt(Money),
     'scope' : Value,
     'executor' : IDL.Opt(IDL.Text),
     'expires_at' : IDL.Opt(Timestamp),
@@ -1145,7 +1147,7 @@ export const idlFactory = ({ IDL }) => {
     'verdict' : IDL.Text,
     'target' : Ref,
     'due_at' : IDL.Opt(Timestamp),
-    'amount' : IDL.Opt(IDL.Nat),
+    'amount' : IDL.Opt(Money),
     'symbol' : IDL.Opt(IDL.Text),
   });
   const PeriodOpenArgs = IDL.Record({
@@ -1157,7 +1159,7 @@ export const idlFactory = ({ IDL }) => {
   const PositionCreateArgs = IDL.Record({
     'title' : IDL.Text,
     'salary_period' : IDL.Opt(Duration),
-    'salary' : IDL.Opt(IDL.Nat),
+    'salary' : IDL.Opt(Money),
     'headcount' : IDL.Opt(IDL.Nat),
     'department' : IDL.Text,
     'position' : IDL.Text,
@@ -1167,7 +1169,7 @@ export const idlFactory = ({ IDL }) => {
     'status' : IDL.Opt(IDL.Variant({ 'Open' : IDL.Null, 'Frozen' : IDL.Null })),
     'title' : IDL.Opt(IDL.Text),
     'salary_period' : IDL.Opt(Duration),
-    'salary' : IDL.Opt(IDL.Nat),
+    'salary' : IDL.Opt(Money),
     'headcount' : IDL.Opt(IDL.Nat),
     'position' : IDL.Text,
     'profile' : IDL.Opt(IDL.Text),
@@ -1235,7 +1237,7 @@ export const idlFactory = ({ IDL }) => {
     'tally' : Tally,
     'title' : IDL.Text,
     'action' : ProposalAction,
-    'threshold' : IDL.Nat,
+    'threshold' : Ratio,
     'effective_at' : IDL.Opt(Timestamp),
     'description' : IDL.Text,
     'deadline' : IDL.Opt(Timestamp),
@@ -1243,7 +1245,7 @@ export const idlFactory = ({ IDL }) => {
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'proposer' : IDL.Principal,
     'department' : IDL.Opt(IDL.Text),
-    'quorum' : IDL.Nat,
+    'quorum' : Ratio,
   });
   const VoteChoice = IDL.Variant({
     'No' : IDL.Null,
@@ -1397,9 +1399,9 @@ export const idlFactory = ({ IDL }) => {
     'welcome_message' : IDL.Text,
     'trusted_approvers' : IDL.Vec(IDL.Text),
     'member_count' : IDL.Nat,
-    'voting_quorum' : IDL.Nat,
+    'voting_quorum' : Ratio,
     'background_image_url' : IDL.Opt(IDL.Text),
-    'voting_threshold' : IDL.Nat,
+    'voting_threshold' : Ratio,
     'installed_version' : IDL.Text,
     'treasury' : IDL.Opt(IDL.Text),
     'accounting_currency' : IDL.Opt(IDL.Text),
@@ -1528,7 +1530,7 @@ export const idlFactory = ({ IDL }) => {
     'base' : IDL.Text,
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'organization' : IDL.Opt(IDL.Text),
-    'amount' : IDL.Nat,
+    'amount' : Money,
   });
   const TaxDeclarationStatus = IDL.Variant({
     'Disputed' : IDL.Null,
@@ -1543,13 +1545,23 @@ export const idlFactory = ({ IDL }) => {
     'base' : IDL.Text,
     'invoice' : IDL.Opt(IDL.Text),
     'declarant' : Ref,
-    'amount' : IDL.Nat,
+    'amount' : Money,
   });
   const TaxDeclared = IDL.Record({
     'invoice' : IDL.Opt(Invoice),
     'declaration' : TaxDeclaration,
   });
+  const Rate = IDL.Nat;
+  const TaxEntry = IDL.Record({
+    'subject' : IDL.Text,
+    'code' : IDL.Text,
+    'kind' : IDL.Text,
+    'rate' : IDL.Opt(Rate),
+    'amount' : IDL.Opt(Money),
+    'facts' : Value,
+  });
   const TaxPolicyDraftArgs = IDL.Record({
+    'taxes' : IDL.Vec(TaxEntry),
     'description' : IDL.Opt(IDL.Text),
     'document' : Value,
   });
@@ -1558,7 +1570,7 @@ export const idlFactory = ({ IDL }) => {
     'justification' : IDL.Opt(IDL.Text),
     'tender' : IDL.Text,
   });
-  const Criterion = IDL.Record({ 'weight' : IDL.Nat, 'criterion' : IDL.Text });
+  const Criterion = IDL.Record({ 'weight' : Ratio, 'criterion' : IDL.Text });
   const TenderCreateArgs = IDL.Record({
     'opens_at' : IDL.Opt(Timestamp),
     'title' : IDL.Text,
@@ -1605,7 +1617,7 @@ export const idlFactory = ({ IDL }) => {
   const ForceTransferArgs = IDL.Record({
     'to' : IDL.Principal,
     'from' : IDL.Principal,
-    'amount' : IDL.Nat,
+    'amount' : Money,
     'symbol' : IDL.Text,
     'reason' : IDL.Opt(IDL.Text),
   });
@@ -1629,7 +1641,7 @@ export const idlFactory = ({ IDL }) => {
     'description' : IDL.Opt(IDL.Text),
     'category' : IDL.Opt(IDL.Text),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
-    'amount' : IDL.Nat,
+    'amount' : Money,
     'symbol' : IDL.Opt(IDL.Text),
   });
   const TransferRevertArgs = IDL.Record({
@@ -1642,7 +1654,7 @@ export const idlFactory = ({ IDL }) => {
     'source_fund' : IDL.Opt(IDL.Text),
     'anchor_month' : IDL.Opt(IDL.Nat8),
   });
-  const Balance = IDL.Record({ 'amount' : IDL.Nat, 'symbol' : IDL.Text });
+  const Balance = IDL.Record({ 'amount' : Money, 'symbol' : IDL.Text });
   const Fund = IDL.Record({
     'id' : IDL.Text,
     'allocation_rule' : IDL.Opt(IDL.Text),
@@ -1653,7 +1665,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Token = IDL.Record({
     'id' : IDL.Text,
-    'fee' : IDL.Nat,
+    'fee' : Money,
     'decimals' : IDL.Nat8,
     'ledger' : IDL.Principal,
     'indexer' : IDL.Opt(IDL.Principal),
