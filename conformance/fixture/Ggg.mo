@@ -179,7 +179,7 @@ module {
     #Appealed;
     #Assigned;
   };
-  public type ChangeQuarterArgs = { quarter : Text; on_behalf_of : ?Principal };
+  public type ChangeQuarterArgs = { quarter : Text };
   /// One level of the chart: the department's totals, and its sub-departments a page at a time.
   public type Chart = {
     next : ?Text;
@@ -544,7 +544,6 @@ module {
   public type FederalVoteProposeArgs = {
     title : Text;
     action : ProposalAction;
-    on_behalf_of : ?Principal;
   };
   public type FederalVoteStatus = { #Failed; #Passed; #Open; #Cancelled };
   public type FederationMessage = {
@@ -678,12 +677,7 @@ module {
     identity : Text;
   };
   public type IdentityStatus = { #Rejected; #Verified; #Pending };
-  public type IdentitySubmitArgs = {
-    ref : Text;
-    kind : Text;
-    issuer : ?Text;
-    on_behalf_of : ?Principal;
-  };
+  public type IdentitySubmitArgs = { ref : Text; kind : Text; issuer : ?Text };
   public type Invite = {
     id : Text;
     max_uses : Nat;
@@ -1048,13 +1042,11 @@ module {
     network : Text;
     label_ : ?Text;
     address : Text;
-    on_behalf_of : ?Principal;
     organization : ?Text;
     symbol : ?Text;
   };
   public type PaymentAccountRemoveArgs = {
     account : Text;
-    on_behalf_of : ?Principal;
     organization : ?Text;
   };
   /// Pays each active, non-agent appointee once per period label.
