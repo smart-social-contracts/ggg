@@ -61,7 +61,7 @@ result. Several operations may share a permission. Flags:
 |---|---|
 | `read` | Query; changes nothing; not audited. |
 | `delegable` | May be called with `on_behalf_of`: the caller acts for a grantor whose active `Delegation` covers the permission. Both principals are audited. |
-| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create`, the parent) or on a record a department owns, such as a fund, budget, tender or proposal (the owner; a proposal belongs to the department it is scoped to, and a realm-wide one to the root). Identity operations name it in their `department` argument (§2). |
+| `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create`, the parent) or on a record a department owns, such as a fund, budget, tender or proposal (the owner; a proposal belongs to the department it is scoped to, and a realm-wide one to the root). Identity operations name it in their `department` argument (§2). A proposal carries such a call only within its scope (I-GOV-13). |
 | `signing` | Produces an act its signer is personally accountable for: a decision, a certification, a sanction. The active codex's [signing policy](#signing-policy) says whether agents may hold the permission and whether it may be delegated. By default only non-agents sign, and nobody signs on another's behalf. |
 
 An operation either succeeds with its result or is refused with a `GggError`, and a refused
@@ -71,8 +71,9 @@ operation changes nothing.
 
 A call comes from a **user** (possibly acting `on_behalf_of` a grantor), an **agent** (a user holding
 an agent appointment), a **codex** (limited to its declared capabilities), or a **replayed proposal**
-(realm authority). An implementation may add callers of its own, each limited to what it declares.
-Every caller is held to the same permissions and invariants; there is no path around them.
+(realm authority, within the proposal's scope: I-GOV-13). An implementation may add callers of its
+own, each limited to what it declares. Every caller is held to the same permissions and invariants;
+there is no path around them.
 
 ### Candid interface
 
@@ -380,14 +381,12 @@ Two kinds of body:
   `effective_at` the proposal is scheduled, even if its `deadline` is later, and finalized after it
   the proposal is accepted and its action executes at once.
 - I-GOV-8: `proposal_stop` ends a proposal that is `execution_scheduled`, without executing it, as
-  `withdrawn`; for any other status it is refused with `Conflict`. It is governed by the department
-  that owns the stopped proposal, the department it is scoped to (the root for a realm-wide one), and
-  by that department's policy: under a policy that is not direct, calling it files a proposal, scoped
-  to the same department, whose action is the call, so a vote of that department stops the scheduled
-  proposal; under a direct policy the call applies at once. A stop proposal that runs after its target
-  is no longer scheduled ends `failed`. When it applies at once, `proposal_stop` replies `Done` with no
-  id, because it creates no record; under a policy that is not direct it replies `Proposed` with the
-  new proposal's id.
+  `withdrawn`; for any other status it is refused with `Conflict`. Its governing department is the one
+  that owns the stopped proposal (§1), so the votes that may carry it are that department's and those
+  of the departments above it (I-GOV-13). Under a policy that is not direct, calling it files a
+  proposal of that department and replies `Proposed` with the new proposal's id; under a direct policy
+  it applies at once and replies `Done` with no id, because it creates no record. A stop proposal that
+  runs after its target is no longer scheduled ends `failed`.
 - I-GOV-9: A proposal's links are fixed at creation, like its action: no operation edits a proposal's
   links or its action. To change a proposal, its proposer withdraws it and creates a new one that
   `replaces` it.
@@ -412,6 +411,18 @@ Two kinds of body:
   `execution_scheduled` while `effective_at` is ahead, and at `effective_at` a GOS that runs the
   action by itself refuses `proposal_execute` with `Conflict`, one that does not waits for it. The
   action runs once (I-GOV-1).
+- I-GOV-13: A proposal carries a call only within its scope. A realm-wide proposal may carry any call.
+  A department's proposal may carry a call only when it is governed and its governing department (§1)
+  is that department or one below it; `proposal_create` refuses any other with `Forbidden`. A call on
+  a record that does not exist has no governing department: a department's proposal carrying it is
+  refused with `NotFound`; a realm-wide one may carry it, and its execution ends `failed`. The check
+  is made at creation and again when the action executes, against the departments as they are then: a
+  proposal carries nothing when its department has been deleted, or when the department that governs
+  its call is no longer that department or one below it (it was moved out from under it), and its
+  execution ends `failed` (I-GOV-1: nothing runs). So a department's vote cannot stop a realm-wide
+  scheduled proposal, the realm's can stop a department's, and a parent's can act on a department
+  below it, where a sibling's cannot. A governed call that files a proposal itself (§1) scopes it to
+  the governing department, so that proposal carries it when it is filed.
 
 ## 5. Finance
 
@@ -1088,3 +1099,4 @@ There is no permission for raw database writes: everything is an operation.
 | D15 | What a proposal's `threshold` means under a department's m-of-n policy | Decided 8 Nov 2026: it states the rule that decides the proposal and is applied, with one comparison per scope: a realm-wide proposal's yes votes *exceed* the threshold of its basis (votes cast, or all eligible members), a department's *reach* it over the eligible seats (m of n is m/n rounded down: 2 of 3 is 66 666 666); the proposer may only tighten the rule, and the casting vote is the realm's, for a realm-wide proposal only, set by governed configuration (I-GOV-3) |
 | D16 | Personal data in attributes, requests, dispatches and published documents | Decided 8 Nov 2026: an attribute's kind and value are in clear, readable only by the person, the reviewers and the codex; a request's or dispatch's personal content is an encrypted `Document` reference; a published copy holds no personal data (I-PRV-1) |
 | D17 | The majority of a proposal that a governed call files | Decided 8 Nov 2026: the scope's default rule; legislation that needs more requires a proposal of its own and may refuse the direct path with a guard (I-GOV-3) |
+| D18 | Which vote may carry a governed call on another department's record | Decided 8 Nov 2026: a realm-wide proposal carries any call; a department's only a governed call whose governing department is that department or one below it, checked at creation and again when the action executes (I-GOV-13) |
