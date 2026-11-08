@@ -200,11 +200,12 @@ argument (it must hold that permission through its positions or grants); otherwi
   one year.
 - I-ID-7: A delegate acts only within `starts_at`…`expires_at` and while the grant is `active`.
 - I-ID-8: Every delegated act records both the grantor and the delegate.
-- I-ID-9: A delegate's proposal is a motion, with no action. A delegable governed call made under a delegation
-  is filed as a proposal, and the GOS records the grant it was filed under. It replays unless that grant was
-  revoked or replaced, even if the grant has expired since, and only if the grant could still make that call.
-  A delegate does not vote on a proposal it filed. Power of attorney itself, payout accounts, identity proofs, moving to another quarter
-  and federal votes are never delegable.
+- I-ID-9: A delegate's proposal is a motion, with no action. A delegable governed call made under a
+  delegation is filed as a proposal, and the GOS records the grant it was filed under. It replays
+  unless that grant was revoked or replaced, even if the grant has expired since, and only if the
+  grant could still make that call. A delegate does not vote on a proposal it filed. Power of
+  attorney itself, payout accounts, identity proofs, moving to another quarter and federal votes are
+  never delegable.
 
 ## 3. Departments and organizations
 
