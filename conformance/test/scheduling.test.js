@@ -89,32 +89,45 @@ const execute = (id) => as(bob).ggg_proposal_execute(id);
 const RAN = ['Executed', 'Failed'];
 
 /**
- * Returns the proposal once its vote is closed. A GOS that settles a proposal as its vote ends refuses
- * the finalize with Conflict (I-GOV-12), and then the proposal already shows how it ended.
+ * The proposal after a finalize that the GOS refused with Conflict: it settled the proposal as its vote
+ * ended (I-GOV-12), so the proposal already shows how it ended.
  */
-async function finalizeProposal(id) {
-  const finalized = await as(bob).ggg_proposal_finalize(id);
-  if ('Ok' in finalized) return finalized.Ok;
-  refusedWith(finalized, 'Conflict');
+async function settledAlready(id, refused) {
+  refusedWith(refused, 'Conflict');
   const settled = await get(id);
   assert.notEqual(tag(settled.status), 'Voting', `${id} was refused a finalize, but its vote is open`);
   return settled;
 }
+
+/** Returns the proposal once its vote is closed: as finalize replies, or as the GOS had already settled it. */
+async function finalizeProposal(id) {
+  const finalized = await as(bob).ggg_proposal_finalize(id);
+  return 'Ok' in finalized ? finalized.Ok : settledAlready(id, finalized);
+}
 const finalize = async (id) => tag((await finalizeProposal(id)).status);
+
+/** The proposal, which has run its action already: a later proposal_execute is a Conflict. */
+async function alreadyRan(proposal) {
+  assert.ok(RAN.includes(tag(proposal.status)), `${proposal.id} is ${tag(proposal.status)}`);
+  refusedWith(await execute(proposal.id), 'Conflict');
+  return proposal;
+}
 
 /**
  * Finalizes a proposal whose effective_at, if it has one, has come by now, and returns the proposal once
- * the action has run. Either it is Accepted and proposal_execute runs the action, or it is already
- * Executed or Failed, and a later proposal_execute is a Conflict. A GOS that settled it as the vote ended,
- * before its effective_at, may still show it as ExecutionScheduled, and runScheduled follows it.
+ * the action has run. A finalize that settles it now replies Accepted, and proposal_execute runs the
+ * action, or Executed or Failed, and a later proposal_execute is a Conflict. A finalize refused with
+ * Conflict means the GOS settled it as the vote ended, perhaps before its effective_at, and then it
+ * shows Executed or Failed, or ExecutionScheduled until the GOS runs it, which runScheduled follows.
  */
 async function finalizeAndRun(id) {
-  const finalized = await finalizeProposal(id);
-  if (tag(finalized.status) === 'ExecutionScheduled') return runScheduled(id);
-  if (tag(finalized.status) === 'Accepted') return ok(await execute(id));
-  assert.ok(RAN.includes(tag(finalized.status)), `${id} is ${tag(finalized.status)}`);
-  refusedWith(await execute(id), 'Conflict');
-  return finalized;
+  const finalized = await as(bob).ggg_proposal_finalize(id);
+  if ('Err' in finalized) {
+    const settled = await settledAlready(id, finalized);
+    return tag(settled.status) === 'ExecutionScheduled' ? runScheduled(id) : alreadyRan(settled);
+  }
+  if (tag(finalized.Ok.status) === 'Accepted') return ok(await execute(id));
+  return alreadyRan(finalized.Ok);
 }
 
 /**
