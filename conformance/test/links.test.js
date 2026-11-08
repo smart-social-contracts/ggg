@@ -61,7 +61,6 @@ const create = (identity, links) =>
     threshold: [],
     quorum: [],
     threshold_of: [],
-    casting_vote: [],
     effective_at: [],
     links: links ? [links] : [],
     on_behalf_of: [],
@@ -82,7 +81,6 @@ test('a caller that sends no links field files a proposal with no links', async 
     threshold: [],
     quorum: [],
     threshold_of: [],
-    casting_vote: [],
     effective_at: [],
     on_behalf_of: [],
   }));

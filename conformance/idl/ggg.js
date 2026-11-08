@@ -438,6 +438,7 @@ export const idlFactory = ({ IDL }) => {
     'm' : IDL.Nat,
     'n' : IDL.Nat,
     'veto' : IDL.Vec(IDL.Principal),
+    'casting_vote' : IDL.Opt(IDL.Principal),
     'quorum' : Ratio,
   });
   const Department = IDL.Record({
@@ -828,6 +829,9 @@ export const idlFactory = ({ IDL }) => {
   });
   const GovernanceUpdateArgs = IDL.Record({
     'voting_window' : IDL.Opt(Duration),
+    'casting_vote' : IDL.Opt(
+      IDL.Variant({ 'Set' : IDL.Principal, 'Clear' : IDL.Null })
+    ),
     'voting_quorum' : IDL.Opt(Ratio),
     'voting_threshold' : IDL.Opt(Ratio),
   });
@@ -1487,7 +1491,6 @@ export const idlFactory = ({ IDL }) => {
     'links' : IDL.Opt(IDL.Vec(ProposalLink)),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'matter' : IDL.Opt(IDL.Text),
-    'casting_vote' : IDL.Opt(IDL.Principal),
     'department' : IDL.Opt(IDL.Text),
     'quorum' : IDL.Opt(Ratio),
   });
@@ -1686,6 +1689,7 @@ export const idlFactory = ({ IDL }) => {
     'federation_realm_id' : IDL.Opt(IDL.Text),
     'accounting_currency_decimals' : IDL.Opt(IDL.Nat8),
     'welcome_message' : IDL.Text,
+    'casting_vote' : IDL.Opt(IDL.Principal),
     'trusted_approvers' : IDL.Vec(IDL.Text),
     'member_count' : IDL.Nat,
     'voting_quorum' : Ratio,

@@ -1,6 +1,7 @@
 // The rule that decides a proposal (I-GOV-3), on PocketIC with four members: over the eligible voters a tie
 // at the threshold rejects, a clear majority accepts, and absentees count against, where over the votes
-// cast they would not. The suite's W18 to W20 cover what is stored; this covers what it decides.
+// cast they would not; and a tie over the votes cast passes only when the realm's configured casting
+// member voted yes. The suite's W18 to W20 cover what is stored; this covers what it decides.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, before, test } from 'node:test';
@@ -50,7 +51,6 @@ const file = async (rule = {}) =>
     threshold: [],
     quorum: [],
     threshold_of: [],
-    casting_vote: [],
     effective_at: [],
     links: [],
     on_behalf_of: [],
@@ -63,6 +63,13 @@ const pastTheDeadline = async () => {
   await pic.tick();
 };
 const eligible = { threshold_of: [{ Eligible: null }] };
+const setCastingVote = async (member) =>
+  ok(await as(alice).ggg_governance_update({
+    voting_window: [],
+    voting_threshold: [],
+    voting_quorum: [],
+    casting_vote: [member ? { Set: member.getPrincipal() } : { Clear: null }],
+  }));
 
 test('two yes and two no over the eligible voters is a tie at the threshold, and rejects', async () => {
   const id = await file(eligible);
@@ -92,4 +99,31 @@ test('two yes with two absent rejects over the eligible voters, and accepts over
   await pastTheDeadline();
   assert.equal(await finalize(overEligible), 'Rejected');
   assert.equal(await finalize(overCast), 'Accepted');
+});
+
+test('a tie over the votes cast rejects without a casting vote, and passes only when the configured casting member voted yes', async () => {
+  const tie = async (id, castersChoice) => {
+    await vote(alice, id, 'Yes');
+    await vote(bob, id, 'No');
+    await vote(carol, id, castersChoice);
+    await vote(dave, id, castersChoice === 'Yes' ? 'No' : 'Yes');
+    return finalize(id);
+  };
+  assert.equal(await tie(await file(), 'Yes'), 'Rejected');
+
+  await setCastingVote(carol);
+  const withCarol = await file();
+  assert.equal((await as(alice).ggg_proposal_get({ id: withCarol, cursor: [], limit: [] })).Ok[0].proposal.casting_vote[0].toText(), carol.getPrincipal().toText());
+  assert.equal(await tie(withCarol, 'Yes'), 'Accepted');
+  assert.equal(await tie(await file(), 'No'), 'Rejected');
+
+  // The rule is fixed at creation: clearing the setting changes no open proposal.
+  const before = await file();
+  await setCastingVote(null);
+  assert.equal(await tie(before, 'Yes'), 'Accepted');
+  assert.equal(await tie(await file(), 'Yes'), 'Rejected');
+
+  const stranger = Ed25519KeyIdentity.generate();
+  const refused = await as(alice).ggg_governance_update({ voting_window: [], voting_threshold: [], voting_quorum: [], casting_vote: [{ Set: stranger.getPrincipal() }] });
+  assert.ok('Err' in refused && tag(refused.Err) === 'InvalidArgument', 'a casting vote names an active member');
 });

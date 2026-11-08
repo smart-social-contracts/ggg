@@ -115,7 +115,8 @@ type AttributeStatus = variant { Pending; Verified; Rejected };
 
 // A certified attribute of a person: a status another body certifies and the realm verifies, as it
 // verifies identities, such as a disability, a family status or being a student. The kinds and their
-// values are legislation's; GGG records the attestation.
+// values are legislation's; GGG records the attestation. `kind` and `value` are in clear, and readable
+// only by the person, by the holders of attribute.review and by the codex (I-PRV-1).
 type Attribute = record {
   id : text;
   human : text;
@@ -191,8 +192,9 @@ type DelegationRequest = record {
 
 // ---- §3 Departments and organizations
 
-// m of n approvals.
-type Policy = record { m : nat; n : nat; quorum : Ratio; veto : vec principal };
+// m of n approvals. `casting_vote` is a seat holder whose yes decides a tie in a proposal of the department
+// counted over the votes cast (I-GOV-3).
+type Policy = record { m : nat; n : nat; quorum : Ratio; veto : vec principal; casting_vote : opt principal };
 
 type Department = record {
   id : text;
@@ -309,7 +311,8 @@ type Proposal = record {
   threshold : Ratio;
   quorum : Ratio;
   threshold_of : ThresholdBasis;
-  // An eligible member whose yes decides a tie under the Cast basis.
+  // The scope's casting vote when the proposal was created (the realm's setting, or the department's
+  // policy's): a member whose yes decides a tie under the Cast basis. Never the proposer's choice.
   casting_vote : opt principal;
   tally : Tally;
   result : opt ProposalResult;
@@ -677,7 +680,8 @@ type Procedure = record {
 type RequestStatus = variant { Filed; Decided };
 
 // A request to the realm by a person or a body: a petition, a complaint, a request for information or
-// for personal data. The kinds are the realm's; legislation sets the deadline and decides silence.
+// for personal data. The kinds are the realm's; legislation sets the deadline and decides silence. A
+// `body` or `reply` that holds personal data carries a Document reference, encrypted, not text in clear.
 type Request = record {
   id : text;
   kind : text;
@@ -874,9 +878,11 @@ type Realm = record {
   trusted_principals : vec principal;
   require_marketplace_approval : bool;
   trusted_approvers : vec text;
-  // For realm-wide proposals.
+  // For realm-wide proposals. `casting_vote` is an active member whose yes decides a tie over the votes
+  // cast (I-GOV-3); set with governance_update.
   voting_threshold : Ratio;
   voting_quorum : Ratio;
+  casting_vote : opt principal;
   open_registration : bool;
   logo_url : opt text;
   background_image_url : opt text;
@@ -1017,7 +1023,8 @@ type DispatchStatus = variant {
 };
 
 // One notice to an External, queued by the realm and confirmed by whoever delivered it. `document` is
-// the document it carries, `codex` the codex it concerns, when either applies.
+// the document it carries, `codex` the codex it concerns, when either applies. A `body` that holds
+// personal data carries a Document reference, encrypted, not text in clear.
 type Dispatch = record {
   id : text;
   to : text;
@@ -1074,7 +1081,7 @@ type KeyEnvelope = record {
 // A publication of the document in a journal: the dispatch that carried it, and when and under which
 // reference the journal published it, from the dispatch's confirmation.
 type Publication = record { journal : text; dispatch : text; published_at : opt Timestamp; ref : opt text };
-// Content in clear: where it lives and its hash.
+// Content in clear: where it lives and its hash. It holds no personal data.
 type Published = record { ref : text; hash : text };
 
 type Document = record {
@@ -1316,12 +1323,10 @@ type ProposalCreateArgs = record {
   kind : opt text;
   matter : opt text;
   // Stricter than the realm's or the department's rule, never weaker (InvalidArgument): a higher threshold
-  // or quorum, Eligible where the default is Cast, a casting vote where there is none. A casting vote
-  // under Eligible, or one naming a member who is not eligible, is InvalidArgument.
+  // or quorum, or Eligible where the default is Cast. The casting vote is the scope's, not the proposer's.
   threshold : opt Ratio;
   quorum : opt Ratio;
   threshold_of : opt ThresholdBasis;
-  casting_vote : opt principal;
   action : ProposalAction;
   // Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
   effective_at : opt Timestamp;
@@ -1364,10 +1369,12 @@ type ContractCreateArgs = record {
   ends_at : opt Timestamp;
 };
 
+// `casting_vote` names an active member, else InvalidArgument.
 type GovernanceUpdateArgs = record {
   voting_window : opt Duration;
   voting_threshold : opt Ratio;
   voting_quorum : opt Ratio;
+  casting_vote : opt variant { Set : principal; Clear };
 };
 
 // §5

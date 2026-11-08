@@ -154,7 +154,7 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `GuestUser` | `id` (principal), `home_quarter`, `permissions` (Json) | A user from another quarter acting here. | Bob from South, allowed to view and transact |
 | `Human` | `id`, `user` → `User`, `date_of_birth`, `h3_index` | A verified person behind a user. At most one user per human. | Alice's verified person record: born 1990-04-12, home cell `871f1d489ffffff` |
 | `Identity` | `id`, `human` → `Human`, `kind` (`national_id`, `passport`, `residence_permit`, `driver_license`, `email`, …), `category`, `issuer`, `ref`, `status`, `verified_at`, `expires_at` | An attestation. Proof material is stored encrypted or off-chain; `ref` points to it. The standard kinds are the ones named here, and a realm may add its own; `category` is a subdivision of the kind (a long-term permit); the issuer of a national id or passport is the country, so it says the nationality. | Alice's passport: kind `passport`, issuer `ES`, verified 2026-03-02, expires 2031-03-01 |
-| `Attribute` | `id`, `human` → `Human`, `kind`, `value`, `issuer`, `ref`, `status`, `verified_at`, `expires_at` | A certified attribute of a person, which another body certifies and the realm verifies as it verifies identities: a disability, a family status, being a student. The kinds and values are legislation's; GGG records the attestation. | Alice's large-family title: kind `large_family`, value `general`, issued by the regional government, `verified`, expires 2028-06-30 |
+| `Attribute` | `id`, `human` → `Human`, `kind`, `value`, `issuer`, `ref`, `status`, `verified_at`, `expires_at` | A certified attribute of a person, which another body certifies and the realm verifies as it verifies identities: a disability, a family status, being a student. The kinds and values are legislation's; GGG records the attestation. `kind` and `value` are in clear, readable only by the person, the reviewers and the codex (I-PRV-1). | Alice's large-family title: kind `large_family`, value `general`, issued by the regional government, `verified`, expires 2028-06-30 |
 | `UserProfile` | `id` (name), `description`, `allowed_to` (Json list of permissions), `permissions` → `Permission`* | A named role. Defaults: `admin` (`all`), `member`. | `member` → `[self.join, proposal.vote, proposal.create, dispute.create, …]` |
 | `Permission` | `id` (name), `description`, `category`, `scope`, `users` → `User`*, `profiles` → `UserProfile`*, `departments` → `Department`* | A fine-grained grant of one permission to users, profiles or departments. | `transfer.create` on scope `fund:ROADS`, granted to Infrastructure |
 | `Invite` | `id` (code hash), `profile`, `department`, `position`, `max_uses`, `uses`, `redeemed_by` (Json), `expires_at`, `revoked`, `created_by` | The code itself is never stored. | 50-use code for new clerks: profile `member`, Civil Registry, position `clerk`, expires in 30 days |
@@ -229,7 +229,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Department` | `id` (name), `description`, `kind`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals]}`, quorum in hundred-millionths (50 % = 50 000 000). Exactly one root department per realm. `kind` says what the body is (the realm's plenary, a committee), so legislation from another source can address a kind without naming a department. | Civil Registry: under Administration, 2-of-3 policy, head `dana`; the Council: kind `plenary` |
+| `Department` | `id` (name), `description`, `kind`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals], casting_vote}`, quorum in hundred-millionths (50 % = 50 000 000); `casting_vote` is a seat holder whose yes decides a tie in a proposal of the department counted over the votes cast (I-GOV-3). Exactly one root department per realm. `kind` says what the body is (the realm's plenary, a committee), so legislation from another source can address a kind without naming a department. | Civil Registry: under Administration, 2-of-3 policy, head `dana`; the Council: kind `plenary` |
 | `Organization` | `id` (name), `description`, `status`, `admins` → `User`* | An external party. Its admins manage its representatives. | Clinic B: `active`, admin `dr-ana` |
 | `Position` | `id` (key), `department` → `Department` or `organization` → `Organization`, `title`, `profile` → `UserProfile`, `headcount`, `salary` (int), `salary_period`, `status`, `inherit_from_capital` | A seat in a department, or a representative seat in an organization. | `civil-registry.clerk`: 4 seats, 2,000 REALM/month, profile `clerk`; `clinic-b.physician`: 3 seats |
 | `Appointment` | `id`, `position` → `Position`, `user` → `User`, `kind` (`substantive`, `acting`), `agent` (bool), `supervisor` → `User`, `started_at`, `ended_at`, `status`, `source_quarter` | One user holding one seat. Agents are users with `agent = true`. | Bob holds a clerk seat since 2026-05-01; `records-bot` holds `records_agent` at Clinic B, agent, supervisor `dr-ana` |
@@ -268,7 +268,8 @@ Two kinds of body:
   same department or organization, unless the signing policy makes supervision optional.
 - I-ORG-4: An agent holds a `signing` permission only if the active codex's signing policy allows
   agents to hold it.
-- I-ORG-5: A policy satisfies `1 ≤ m ≤ n`; veto principals hold an appointment in the department.
+- I-ORG-5: A policy satisfies `1 ≤ m ≤ n`; veto principals, and the casting vote, hold an appointment in
+  the department.
 - I-ORG-6: The root department always exists and cannot be deleted.
 - I-ORG-7: A department's positions and policy change only under the realm's rules; an organization's
   representatives are managed only by its admins.
@@ -280,7 +281,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed at creation like the action. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of the `eligible` seats under Infrastructure's policy |
+| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed at creation like the action; the casting vote is the scope's, never the proposer's. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of the `eligible` seats under Infrastructure's policy |
 | `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the vote ends. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
 | `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `kind`, `procedure`, `tender` → `Tender`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. `kind` (works, supplies, services) and `procedure` are the realm's words; a contract made from a tender names it and takes its kind and procedure. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, from tender `T-5`, terms `sha256:4be1…` |
@@ -312,7 +313,7 @@ Two kinds of body:
 | `mandate_assign_executor` | `mandate.assign_executor` | governed | Make Infrastructure the mandate's executor |
 | `contract_create` | `contract.create_under_mandate` | | Sign `C-9` with BuildCo under the road-works mandate |
 | `contract_terminate` | `contract.terminate` | signing | End `C-9` after BuildCo misses two milestones (court order) |
-| `governance_update` (the realm's voting window, threshold and quorum) | `governance.update` | governed | Voting window from 7 to 5 days |
+| `governance_update` (the realm's voting window, threshold, quorum and casting vote) | `governance.update` | governed | Voting window from 7 to 5 days; Dana's vote decides ties |
 
 ### Invariants
 
@@ -332,12 +333,18 @@ Two kinds of body:
     the count (I-GOV-7). A direct policy (1 of 1) is the same rule with threshold 100 % over one seat.
   - Under `cast`, when the yes votes stand exactly at `threshold` of the yes and no votes (a tie at 50 %),
     the `casting_vote` member's yes accepts; without one, or if that member did not vote yes, the tie
-    rejects.
+    rejects. The casting vote is part of the scope's default rule, set by governed configuration: the
+    realm's `casting_vote` (`governance_update`, an active member) for a realm-wide proposal, the
+    department's `policy.casting_vote` (`department_set_policy`, a seat holder) for its proposals. The
+    proposal copies it at creation; the proposer never sets it.
   - The proposer may state a stricter rule when creating the proposal, never a weaker one
-    (`InvalidArgument`): a higher threshold or quorum, `eligible` where the default is `cast`, a casting
-    vote where there is none. A casting vote under `eligible`, or one naming a member who is not
-    eligible, is `InvalidArgument`. Each change narrows what the default accepts, so legislation's
-    guards, which may require them, only ever tighten.
+    (`InvalidArgument`): a higher threshold or quorum, or `eligible` where the default is `cast`. Each
+    change narrows what the default accepts, so legislation's guards, which may require them, only ever
+    tighten.
+  - A proposal that a governed call files takes its scope's default rule. Legislation may require a
+    matter to be filed as a proposal of its own, with `proposal_create`, a `Call` action and a stricter
+    rule, and a guard on the governed operation may refuse the direct path, so a chapter can demand a
+    larger majority for, say, the budget.
   - `tally.eligible` is counted when the vote opens: the realm's active members, or the department's
     seats.
 - I-GOV-4: A contract created under a mandate stays within the mandate's scope and term, and its
@@ -567,7 +574,7 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 |---|---|---|---|
 | `License` | `id`, `kind` (court, business, professional, health, education, …), `holder` (`Entity:id`: organization or user), `issued_by` → `Department`, `status`, `applied_at`, `decision_due`, `issued_at`, `expires_at`, `evidence_ref`, `conditions` (Json) | Many licences per holder. An application is a licence in `applied`; `decision_due` comes from the `Procedure` of its kind, when one is defined. | `LIC-12`: health, holder Clinic B, issued by Health, active until 2028-10-25 |
 | `Procedure` | `id` (the licence kind it governs), `initiated_by`, `matter`, `decision_deadline` (a Period), `silence` (`positive` grants, `negative` refuses), `legislation`, `facts` (Json) | How applications of one kind are decided. Legislation acts on the silence, with a task (§11). | `health`: initiated by the applicant, decided within 3 months, silence positive |
-| `Request` | `id`, `kind`, `by` (`Entity:id`), `body` (Json), `filed_at`, `due_at`, `extension_limit`, `status`, `decision`, `reply`, `decided_at` | A request to the realm by a person or a body: a petition, a complaint, a request for information or for one's personal data. The kinds are the realm's; legislation sets `due_at` and says what silence means, recording it as a decision. | `REQ-14`: Bob asks for last year's minor contracts, due in one month, `filed` |
+| `Request` | `id`, `kind`, `by` (`Entity:id`), `body` (Json), `filed_at`, `due_at`, `extension_limit`, `status`, `decision`, `reply`, `decided_at` | A request to the realm by a person or a body: a petition, a complaint, a request for information or for one's personal data. The kinds are the realm's; legislation sets `due_at` and says what silence means, recording it as a decision. A `body` or `reply` that holds personal data is an encrypted `Document` reference (I-PRV-1). | `REQ-14`: Bob asks for last year's minor contracts, due in one month, `filed` |
 
 ### Lifecycles
 
@@ -707,7 +714,7 @@ A realm can be one canister or a federation of quarters, one of which is the cap
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Realm` | `id` (`1`), `name`, `manifesto`, `welcome_message`, `status`, `calendar` → `Calendar`, `treasury` → `Treasury`, `accounting_currency`, `accounting_currency_decimals`; federation: `is_quarter`, `is_capital`, `federation_realm_id`, `federation_codex`, `quarter_join_mode`; trust: `trusted_principals`, `require_marketplace_approval`, `trusted_approvers`; governance: `voting_threshold`, `voting_quorum` (hundred-millionths, for realm-wide proposals); settings: `open_registration`, `logo_url`, `background_image_url`, `installed_version`, `network`, `timezone`, `languages` (BCP 47 tags, the first the default); `member_count` (its members, and on a capital its quarters' as they last reported) | Singleton per canister. An implementation adds its own settings next to these. | Agora: `beta`, capital, currency REALM (8 decimals), open registration off |
+| `Realm` | `id` (`1`), `name`, `manifesto`, `welcome_message`, `status`, `calendar` → `Calendar`, `treasury` → `Treasury`, `accounting_currency`, `accounting_currency_decimals`; federation: `is_quarter`, `is_capital`, `federation_realm_id`, `federation_codex`, `quarter_join_mode`; trust: `trusted_principals`, `require_marketplace_approval`, `trusted_approvers`; governance: `voting_threshold`, `voting_quorum` (hundred-millionths, for realm-wide proposals), `casting_vote` → `User` (a member whose yes decides a tie, I-GOV-3); settings: `open_registration`, `logo_url`, `background_image_url`, `installed_version`, `network`, `timezone`, `languages` (BCP 47 tags, the first the default); `member_count` (its members, and on a capital its quarters' as they last reported) | Singleton per canister. An implementation adds its own settings next to these. | Agora: `beta`, capital, currency REALM (8 decimals), open registration off |
 | `Calendar` | `id`, `realm` → `Realm`, `epoch`, `fiscal_period`, `voting_window`, `codex_release_cycle`, `benefit_cycle`, `service_payment_cycle`, `license_review_cycle`, `custom_cycles` (Json) | The realm's governance time cycles, as durations. | Voting window 7 days, fiscal period 1 year, licence review every 2 years |
 | `Registry` | `id` (name), `description`, `principal_id` | A registry canister the realm is listed in. | `realm-registry`, `ufxgi-…` |
 | `Quarter` | `id` (canister id), `name`, `index`, `status`, `population`, `codex_id`, `codex_version`, `last_sync`, `last_activity_at` | Known on the capital. | North: population 1,240, `active`, codex agora 1.4.2 |
@@ -783,7 +790,7 @@ vote. If the quarter cannot apply it, the call fails and nothing changes.
 | `Codex` | `id` (`name@version`), `version`, `checksum`, `status` (`pending`, `active`, `inactive`, `reverted`), `manifest` (Json, including the signing policy), `capabilities` (Json: operation names), `source` (its code), `installed_at`, `previous` → `Codex` | The realm's policy package. At most one is `active`; a `pending` one is installed and checked, waiting for its time. Methods return its `checksum` (`sha256:<hex>`), never this record. | `agora@1.4.2`, checksum `sha256:4be1…` |
 | `Notification` | `id`, `recipient` (`Entity:id`: user, department or organization), `topic`, `title`, `body`, `href`, `sender`, `visibility`, `read_by` (Json), `at` | | To Alice: "P-7 passed", link `/proposals/P-7` |
 | `External` | `id`, `name`, `kind` (authority, journal, lender, …), `channel` | A body outside the realm and outside the Internet Computer. `channel` is how a dispatch reaches it: `manual`, an operator delivers it, or an https URL, a bridge does. A second `external_add` of the same id redefines it. | The statistics office: kind `authority`, channel `manual`; the provincial gazette: kind `journal` |
-| `Dispatch` | `id`, `to` → `External`, `topic`, `title`, `body` (Json), `document` → `Document`, `codex`, `queued_at`, `status` | One notice to an outside body, queued by the realm and confirmed by whoever delivered it, with the receipt that proves it. `document` is the document it carries and `codex` the codex it concerns, when either applies. | To the gazette: the new ordinance's full text, `confirmed` on 12 Nov, bulletin 214 |
+| `Dispatch` | `id`, `to` → `External`, `topic`, `title`, `body` (Json), `document` → `Document`, `codex`, `queued_at`, `status` | One notice to an outside body, queued by the realm and confirmed by whoever delivered it, with the receipt that proves it. `document` is the document it carries and `codex` the codex it concerns, when either applies. A `body` that holds personal data is an encrypted `Document` reference (I-PRV-1). | To the gazette: the new ordinance's full text, `confirmed` on 12 Nov, bulletin 214 |
 | `Task` | `id`, `op`, `args` (Json), `at`, `reason`, `status`, `scheduled_by` (`Entity:id`), `event` → `Event` | One operation scheduled for a time. `event` is the operation's own `Event` once it ran. | `user_set_status` of Bob to `inactive` on 10 Mar 2028, scheduled by the codex: the registration lapses |
 | `Event` | `id`, `op`, `user`, `by` (the delegate, when delegated), `agent` (the caller acted as an agent), `supervisor` (that agent's supervisor), `origin`, `args` (Json, secrets stripped), `result` (Json), `at` | The audit log. Append-only. | `proposal_vote` by `claude-conn` for `alice` at 09:31 → ok |
 
@@ -949,7 +956,7 @@ for that principal. No canister ever sees a data key or the content.
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
 | `KeyEnvelope` | `id`, `scope`, `principal`, `wrapped_dek`, `granted_by`, `at` | One scope's data key, wrapped for one principal. | `dept:Health:doc:DOC-1` for `dr-ana`, granted by Health's head |
-| `Document` | `id`, `department` → `Department`, `title`, `kind`, `languages` (BCP 47 tags), `ref` (where the ciphertext lives), `hash`, `author`, `at`, `facts` (Json), `public` (the clear content's `ref` and `hash`, once published), `publications` (each a `Publication`: `journal`, `dispatch` → `Dispatch`, `published_at`, `ref`) | A department document. Its key scope is `dept:<department>:doc:<id>`. `kind` (minutes, an ordinance, an award) and `languages` let the realm list what it has and in which language; `facts` is what legislation reads about it when it is shared (its source, whether it was given freely). A published document is `public`: its content in clear, readable by anyone, and `publications` records where a journal published it. | Health's inspection report `DOC-1`, kind `report`, in `en`, shared with Dr. Ana |
+| `Document` | `id`, `department` → `Department`, `title`, `kind`, `languages` (BCP 47 tags), `ref` (where the ciphertext lives), `hash`, `author`, `at`, `facts` (Json), `public` (the clear content's `ref` and `hash`, once published), `publications` (each a `Publication`: `journal`, `dispatch` → `Dispatch`, `published_at`, `ref`) | A department document. Its key scope is `dept:<department>:doc:<id>`. `kind` (minutes, an ordinance, an award) and `languages` let the realm list what it has and in which language; `facts` is what legislation reads about it when it is shared (its source, whether it was given freely). A published document is `public`: its content in clear, readable by anyone and holding no personal data, and `publications` records where a journal published it. | Health's inspection report `DOC-1`, kind `report`, in `en`, shared with Dr. Ana |
 
 ### Operations
 
@@ -982,7 +989,11 @@ is its proposal's `effective_at` (I-GOV-5).
 ### Invariants
 
 - I-PRV-1: The realm never holds private content or an unwrapped data key, only ciphertext
-  references, hashes and wrapped keys.
+  references, hashes and wrapped keys. One exception: an attribute's `kind` and `value` (§2) are in
+  clear, and readable only by the person they belong to, by the holders of `attribute.review` and by the
+  codex. A request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
+  `Document` reference, encrypted, never text in clear, and a published copy (`Document.public`) holds
+  no personal data.
 - I-PRV-2: Only a scope's managers grant or revoke its keys, or see who holds them.
 - I-PRV-3: A key envelope is returned only to the principal it was wrapped for.
 - I-PRV-4: Only a published document's `public` copy is readable without a key, by anyone; its
@@ -1067,4 +1078,6 @@ There is no permission for raw database writes: everything is an operation.
 | D12 | Sessions of a collegiate organ as entities, with operations to open and close one | Rejected: a proposal's `opens_at` and `deadline` are the session |
 | D13 | Holidays as realm data | Rejected: they stay in the codex, beside its chapters |
 | D14 | Outside bodies as registry entries, or as realms | Rejected: an `External` with a `Dispatch` outbox, confirmed by an operator or a bridge; what they say enters through `external_report` |
-| D15 | What a proposal's `threshold` means under a department's m-of-n policy | Decided 8 Nov 2026: it states the rule that decides the proposal and is applied, with one comparison per scope: a realm-wide proposal's yes votes *exceed* the threshold of its basis (votes cast, or all eligible members), a department's *reach* it over the eligible seats (m of n is m/n rounded down: 2 of 3 is 66 666 666); the proposer may only tighten the rule (I-GOV-3) |
+| D15 | What a proposal's `threshold` means under a department's m-of-n policy | Decided 8 Nov 2026: it states the rule that decides the proposal and is applied, with one comparison per scope: a realm-wide proposal's yes votes *exceed* the threshold of its basis (votes cast, or all eligible members), a department's *reach* it over the eligible seats (m of n is m/n rounded down: 2 of 3 is 66 666 666); the proposer may only tighten the rule, and the casting vote is the scope's, set by governed configuration (I-GOV-3) |
+| D16 | Personal data in attributes, requests, dispatches and published documents | Decided 8 Nov 2026: an attribute's kind and value are in clear, readable only by the person, the reviewers and the codex; a request's or dispatch's personal content is an encrypted `Document` reference; a published copy holds no personal data (I-PRV-1) |
+| D17 | The majority of a proposal that a governed call files | Decided 8 Nov 2026: the scope's default rule; legislation that needs more requires a proposal of its own and may refuse the direct path with a guard (I-GOV-3) |

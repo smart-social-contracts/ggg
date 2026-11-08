@@ -1,6 +1,7 @@
 /// A minimal GGG GOS, used to test the conformance suite. It implements every method of ggg.did.
 /// Members are fixed at install time. They may propose, vote, manage proposals (open, finalize,
-/// execute and stop them), read the realm and manage their own profile; every other permission is
+/// execute and stop them), set the realm's governance rule (governance_update, which the root's direct
+/// policy applies at once), read the realm and manage their own profile; every other permission is
 /// held by nobody, so those operations are refused. There are two departments: the root, with a
 /// direct policy, so a governed call on a realm-wide proposal is applied at once; and a council
 /// under it, deciding 2 of 3, so a governed call on one of its proposals files a proposal instead.
@@ -34,15 +35,18 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let DEFAULT_LIMIT = 20;
   let MAX_LIMIT = 100;
   let MAP_VIEW = 32;
-  let VOTING_WINDOW_NS : Nat64 = 7 * 24 * 3600 * 1_000_000_000;
   let WHOLE = 100_000_000; // 100 %, in hundred-millionths
-  let VOTING_THRESHOLD = 50_000_000; // 50 %
-  let VOTING_QUORUM = 0;
   let MAX_LINKS = 16; // a proposal's own links
-  /// The rule that decides a proposal (I-GOV-3). The realm's, over the votes cast, unless the proposer
-  /// states a stricter one.
+  /// The realm's governance rule, set with governance_update: the voting window, and the threshold,
+  /// quorum and casting vote of a realm-wide proposal.
+  var votingWindow : T.Duration = 7 * 24 * 3600 * 1_000_000_000;
+  var votingThreshold : T.Ratio = 50_000_000; // 50 %
+  var votingQuorum : T.Ratio = 0;
+  var castingVote : ?Principal = null;
+  /// The rule that decides a proposal (I-GOV-3). The scope's, over the votes cast, unless the proposer
+  /// states a stricter threshold, quorum or basis; the casting vote is the scope's.
   type Rule = { threshold : T.Ratio; quorum : T.Ratio; threshold_of : T.ThresholdBasis; casting_vote : ?Principal };
-  let DEFAULT_RULE : Rule = { threshold = VOTING_THRESHOLD; quorum = VOTING_QUORUM; threshold_of = #Cast; casting_vote = null };
+  func defaultRule() : Rule = { threshold = votingThreshold; quorum = votingQuorum; threshold_of = #Cast; casting_vote = castingVote };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
@@ -54,7 +58,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     parent = null;
     is_root = true;
     head = null;
-    policy = { m = 1; n = 1; quorum = 0; veto = [] };
+    policy = { m = 1; n = 1; quorum = 0; veto = []; casting_vote = null };
     target_policy = null;
     fund = null;
   };
@@ -68,7 +72,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     parent = ?ROOT.id;
     is_root = false;
     head = null;
-    policy = { m = 2; n = 3; quorum = 0; veto = [] };
+    policy = { m = 2; n = 3; quorum = 0; veto = []; casting_vote = null };
     target_policy = null;
     fund = null;
   };
@@ -216,24 +220,23 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     null;
   };
 
-  /// The rule a proposer states, checked against the default: stricter is allowed, weaker is refused
-  /// (I-GOV-3). A casting vote decides a tie over the votes cast only, and names an eligible member.
+  /// The rule a proposer states, checked against the scope's default: stricter is allowed, weaker is
+  /// refused (I-GOV-3). The casting vote is the scope's: the realm's for a realm-wide proposal, the
+  /// department's policy's for one of its proposals.
   func statedRule(args : T.ProposalCreateArgs) : Result<Rule> {
-    let threshold = switch (args.threshold) { case (?t) t; case null DEFAULT_RULE.threshold };
-    let quorum = switch (args.quorum) { case (?q) q; case null DEFAULT_RULE.quorum };
-    let threshold_of = switch (args.threshold_of) { case (?b) b; case null DEFAULT_RULE.threshold_of };
-    if (threshold < DEFAULT_RULE.threshold or quorum < DEFAULT_RULE.quorum) {
+    let scope = defaultRule();
+    let threshold = switch (args.threshold) { case (?t) t; case null scope.threshold };
+    let quorum = switch (args.quorum) { case (?q) q; case null scope.quorum };
+    let threshold_of = switch (args.threshold_of) { case (?b) b; case null scope.threshold_of };
+    if (threshold < scope.threshold or quorum < scope.quorum) {
       return #Err(#InvalidArgument("the rule is weaker than the realm's: a proposer may only tighten it"));
     };
     if (threshold > WHOLE or quorum > WHOLE) return #Err(#InvalidArgument("a ratio is at most 100 000 000 (100 %)"));
-    switch (args.casting_vote) {
-      case (?caster) {
-        if (threshold_of == #Eligible) return #Err(#InvalidArgument("a casting vote decides a tie over the votes cast only"));
-        if (requireMember(caster, "proposal.vote") != null) return #Err(#InvalidArgument("the casting vote names a member who is not eligible"));
-      };
-      case null {};
+    let casting_vote = switch (args.department) {
+      case (?d) { switch (findDepartment(d)) { case (?found) { if (found.is_root) scope.casting_vote else found.policy.casting_vote }; case null null } };
+      case null scope.casting_vote;
     };
-    #Ok({ threshold; quorum; threshold_of; casting_vote = args.casting_vote });
+    #Ok({ threshold; quorum; threshold_of; casting_vote });
   };
 
   /// The member a proposal was filed for: the grantor when it was filed on their behalf.
@@ -334,6 +337,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         "self.update_private_data",
         "proposal.create",
         "proposal.vote",
+        "governance.update",
         "realm.data_view",
         "realm.monitor",
       ];
@@ -553,7 +557,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       action;
       status = #Voting;
       opens_at = ?t;
-      deadline = ?(t + VOTING_WINDOW_NS);
+      deadline = ?(t + votingWindow);
       effective_at;
       threshold = rule.threshold;
       quorum = rule.quorum;
@@ -748,7 +752,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       };
     } else {
       let call = #Call({ method = "ggg_proposal_stop"; arg = to_candid (id) });
-      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, null, null, call, DEFAULT_RULE, null, []);
+      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, null, null, call, { defaultRule() with casting_vote = owner.policy.casting_vote }, null, []);
       audit("proposal_stop", caller, #Map([("proposal", #Text(id))]), #Text(filed.id));
       #Ok(#Proposed(filed.id));
     };
@@ -769,8 +773,22 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_contract_terminate(_ : Text) : async Result<T.Contract> {
     nobody(caller, "contract.terminate");
   };
-  public shared ({ caller }) func ggg_governance_update(_ : T.GovernanceUpdateArgs) : async Result<T.Governed> {
-    nobody(caller, "governance.update");
+  /// Governed by the root, whose direct policy applies it at once. The casting vote is an active member.
+  public shared ({ caller }) func ggg_governance_update(args : T.GovernanceUpdateArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "governance.update")) { case (?e) return #Err(e); case null {} };
+    for (ratio in [args.voting_threshold, args.voting_quorum].vals()) {
+      switch (ratio) { case (?r) { if (r > WHOLE) return #Err(#InvalidArgument("a ratio is at most 100 000 000 (100 %)")) }; case null {} };
+    };
+    switch (args.casting_vote) {
+      case (?#Set(member)) { if (requireMember(member, "proposal.vote") != null) return #Err(#InvalidArgument("the casting vote names a principal who is not an active member")) };
+      case _ {};
+    };
+    switch (args.voting_window) { case (?w) votingWindow := w; case null {} };
+    switch (args.voting_threshold) { case (?t) votingThreshold := t; case null {} };
+    switch (args.voting_quorum) { case (?q) votingQuorum := q; case null {} };
+    switch (args.casting_vote) { case (?#Set(member)) castingVote := ?member; case (?#Clear) castingVote := null; case null {} };
+    audit("governance_update", caller, #Map([]), #Text("ok"));
+    #Ok(#Done(null));
   };
 
   // §5
@@ -950,8 +968,9 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       trusted_principals = [];
       require_marketplace_approval = false;
       trusted_approvers = [];
-      voting_threshold = VOTING_THRESHOLD;
-      voting_quorum = VOTING_QUORUM;
+      voting_threshold = votingThreshold;
+      voting_quorum = votingQuorum;
+      casting_vote = castingVote;
       open_registration = false;
       logo_url = null;
       background_image_url = null;

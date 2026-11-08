@@ -100,7 +100,9 @@ addition is in the [model](../model/README.md) and `ggg.did`; the model's sectio
   proposal, not a forbid on `proposal_finalize`: the proposer may state a stricter rule than the realm's
   or the department's, never a weaker one, and a guard on `proposal_create` requires the majority the
   matter needs. A realm-wide proposal's yes votes exceed the threshold of the basis, a department's reach
-  it over the eligible seats (model I-GOV-3);
+  it over the eligible seats; the casting vote is the scope's, set by governed configuration, never the
+  proposer's. A proposal a governed call files takes the scope's default rule, so legislation that needs
+  more requires a proposal of its own and may refuse the direct path with a guard (model I-GOV-3);
 - **outside bodies**: `External` parties with a `Dispatch` outbox (`external_add`, `dispatch_confirm`,
   `dispatch_list`). An outside body is not a realm; a dispatch to it is a plain notice that gates
   nothing, confirmed by the operator or bridge that delivered it;

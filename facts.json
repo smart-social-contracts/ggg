@@ -844,6 +844,10 @@
               "element": {
                 "type": "principal"
               }
+            },
+            "casting_vote": {
+              "type": "principal",
+              "optional": true
             }
           }
         }
@@ -1228,10 +1232,6 @@
           ],
           "optional": true
         },
-        "casting_vote": {
-          "type": "principal",
-          "optional": true
-        },
         "action": {
           "type": "ProposalAction",
           "values": [
@@ -1551,6 +1551,19 @@
           "kind": "ratio",
           "min": 0,
           "max": 100000000,
+          "optional": true
+        },
+        "casting_vote": {
+          "type": "variant",
+          "values": [
+            "Set",
+            "Clear"
+          ],
+          "cases": {
+            "Set": {
+              "type": "principal"
+            }
+          },
           "optional": true
         }
       }

@@ -78,7 +78,6 @@ async function file({ action = motion, days = null, everyone = false, department
     threshold: [],
     quorum: [],
     threshold_of: [],
-    casting_vote: [],
     effective_at,
     links: [],
     on_behalf_of: [],
@@ -175,7 +174,6 @@ test('an effective_at that is not in the future is refused', async () => {
     threshold: [],
     quorum: [],
     threshold_of: [],
-    casting_vote: [],
     links: [],
     on_behalf_of: [],
   };

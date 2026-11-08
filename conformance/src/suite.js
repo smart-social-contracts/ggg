@@ -575,7 +575,6 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     threshold: [],
     quorum: [],
     threshold_of: [],
-    casting_vote: [],
     effective_at: [],
     links: [],
     on_behalf_of: [],
@@ -838,7 +837,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
       assert(p.threshold === realm.voting_threshold, `threshold is ${p.threshold}, the realm's is ${realm.voting_threshold}`);
       assert(p.quorum === realm.voting_quorum, `quorum is ${p.quorum}, the realm's is ${realm.voting_quorum}`);
       assert(tag(p.threshold_of) === 'Cast', `threshold_of is ${tag(p.threshold_of)}`);
-      assert(opt(p.casting_vote) === null, `casting_vote is ${show(p.casting_vote)}`);
+      assert(show(p.casting_vote) === show(realm.casting_vote), `casting_vote is ${show(p.casting_vote)}, the realm's is ${show(realm.casting_vote)}`);
       assert(opt(p.kind) === 'motion' && opt(p.matter) === 'conformance', `kind and matter are ${show(p.kind)}, ${show(p.matter)}`);
     });
   });
@@ -849,8 +848,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     const weaker = [];
     if (realm.voting_threshold > 0n) weaker.push(['lower threshold', { threshold: [realm.voting_threshold - 1n] }]);
     if (realm.voting_quorum > 0n) weaker.push(['lower quorum', { quorum: [realm.voting_quorum - 1n] }]);
-    weaker.push(['casting vote over the eligible', { threshold_of: [{ Eligible: null }], casting_vote: [member.getPrincipal()] }]);
-    weaker.push(['casting vote of a stranger', { casting_vote: [Ed25519KeyIdentity.generate().getPrincipal()] }]);
+    if (!weaker.length) throw new Skip('the realm has no threshold and no quorum, so nothing is weaker');
     for (const [what, extra] of weaker) await proposeAs(motion(what, extra), `ggg_proposal_create(${what})`);
     return weaker.map(([what]) => what).join(', ');
   });
@@ -864,9 +862,6 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     await fileRule('stricter rule', { threshold: [threshold], quorum: [quorum], threshold_of: [{ Eligible: null }] }, (p) => {
       assert(p.threshold === threshold && p.quorum === quorum, `the rule is ${p.threshold}, ${p.quorum}, not ${threshold}, ${quorum}`);
       assert(tag(p.threshold_of) === 'Eligible', `threshold_of is ${tag(p.threshold_of)}`);
-    });
-    await fileRule('casting vote', { casting_vote: [member.getPrincipal()] }, (p) => {
-      assert(opt(p.casting_vote)?.toText() === member.getPrincipal().toText(), `casting_vote is ${show(p.casting_vote)}`);
     });
   });
 

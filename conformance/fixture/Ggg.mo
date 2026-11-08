@@ -78,7 +78,8 @@ module {
   public type Area = Nat;
   /// A certified attribute of a person: a status another body certifies and the realm verifies, as it
   /// verifies identities, such as a disability, a family status or being a student. The kinds and their
-  /// values are legislation's; GGG records the attestation.
+  /// values are legislation's; GGG records the attestation. `kind` and `value` are in clear, and readable
+  /// only by the person, by the holders of attribute.review and by the codex (I-PRV-1).
   public type Attribute = {
     id : Text;
     ref : Text;
@@ -476,7 +477,8 @@ module {
   public type DepartmentPage = { next : ?Text; items : [Department] };
   public type DepartmentPolicyArgs = { department : Text; policy : Policy };
   /// One notice to an External, queued by the realm and confirmed by whoever delivered it. `document` is
-  /// the document it carries, `codex` the codex it concerns, when either applies.
+  /// the document it carries, `codex` the codex it concerns, when either applies. A `body` that holds
+  /// personal data carries a Document reference, encrypted, not text in clear.
   public type Dispatch = {
     id : Text;
     to : Text;
@@ -792,8 +794,10 @@ module {
     #Unauthenticated;
     #Conflict : Text;
   };
+  /// `casting_vote` names an active member, else InvalidArgument.
   public type GovernanceUpdateArgs = {
     voting_window : ?Duration;
+    casting_vote : ?{ #Set : Principal; #Clear };
     voting_quorum : ?Ratio;
     voting_threshold : ?Ratio;
   };
@@ -1374,8 +1378,15 @@ module {
     category : Text;
     profiles : [Text];
   };
-  /// m of n approvals.
-  public type Policy = { m : Nat; n : Nat; veto : [Principal]; quorum : Ratio };
+  /// m of n approvals. `casting_vote` is a seat holder whose yes decides a tie in a proposal of the department
+  /// counted over the votes cast (I-GOV-3).
+  public type Policy = {
+    m : Nat;
+    n : Nat;
+    veto : [Principal];
+    casting_vote : ?Principal;
+    quorum : Ratio;
+  };
   public type Position = {
     id : Text;
     status : PositionStatus;
@@ -1472,7 +1483,8 @@ module {
     on_behalf_of : ?Principal;
     proposer : Principal;
     matter : ?Text;
-    /// An eligible member whose yes decides a tie under the Cast basis.
+    /// The scope's casting vote when the proposal was created (the realm's setting, or the department's
+    /// policy's): a member whose yes decides a tie under the Cast basis. Never the proposer's choice.
     casting_vote : ?Principal;
     department : ?Text;
     quorum : Ratio;
@@ -1493,8 +1505,7 @@ module {
     title : Text;
     action : ProposalAction;
     /// Stricter than the realm's or the department's rule, never weaker (InvalidArgument): a higher threshold
-    /// or quorum, Eligible where the default is Cast, a casting vote where there is none. A casting vote
-    /// under Eligible, or one naming a member who is not eligible, is InvalidArgument.
+    /// or quorum, or Eligible where the default is Cast. The casting vote is the scope's, not the proposer's.
     threshold : ?Ratio;
     /// Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
     effective_at : ?Timestamp;
@@ -1504,7 +1515,6 @@ module {
     links : ?[ProposalLink];
     on_behalf_of : ?Principal;
     matter : ?Text;
-    casting_vote : ?Principal;
     department : ?Text;
     quorum : ?Ratio;
   };
@@ -1564,7 +1574,7 @@ module {
     journal : Text;
     published_at : ?Timestamp;
   };
-  /// Content in clear: where it lives and its hash.
+  /// Content in clear: where it lives and its hash. It holds no personal data.
   public type Published = { ref : Text; hash : Text };
   public type Quarter = {
     id : Text;
@@ -1637,12 +1647,14 @@ module {
     federation_realm_id : ?Text;
     accounting_currency_decimals : ?Nat8;
     welcome_message : Text;
+    casting_vote : ?Principal;
     trusted_approvers : [Text];
     /// Its members; on a capital, with its quarters' as they last reported.
     member_count : Nat;
     voting_quorum : Ratio;
     background_image_url : ?Text;
-    /// For realm-wide proposals.
+    /// For realm-wide proposals. `casting_vote` is an active member whose yes decides a tie over the votes
+    /// cast (I-GOV-3); set with governance_update.
     voting_threshold : Ratio;
     installed_version : Text;
     treasury : ?Text;
@@ -1702,7 +1714,8 @@ module {
     profile : ?Text;
   };
   /// A request to the realm by a person or a body: a petition, a complaint, a request for information or
-  /// for personal data. The kinds are the realm's; legislation sets the deadline and decides silence.
+  /// for personal data. The kinds are the realm's; legislation sets the deadline and decides silence. A
+  /// `body` or `reply` that holds personal data carries a Document reference, encrypted, not text in clear.
   public type Request = {
     by : Ref;
     id : Text;
