@@ -149,7 +149,7 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `User` | `id` (principal), `nickname`, `avatar`, `home_quarter`, `home_zone` → `Zone`, `language` (a BCP 47 tag), `profiles` → `UserProfile`*, `private_data` (encrypted) | One per principal known to this quarter. `home_zone` is a zone the realm defined, such as a district (§6): the member states it when joining, and `user_edit` changes it. | `alice`: nickname Alice, home quarter North, home zone Riverside, language `en`, profiles `[member]` |
+| `User` | `id` (principal), `nickname`, `avatar`, `home_quarter`, `home_zone` → `Zone`, `language` (a BCP 47 tag), `profiles` → `UserProfile`*, `private_data` (encrypted) | One per principal known to this quarter. `home_zone` is a zone the realm defined, such as a district (§6): the member states it when joining, and `user_edit` changes it; a name that is no defined zone, or a member's home cell, is `InvalidArgument`. | `alice`: nickname Alice, home quarter North, home zone Riverside, language `en`, profiles `[member]` |
 | `Member` | `id`, `user` → `User`, `status`, `joined_at` | Membership of a user in this quarter. | Alice: `active` since 2026-03-02 |
 | `GuestUser` | `id` (principal), `home_quarter`, `permissions` (Json) | A user from another quarter acting here. | Bob from South, allowed to view and transact |
 | `Human` | `id`, `user` → `User`, `date_of_birth`, `h3_index` | A verified person behind a user. At most one user per human. | Alice's verified person record: born 1990-04-12, home cell `871f1d489ffffff` |
@@ -451,7 +451,7 @@ There is no balance entity: the ledgers are the source of truth.
 | `my_invoices` | `self.data_view` | read, delegable | Alice: `INV-301`, 120 REALM, due 31 Dec |
 | `fund_create`, `period_open`, `period_close` | `org.manage_budget` | governed | Create fund `WELFARE`; close `FY2025` |
 | `budget_draft`, `budget_propose` (every draft line of a period together), `budget_amend` | `org.manage_budget` | governed | FY2027's lines drafted, then proposed as one budget → proposal |
-| `budget_extend` | `org.manage_budget` | | FY2027 opens with no adopted budget: FY2026's adopted lines carry over as `extended`; `Conflict` once FY2027 has a proposed or adopted line |
+| `budget_extend` | `org.manage_budget` | | FY2027 opens with no adopted budget: FY2026's adopted lines carry over as `extended`; `Conflict` once FY2027 has an extended, proposed or adopted line |
 | `allocation_rule_draft`, `allocation_rule_propose` | `org.manage_budget` | governed | Welfare share from 30% to 35% → proposal |
 | `payroll_run` | `org.manage_budget` | governed | November salaries: 23 seats, 51,200 REALM |
 | `loan_create` | `org.manage_budget` | governed | Borrow 500,000 REALM from Bank A over 10 years → proposal |
@@ -478,7 +478,9 @@ and `expense`, the sums of `planned` over its `revenue` and `expense` lines, as 
 `budget_propose` and `loan_create` are governed by the root department: the realm's budget and its
 borrowing are the realm's. When a period opens with no adopted budget, `budget_extend` copies the
 previous period's adopted lines into it as `extended`, without a vote, and they hold until an adopted
-budget replaces them; once the period has a proposed or adopted line it is refused with `Conflict`.
+budget replaces them; once the period has an `extended`, `proposed` or `adopted` line it is refused with
+`Conflict`, while `draft` lines stand in no way. A `budget_propose` whose derived total, `revenue` or
+`expense`, is out of Money's range is refused with `InvalidArgument`, like any other fact.
 
 ### Invariants
 

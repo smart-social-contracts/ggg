@@ -188,7 +188,7 @@ action: every operation, named as the operation, with its facts, which are the o
 `<operation>.<list>`, whose facts are the element's fields (§3.2). `tax_policy_propose.taxes` ranges
 over the saved policy's entries, since that operation's own argument is only the policy's id. An
 operation whose argument is a single value has one fact, `id`, the record it acts on (`user`, `scope`,
-`data` or `transport_key` where the value is not an id). Each fact gives its Candid type, whether it is
+`data`, `transport_key`, `source` or `step` where the value is not an id). Each fact gives its Candid type, whether it is
 optional, and what the schema adds: its `kind`, `min`, `max` and allowed `values` (a variant's tags).
 The kinds are the named aliases of `ggg.did`:
 

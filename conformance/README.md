@@ -55,6 +55,9 @@ path.
   `docs/layered-codex.md`.
 - `test/facts.test.js` fails when `facts.json` differs from what `scripts/facts.js` generates from
   `ggg.did`, or when the kinds table in `docs/layered-codex.md` differs from it.
+- `test/rules.test.js` runs the fixture with four members and checks what a proposal's stated rule
+  decides (model I-GOV-3): over the eligible voters a tie rejects, a majority accepts, absentees count
+  against.
 - `fixture/Ggg.mo` holds the Motoko types generated from `ggg.did`.
 - `fixture/main.mo` is a minimal Motoko GOS: members and proposals, and every other domain empty. The build checks its interface against `ggg.did` with
   `didc check`, and the tests expect it to pass every check.

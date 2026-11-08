@@ -1169,6 +1169,7 @@ export const idlFactory = ({ IDL }) => {
     'valid' : IDL.Bool,
     'license' : IDL.Opt(License),
   });
+  const Rate = IDL.Nat;
   const PeriodUnit = IDL.Variant({
     'Day' : IDL.Null,
     'Year' : IDL.Null,
@@ -1178,7 +1179,7 @@ export const idlFactory = ({ IDL }) => {
   const Period = IDL.Record({ 'count' : IDL.Nat, 'unit' : PeriodUnit });
   const LoanCreateArgs = IDL.Record({
     'fund' : IDL.Text,
-    'rate' : Ratio,
+    'rate' : Rate,
     'term' : Period,
     'lender' : IDL.Text,
     'amount' : Money,
@@ -1195,7 +1196,7 @@ export const idlFactory = ({ IDL }) => {
     'status' : LoanStatus,
     'outstanding' : Money,
     'fund' : IDL.Text,
-    'rate' : Ratio,
+    'rate' : Rate,
     'term' : Period,
     'lender' : IDL.Text,
     'amount' : Money,
@@ -1925,7 +1926,6 @@ export const idlFactory = ({ IDL }) => {
     'invoice' : IDL.Opt(Invoice),
     'declaration' : TaxDeclaration,
   });
-  const Rate = IDL.Nat;
   const TaxEntry = IDL.Record({
     'subject' : IDL.Text,
     'code' : IDL.Text,

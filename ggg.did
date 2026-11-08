@@ -586,7 +586,7 @@ type Loan = record {
   amount : Money;
   symbol : text;
   term : Period;
-  rate : Ratio;
+  rate : Rate;
   fund : text;
   outstanding : Money;
   status : LoanStatus;
@@ -1131,6 +1131,7 @@ type Me = record {
   requests : vec DelegationRequest;
 };
 
+// `home_zone` names a zone the realm defined; an unknown zone, or a member's home cell, is InvalidArgument.
 type JoinArgs = record { code : opt text; nickname : opt text; language : opt text; home_zone : opt text };
 type ProfileUpdateArgs = record { nickname : opt text; avatar : opt text; language : opt text; on_behalf_of : opt principal };
 
@@ -1144,6 +1145,7 @@ type UserEditArgs = record {
   avatar : opt text;
   home_quarter : opt text;
   language : opt text;
+  // A zone the realm defined; an unknown zone, or a member's home cell, is InvalidArgument.
   home_zone : opt text;
 };
 type UserSetStatusArgs = record { user : principal; status : MemberStatus; department : opt text };
@@ -1465,7 +1467,8 @@ type BudgetDraftArgs = record { fund : text; period : text; category : text; kin
 type BudgetAmendArgs = record { budget : text; planned : Money };
 // Proposes every draft line of the period together, under the root department's policy. `years` is how
 // many periods the plan covers, when more than one. Legislation reads the period's totals, `revenue` and
-// `expense` (the sums of `planned` over its Revenue and Expense lines), as facts of the call.
+// `expense` (the sums of `planned` over its Revenue and Expense lines), as facts of the call; a total out
+// of Money's range is InvalidArgument, like any other fact.
 type BudgetProposeArgs = record { period : text; years : opt nat };
 // Shares add up to at most 100 000 000 (100 %).
 type AllocationRuleDraftArgs = record { source_fund : text; rules : vec Allocation };
@@ -1494,7 +1497,7 @@ type LoanCreateArgs = record {
   lender : text;
   amount : Money;
   term : Period;
-  rate : Ratio;
+  rate : Rate;
   fund : text;
   facts : opt Value;
 };
@@ -2065,7 +2068,8 @@ service : {
   ggg_budget_draft : (BudgetDraftArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_budget_propose : (BudgetProposeArgs) -> (variant { Ok : Governed; Err : GggError });
   // Copies the previous period's adopted budget into the period named as Extended lines, without a vote,
-  // and replies how many lines it copied; Conflict once the period has a proposed or adopted line.
+  // and replies how many lines it copied; Conflict once the period has an Extended, Proposed or Adopted
+  // line (Draft lines stand in no way).
   ggg_budget_extend : (text) -> (variant { Ok : nat; Err : GggError });
   ggg_budget_amend : (BudgetAmendArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_allocation_rule_draft : (AllocationRuleDraftArgs) -> (variant { Ok : Governed; Err : GggError });

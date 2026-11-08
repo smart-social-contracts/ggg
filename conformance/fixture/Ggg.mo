@@ -183,7 +183,8 @@ module {
   public type BudgetKind = { #Revenue; #Expense };
   /// Proposes every draft line of the period together, under the root department's policy. `years` is how
   /// many periods the plan covers, when more than one. Legislation reads the period's totals, `revenue` and
-  /// `expense` (the sums of `planned` over its Revenue and Expense lines), as facts of the call.
+  /// `expense` (the sums of `planned` over its Revenue and Expense lines), as facts of the call; a total out
+  /// of Money's range is InvalidArgument, like any other fact.
   public type BudgetProposeArgs = { period : Text; years : ?Nat };
   /// Extended: copied from the previous period's adopted budget by budget_extend, in force until an adopted
   /// budget replaces it.
@@ -924,6 +925,7 @@ module {
     limit : ?Nat32;
   };
   public type InvoiceStatus = { #Paid; #Overdue; #Cancelled; #Pending };
+  /// `home_zone` names a zone the realm defined; an unknown zone, or a member's home cell, is InvalidArgument.
   public type JoinArgs = {
     nickname : ?Text;
     code : ?Text;
@@ -1111,7 +1113,7 @@ module {
     status : LoanStatus;
     outstanding : Money;
     fund : Text;
-    rate : Ratio;
+    rate : Rate;
     term : Period;
     lender : Text;
     amount : Money;
@@ -1121,7 +1123,7 @@ module {
   /// `lender` is an External; the loan is in the accounting currency. Governed by the root department.
   public type LoanCreateArgs = {
     fund : Text;
-    rate : Ratio;
+    rate : Rate;
     term : Period;
     lender : Text;
     amount : Money;
@@ -2055,6 +2057,7 @@ module {
     home_quarter : ?Text;
     user : Principal;
     language : ?Text;
+    /// A zone the realm defined; an unknown zone, or a member's home cell, is InvalidArgument.
     home_zone : ?Text;
     avatar : ?Text;
   };
@@ -2212,7 +2215,8 @@ module {
         #Err : GggError;
       };
     /// Copies the previous period's adopted budget into the period named as Extended lines, without a vote,
-    /// and replies how many lines it copied; Conflict once the period has a proposed or adopted line.
+    /// and replies how many lines it copied; Conflict once the period has an Extended, Proposed or Adopted
+    /// line (Draft lines stand in no way).
     ggg_budget_extend : shared Text -> async { #Ok : Nat; #Err : GggError };
     ggg_budget_propose : shared BudgetProposeArgs -> async {
         #Ok : Governed;
