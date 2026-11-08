@@ -682,6 +682,16 @@ the call fails and nothing changes. In a federation, the capital's zone is the r
 and a quarter's zone its local time. Realm-wide counts are made on the capital: a `FederalVote` has
 one `deadline`, set there once as an instant, and every quarter's leg keeps it.
 
+### Welcome message
+
+Each quarter has its own `Realm.welcome_message`. It starts from its capital's, copied once when the
+quarter joins the federation, and only a realm that has none yet (an empty message) takes it: a realm
+that already has one keeps it. After that the message is the quarter's own, and the quarter may change it
+with `realm_configure`. The realm may also set it by a realm-wide vote: `quarter_configure` takes a
+`welcome_message` for the `quarter` it names, which the capital sends to the quarter (`quarter.sync`) and
+the quarter applies. A `welcome_message` with no `quarter` is refused with `InvalidArgument`, before any
+vote. If the quarter cannot apply it, the call fails and nothing changes.
+
 ### Invariants
 
 - I-FED-1: A user is a member of exactly one home quarter; elsewhere they are a guest.
