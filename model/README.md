@@ -340,8 +340,11 @@ approval runs it:
    decoded at filing, as the grantor, with every check the grantor's own call would meet now
    (permission, guardrails, parties, banned status), and stores the reply as `result`, without what the
    event log strips (a secret the operation returns, such as an invite code, is in the approval's own
-   reply alone): `done`, or `failed`. A governed call goes as the grantor's own call would: at once
-   where the governing department decides directly, else as the grantor's own proposal, with
+   reply alone): `done`, or `failed`. A `confirm` read that returns third parties' personal data keeps
+   no `result` at all: the approved action gives the reply once to the delegate that prepared it, at
+   its first `action_get`, and `result` is then cleared (I-PRV-1). A governed call goes as the
+   grantor's own call would: at once where the governing department decides directly, else as the
+   grantor's own proposal, with
    `Proposal.prepared_by` the delegate. An action left `approving` after a trap ends `failed` and is
    never retried.
 4. **Ending otherwise.** `expired` once `expires_at` passes; `void` once its grant is revoked,
@@ -1348,8 +1351,9 @@ is its proposal's `effective_at` (I-GOV-5).
 - I-PRV-1: The realm never holds private content or an unwrapped data key, only ciphertext
   references, hashes and wrapped keys. One exception: an attribute's `kind` and `value` (§2) are in
   clear, and readable only by the person they belong to (`attribute_list`), by the holders of
-  `attribute.review` while it awaits review (`attribute_pending_list`) and by the codex; the audit log
-  never holds them. A request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
+  `attribute.review` while it awaits review (`attribute_pending_list`), by the codex and, once, by the
+  delegate whose approved action read them ([§2](#pending-actions)); the audit log never holds them. A
+  request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
   `Document` reference, encrypted, never text in clear, and a published copy (`Document.public`) holds
   no personal data.
 - I-PRV-2: Only a scope's managers grant or revoke its keys, or see who holds them.

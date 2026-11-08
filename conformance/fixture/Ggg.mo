@@ -1484,6 +1484,8 @@ module {
     status : PendingActionStatus;
     /// The operation's reply once the action ran, Candid-encoded with the method's own type, without what
     /// the event log strips: a secret it returns, such as an invite code, is in the approval's own reply alone.
+    /// A confirm read of third parties' personal data keeps none: the delegate gets the reply once, at its
+    /// first action_get, and the field is then cleared.
     result : ?Blob;
     call : Call;
     /// Seals the record: computed by the GOS, with sha256 or a stronger hash, over at least the realm, the
