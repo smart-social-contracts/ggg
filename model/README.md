@@ -992,7 +992,8 @@ A **revert** restores any earlier codex in the realm's history: `codex_revert` n
 none for the one the active codex replaced. A checksum not in the history is `NotFound`; a revert with
 nothing to restore is `Conflict`, and so is naming the active codex or a pending one, which are not
 earlier codices: a pending codex is activated only by `codex_activate`. A revert filed as a proposal
-names the codex it restores, resolved when it is filed, so what is voted on is what runs. The restored
+names the codex it restores, resolved when it is filed, so what is voted on is what runs; a
+`proposal_create` carrying a revert that names none is refused with `InvalidArgument`. The restored
 codex is `active` again and the one it displaces `reverted`, and a revert never runs
 `on_codex_activate`. A GOS reserves its revert operations, so no
 legislation can refuse or delay one ([layered codex §1](../docs/layered-codex.md#1-chapters-use-gggs-operations-directly)),
