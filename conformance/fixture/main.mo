@@ -543,7 +543,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_delegation_request_decide(_ : T.DelegationDecideArgs) : async Result<?T.Delegation> {
     nobody(caller, "self.delegate");
   };
-  /// Revoking every grant is the member's own act, refused under any grant before anything else.
+  /// Revoking every grant is the member's own act: with on_behalf_of it is refused, whoever the caller is.
   public shared ({ caller }) func ggg_delegation_revoke_all(args : T.DelegationRevokeAllArgs) : async Result<T.DelegationsRevoked> {
     switch (requireMember(caller, "self.delegate")) { case (?e) return #Err(e); case null {} };
     if (args.on_behalf_of != null) {

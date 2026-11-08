@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory } from '../idl/ggg.js';
