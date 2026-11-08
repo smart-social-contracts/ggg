@@ -157,6 +157,22 @@
       },
       "read": true
     },
+    "attribute_pending_list": {
+      "operation": "ggg_attribute_pending_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
     "delegable_operations": {
       "operation": "ggg_delegable_operations",
       "facts": {},

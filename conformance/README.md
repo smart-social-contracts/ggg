@@ -66,6 +66,9 @@ path.
   between realms (model I-NEST-1 to 3) and the published record (model §11).
 - `test/codex.test.js` installs codices the fixture holds and checks `codex_revert` (model §11): the one
   the active codex replaced, any earlier one by checksum, an unknown one `NotFound`.
+- `test/attributes.test.js` submits and reviews attributes and checks who reads them (model §2,
+  I-PRV-1): the reviewers see the pending ones, the person their own, and the audit log never holds a
+  kind or a value.
 - `src/money.js` is the money rule as code (model §5, layered codex §3.3), shipped with the package so a
   GOS can check its own arithmetic against it; `test/money.test.js` runs the model's progressive-tax
   example.

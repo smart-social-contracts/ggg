@@ -1,13 +1,15 @@
 /// A minimal GGG GOS, used to test the conformance suite. It implements every method of ggg.did.
 /// Members are fixed at install time. They may propose, vote, manage proposals (open, finalize,
 /// execute and stop them), set the realm's governance rule (governance_update, which the root's direct
-/// policy applies at once), read the realm and manage their own profile; every other permission is
-/// held by nobody, so those operations are refused. There are four departments: the root, with a
-/// direct policy, so a governed call on a realm-wide proposal is applied at once; a council under
-/// it, deciding 2 of 3 with a 60 % quorum, so a governed call on one of its proposals files a
-/// proposal instead; and two committees under the council, each deciding alone, so that a proposal
-/// of the council can carry a call on a committee's records where a committee's cannot carry one on
-/// its sibling's (I-GOV-13).
+/// policy applies at once), read the realm, manage their own profile, and submit and review attributes
+/// (every member holds attribute.review here, without a scope, so each reads and decides every pending
+/// attribute but their own, and the audit log keeps an attribute's id, never its kind or value); every
+/// other permission is held by nobody, so those operations are refused. There are four departments:
+/// the root, with a direct policy, so a governed call on a realm-wide proposal is applied at once; a
+/// council under it, deciding 2 of 3 with a 60 % quorum, so a governed call on one of its proposals
+/// files a proposal instead; and two committees under the council, each deciding alone, so that a
+/// proposal of the council can carry a call on a committee's records where a committee's cannot carry
+/// one on its sibling's (I-GOV-13).
 /// Members may also edit a department (department_edit, governed by that department, or by the lowest
 /// department above both the old and the new parent when it moves) and delete one that has none below
 /// it (department_delete, governed by its parent), so a committee can be moved or removed while a
@@ -162,6 +164,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   /// When the last eligible member voted. A vote ends then, if its deadline has not come first.
   let everyoneVotedAt = Map.empty<Nat, T.Timestamp>();
   let events = Map.empty<Nat, T.Event>();
+  // The members' attributes (model §2) by the n of their id `A-<n>`; a member's `human` is their
+  // principal here.
+  let attributes = Map.empty<Nat, T.Attribute>();
+  var nextAttribute = 1;
   var nextProposal = 1;
   // Funds and budget lines (model §5): enough to govern a budget by its fund's owner (D19).
   let funds = Map.empty<Text, T.Fund>();
@@ -520,10 +526,39 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
   };
 
+  /// The caller's own attributes, of one kind when `kind` is given.
   public query ({ caller }) func ggg_attribute_list(args : T.AttributeListArgs) : async Result<T.AttributePage> {
     switch (requireMember(caller, "self.data_view")) { case (?e) return #Err(e); case null {} };
     if (args.on_behalf_of != null) return #Err(noDelegation("self.data_view"));
-    none(args.cursor, args.limit);
+    let mine = Iter.filter<T.Attribute>(Map.values(attributes), func(a) {
+      a.human == Principal.toText(caller) and (switch (args.kind) { case (?k) a.kind == k; case null true });
+    });
+    page(mine, args.cursor, args.limit);
+  };
+
+  /// The attributes awaiting review, kind and value in clear, for the holders of attribute.review
+  /// (model §2, I-PRV-1). The cursor is the id of the last attribute returned and the page continues
+  /// after it, so deciding a page skips none.
+  public query ({ caller }) func ggg_attribute_pending_list(args : T.ListArgs) : async Result<T.AttributePage> {
+    switch (requireMember(caller, "attribute.review")) { case (?e) return #Err(e); case null {} };
+    let after = switch (args.cursor) {
+      case null 0;
+      case (?c) { let ?n = attributeNumber(c) else return #Err(#InvalidArgument("unknown cursor")); n };
+    };
+    let pending = Iter.filter<(Nat, T.Attribute)>(Map.entries(attributes), func((n, a)) { n > after and a.status == #Pending });
+    let size = pageSize(args.limit);
+    let items = Iter.toArray(Iter.map<(Nat, T.Attribute), T.Attribute>(Iter.take(pending, size + 1), func((_, a)) { a }));
+    if (items.size() > size) {
+      #Ok({ items = Array.sliceToArray(items, 0, size); next = ?items[size - 1].id });
+    } else {
+      #Ok({ items; next = null });
+    };
+  };
+
+  /// The n of an attribute id `A-<n>`.
+  func attributeNumber(id : Text) : ?Nat {
+    let ?rest = Text.stripStart(id, #text "A-") else return null;
+    Nat.fromText(rest);
   };
 
   public query func ggg_delegable_operations() : async Result<[T.DelegableOperation]> {
@@ -556,6 +591,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         "self.data_view",
         "self.update_public_profile",
         "self.update_private_data",
+        "attribute.submit",
+        "attribute.review",
         "proposal.create",
         "proposal.vote",
         "governance.update",
@@ -630,11 +667,45 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_identity_review(_ : T.IdentityReviewArgs) : async Result<T.Identity> {
     nobody(caller, "identity.review");
   };
-  public shared ({ caller }) func ggg_attribute_submit(_ : T.AttributeSubmitArgs) : async Result<T.Attribute> {
-    nobody(caller, "attribute.submit");
+  /// Files an attribute of the caller's, pending review. The audit event keeps its id, never its kind
+  /// or value (I-PRV-1).
+  public shared ({ caller }) func ggg_attribute_submit(args : T.AttributeSubmitArgs) : async Result<T.Attribute> {
+    switch (requireMember(caller, "attribute.submit")) { case (?e) return #Err(e); case null {} };
+    if (Text.size(args.kind) == 0 or Text.size(args.value) == 0) return #Err(#InvalidArgument("kind and value are not empty"));
+    let attribute : T.Attribute = {
+      id = "A-" # Nat.toText(nextAttribute);
+      human = Principal.toText(caller);
+      kind = args.kind;
+      value = args.value;
+      issuer = switch (args.issuer) { case (?i) i; case null "" };
+      ref = args.ref;
+      status = #Pending;
+      verified_at = null;
+      expires_at = args.expires_at;
+    };
+    Map.add(attributes, Nat.compare, nextAttribute, attribute);
+    nextAttribute += 1;
+    audit("attribute_submit", caller, #Map([("attribute", #Text(attribute.id))]), #Text(attribute.id));
+    #Ok(attribute);
   };
-  public shared ({ caller }) func ggg_attribute_review(_ : T.AttributeReviewArgs) : async Result<T.Attribute> {
-    nobody(caller, "attribute.review");
+
+  /// Decides a pending attribute. The audit event keeps its id and the decision, never its kind or
+  /// value (I-PRV-1).
+  public shared ({ caller }) func ggg_attribute_review(args : T.AttributeReviewArgs) : async Result<T.Attribute> {
+    switch (requireMember(caller, "attribute.review")) { case (?e) return #Err(e); case null {} };
+    let ?n = attributeNumber(args.attribute) else return #Err(#NotFound);
+    let ?a = Map.get(attributes, Nat.compare, n) else return #Err(#NotFound);
+    if (a.human == Principal.toText(caller)) {
+      return #Err(#Forbidden({ permission = ?"attribute.review"; message = "Nobody decides their own attribute (I-ALL-3)." }));
+    };
+    if (a.status != #Pending) return #Err(#Conflict("attribute " # a.id # " is decided already"));
+    let (reviewed, decision) = switch (args.status) {
+      case (#Verified) ({ a with status = #Verified; verified_at = ?now() }, "verified");
+      case (#Rejected) ({ a with status = #Rejected }, "rejected");
+    };
+    Map.add(attributes, Nat.compare, n, reviewed);
+    audit("attribute_review", caller, #Map([("attribute", #Text(a.id))]), #Text(decision));
+    #Ok(reviewed);
   };
 
   public shared ({ caller }) func ggg_invite_create(_ : T.InviteCreateArgs) : async Result<T.InviteCreated> {

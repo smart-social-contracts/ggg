@@ -79,7 +79,8 @@ module {
   /// A certified attribute of a person: a status another body certifies and the realm verifies, as it
   /// verifies identities, such as a disability, a family status or being a student. The kinds and their
   /// values are legislation's; GGG records the attestation. `kind` and `value` are in clear, and readable
-  /// only by the person, by the holders of attribute.review and by the codex (I-PRV-1).
+  /// only by the person, by the holders of attribute.review while it awaits review and by the codex
+  /// (I-PRV-1); the audit log never holds them.
   public type Attribute = {
     id : Text;
     ref : Text;
@@ -2326,6 +2327,12 @@ module {
         #Err : GggError;
       };
     ggg_attribute_list : shared query AttributeListArgs -> async {
+        #Ok : AttributePage;
+        #Err : GggError;
+      };
+    /// The attributes awaiting review, for the holders of attribute.review (I-PRV-1); the cursor continues
+    /// after the last attribute returned, so deciding a page skips none.
+    ggg_attribute_pending_list : shared query ListArgs -> async {
         #Ok : AttributePage;
         #Err : GggError;
       };

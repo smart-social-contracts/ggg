@@ -116,7 +116,8 @@ type AttributeStatus = variant { Pending; Verified; Rejected };
 // A certified attribute of a person: a status another body certifies and the realm verifies, as it
 // verifies identities, such as a disability, a family status or being a student. The kinds and their
 // values are legislation's; GGG records the attestation. `kind` and `value` are in clear, and readable
-// only by the person, by the holders of attribute.review and by the codex (I-PRV-1).
+// only by the person, by the holders of attribute.review while it awaits review and by the codex
+// (I-PRV-1); the audit log never holds them.
 type Attribute = record {
   id : text;
   human : text;
@@ -2094,6 +2095,9 @@ service : {
   ggg_invite_list : (ListArgs) -> (variant { Ok : InvitePage; Err : GggError }) query;
   ggg_delegation_list : (DelegationListArgs) -> (variant { Ok : DelegationPage; Err : GggError }) query;
   ggg_attribute_list : (AttributeListArgs) -> (variant { Ok : AttributePage; Err : GggError }) query;
+  // The attributes awaiting review, for the holders of attribute.review (I-PRV-1); the cursor continues
+  // after the last attribute returned, so deciding a page skips none.
+  ggg_attribute_pending_list : (ListArgs) -> (variant { Ok : AttributePage; Err : GggError }) query;
   ggg_delegable_operations : () -> (variant { Ok : vec DelegableOperation; Err : GggError }) query;
   ggg_delegation_groups : (DelegationGroupsArgs) -> (variant { Ok : DelegationGroupPage; Err : GggError }) query;
   ggg_delegation_activity : (DelegationActivityArgs) -> (variant { Ok : EventPage; Err : GggError }) query;

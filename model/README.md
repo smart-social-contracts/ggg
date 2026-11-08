@@ -167,7 +167,7 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `GuestUser` | `id` (principal), `home_quarter`, `permissions` (Json) | A user from another quarter acting here. | Bob from South, allowed to view and transact |
 | `Human` | `id`, `user` → `User`, `date_of_birth`, `h3_index` | A verified person behind a user. At most one user per human. | Alice's verified person record: born 1990-04-12, home cell `871f1d489ffffff` |
 | `Identity` | `id`, `human` → `Human`, `kind` (`national_id`, `passport`, `residence_permit`, `driver_license`, `email`, …), `category`, `issuer`, `ref`, `status`, `verified_at`, `expires_at` | An attestation. Proof material is stored encrypted or off-chain; `ref` points to it. The standard kinds are the ones named here, and a realm may add its own; `category` is a subdivision of the kind (a long-term permit); the issuer of a national id or passport is the country, so it says the nationality. | Alice's passport: kind `passport`, issuer `ES`, verified 2026-03-02, expires 2031-03-01 |
-| `Attribute` | `id`, `human` → `Human`, `kind`, `value`, `issuer`, `ref`, `status`, `verified_at`, `expires_at` | A certified attribute of a person, which another body certifies and the realm verifies as it verifies identities: a disability, a family status, being a student. The kinds and values are legislation's; GGG records the attestation. `kind` and `value` are in clear, readable only by the person, the reviewers and the codex (I-PRV-1). | Alice's large-family title: kind `large_family`, value `general`, issued by the regional government, `verified`, expires 2028-06-30 |
+| `Attribute` | `id`, `human` → `Human`, `kind`, `value`, `issuer`, `ref`, `status`, `verified_at`, `expires_at` | A certified attribute of a person, which another body certifies and the realm verifies as it verifies identities: a disability, a family status, being a student. The kinds and values are legislation's; GGG records the attestation. `kind` and `value` are in clear, readable only by the person, by the reviewers while it awaits review and by the codex, never the audit log (I-PRV-1). | Alice's large-family title: kind `large_family`, value `general`, issued by the regional government, `verified`, expires 2028-06-30 |
 | `UserProfile` | `id` (name), `description`, `allowed_to` (Json list of permissions), `permissions` → `Permission`* | A named role. Defaults: `admin` (`all`), `member`. | `member` → `[self.join, proposal.vote, proposal.create, dispute.create, …]` |
 | `Permission` | `id` (name), `description`, `category`, `scope`, `users` → `User`*, `profiles` → `UserProfile`*, `departments` → `Department`* | A fine-grained grant of one permission to users, profiles or departments. | `transfer.create` on scope `fund:ROADS`, granted to Infrastructure |
 | `Invite` | `id` (code hash), `profile`, `department`, `position`, `max_uses`, `uses`, `redeemed_by` (Json), `expires_at`, `revoked`, `created_by` | The code itself is never stored. | 50-use code for new clerks: profile `member`, Civil Registry, position `clerk`, expires in 30 days |
@@ -198,6 +198,7 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `identity_review` | `identity.review` | signing, confirm | Dana approves Alice's passport proof |
 | `attribute_submit` | `attribute.submit` | confirm | Alice submits her large-family title |
 | `attribute_review` | `attribute.review` | signing, confirm | Dana verifies it |
+| `attribute_pending_list` (the attributes awaiting review) | `attribute.review` | read, confirm | Dana lists the attributes awaiting her review, kind and value in clear. Prepared by a delegate, it waits for Dana's approval: third parties' personal data |
 | `attribute_list` (own) | `self.data_view` | read, delegable | Alice's verified attributes |
 | `invite_create`, `invite_revoke` | `invite.manage` | delegable | Dana creates 50 clerk invites; revokes one sent to the wrong email. `invite_create` asks each time when the invite carries a profile beyond member, or a seat |
 | `invite_list` | `invite.manage` | read, delegable | Dana checks which of her invites have been used |
@@ -211,6 +212,16 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `delegation_list`, `delegable_operations` | `self.data_view` | read, delegable | Alice's grants; the operations a permission-named grant covers: `[proposal.vote, proposal.create, …]` |
 | `delegation_groups` (the groups the caller can grant, each with its operations and their tiers) | `self.data_view` | read, delegable | Alice's Authorize page: "Vote for me", "Propose for me", "See my affairs and the realm", … |
 | `delegation_activity` (the events recorded under one grant, to its grantor or its delegate) | `self.data_view` | read, delegable | What `claude-conn` did under Alice's grant: two votes and a motion |
+
+A holder of `attribute.review` reads the attributes awaiting review with `attribute_pending_list`,
+`kind` and `value` in clear, before deciding with `attribute_review` (I-PRV-1); nobody decides their
+own (I-ALL-3). Its cursor continues after the last attribute returned, so deciding a page skips none.
+A holder of `attribute.review` on a scope reads and decides only the attributes in it: scope
+`kind:<kind>` for the kinds that body certifies (Social Services on `kind:large_family`); held without
+a scope, every pending attribute of the realm. `attribute_pending_list` and `attribute_review` apply
+the same scope. Once decided, an attribute is read by its person alone, with `attribute_list`. The
+audit events of `attribute_submit` and `attribute_review` record the attribute's id, and for a review
+the decision, never its `kind` or `value`.
 
 Governed identity operations follow the policy of the department named in their `department`
 argument (it must hold that permission through its positions or grants); otherwise the root's.
@@ -249,7 +260,8 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
   several groups lasts at most the shortest. Nothing lasts more than one year (I-ID-6).
 - **Limits are checked at use**, not only at grant: a later, stricter limit binds existing grants.
 - **Signing acts** are `confirm`, in the `sign` group: the official's own approval is their signature
-  (I-ALL-7), and the delegate only drafts. The signing policy's `delegable` key
+  (I-ALL-7), and the delegate only drafts. So is the one read in that group, `attribute_pending_list`:
+  a read asks each time only when it returns third parties' personal data. The signing policy's `delegable` key
   ([§11](#signing-policy)) lets a codex make a signing permission direct instead; by default none is.
 - **Setup.** While the realm is in setup, an operation of the `setup` group runs at once under a grant
   wherever the founder's own call would: most are not governed before launch, and Launch is the
@@ -1264,8 +1276,9 @@ is its proposal's `effective_at` (I-GOV-5).
 
 - I-PRV-1: The realm never holds private content or an unwrapped data key, only ciphertext
   references, hashes and wrapped keys. One exception: an attribute's `kind` and `value` (§2) are in
-  clear, and readable only by the person they belong to, by the holders of `attribute.review` and by the
-  codex. A request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
+  clear, and readable only by the person they belong to (`attribute_list`), by the holders of
+  `attribute.review` while it awaits review (`attribute_pending_list`) and by the codex; the audit log
+  never holds them. A request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
   `Document` reference, encrypted, never text in clear, and a published copy (`Document.public`) holds
   no personal data.
 - I-PRV-2: Only a scope's managers grant or revoke its keys, or see who holds them.
@@ -1364,3 +1377,4 @@ There is no permission for raw database writes: everything is an operation.
 | D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the nearest cent (a multiple of 10^(decimals − 2) smallest units); never bracket by bracket (§5) |
 | D24 | What replaces a fund's extended lines, and what an adopted budget allows | Decided 9 Nov 2026: an adopted budget that replaces a fund's extended lines makes them `amended`, so a category it dropped does not come back at the next extension (`closed` keeps meaning closed with its period); `budget_extend` carries what stood at the previous period's end, adopted, extended or closed with it, leaving out a category the new period holds as the other kind; once a fund has an adopted budget for a period, a transfer from it in a category with no adopted expense line is refused (`Conflict`), a transfer with no category counting as `transfer`, while a fund with only extended lines, or none, spends as before, and the ledger's fee for a payment is exempt; within a fund and period a category is either revenue or expense, a draft of the other kind `InvalidArgument` (§5) |
 | D25 | What `codex_revert` restores | Decided 8 Nov 2026: any earlier codex in the history, named by its checksum, or the one the active codex replaced when none is named (`opt CodexRevertArgs`, so existing callers keep working); a revert filed as a proposal names the codex it restores; the active or a pending codex is not an earlier one (`Conflict`); never `on_codex_activate`; which rule decides the vote is the GOS's (§11) |
+| D29 | How a reviewer reads a pending attribute | Decided 8 Nov 2026: `attribute_pending_list`, a read under `attribute.review`, lists the attributes awaiting review with kind and value in clear, consistent with I-PRV-1, paged by id so that deciding a page skips none; a holder of `attribute.review` on a scope reads and decides only the attributes in it, scope `kind:<kind>` for the kinds that body certifies, and held without a scope every pending attribute of the realm, `attribute_pending_list` and `attribute_review` applying the same scope; the audit events of `attribute_submit` and `attribute_review` keep the attribute's id, and for a review the decision, never its kind or value (§2) |

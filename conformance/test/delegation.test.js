@@ -14,6 +14,8 @@ const DAY = 24 * 3600;
 const YEAR = 365 * DAY;
 // Calls between canisters: never a member's act.
 const BETWEEN_CANISTERS = ['quarter_sync', 'quarter_report', 'federation_message', 'link_notify', 'follower_report'];
+// The reads of third parties' personal data: the only reads that ask each time.
+const CONFIRM_READS = ['attribute_pending_list'];
 
 const oneSentence = (sentence, where) => assert.ok(typeof sentence === 'string' && sentence.length > 0 && !sentence.includes('\n'), `${where} is not one sentence`);
 
@@ -65,13 +67,15 @@ test('the groups are the design\'s, each with its texts, parameter and longest d
   oneSentence(everything.warning, 'everything.warning');
 });
 
-test('signing acts ask each time in the sign group, Launch is the founder\'s, reads never ask, canisters hold no power of attorney', () => {
+test('signing acts ask each time in the sign group, Launch is the founder\'s, only personal-data reads ask, canisters hold no power of attorney', () => {
   const signing = new Set(flagged('signing'));
   assert.ok(signing.size > 0, 'no signing operation found in the model');
   for (const name of signing) assert.deepEqual([operations[name].tier, operations[name].group], ['confirm', 'sign'], name);
   for (const [name, op] of Object.entries(operations)) if (op.group === 'sign') assert.ok(signing.has(name), `${name} is in the sign group but is not a signing act`);
   assert.equal(operations.setup_launch.tier, 'founder');
-  for (const { name, read: isRead } of methods) if (isRead) assert.notEqual(operations[name].tier, 'confirm', `${name} is a read`);
+  // A read asks each time only when it returns third parties' personal data.
+  for (const { name, read: isRead } of methods) if (isRead && !CONFIRM_READS.includes(name)) assert.notEqual(operations[name].tier, 'confirm', `${name} is a read`);
+  for (const name of CONFIRM_READS) assert.equal(operations[name].tier, 'confirm', name);
   for (const name of BETWEEN_CANISTERS) assert.equal(operations[name].tier, 'none', name);
 });
 
