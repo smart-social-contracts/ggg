@@ -13,7 +13,7 @@ const GROUPS = ['see', 'profile', 'vote', 'propose', 'filings', 'justice', 'mone
 const DAY = 24 * 3600;
 const YEAR = 365 * DAY;
 // Calls between canisters: never a member's act.
-const BETWEEN_CANISTERS = ['quarter_sync', 'quarter_report', 'federation_message'];
+const BETWEEN_CANISTERS = ['quarter_sync', 'quarter_report', 'federation_message', 'link_notify', 'follower_report'];
 
 const oneSentence = (sentence, where) => assert.ok(typeof sentence === 'string' && sentence.length > 0 && !sentence.includes('\n'), `${where} is not one sentence`);
 

@@ -60,7 +60,9 @@ path.
 - `test/rules.test.js` runs the fixture with four members and checks what a proposal's stated rule
   decides (model I-GOV-3): over the eligible voters a tie rejects, a majority accepts, absentees count
   against.
+- `test/sync.test.js` runs three fixtures that take legislation from one another and checks the links
+  between realms (model I-NEST-1 to 3) and the published record (model §11).
 - `fixture/Ggg.mo` holds the Motoko types generated from `ggg.did`.
-- `fixture/main.mo` is a minimal Motoko GOS: members, four departments and proposals, and every other domain empty. The build checks its interface against `ggg.did` with
+- `fixture/main.mo` is a minimal Motoko GOS: members, four departments, proposals, links between realms and a published record, and every other domain empty. The build checks its interface against `ggg.did` with
   `didc check`, and the tests expect it to pass every check.
 - `fixture/broken.mo` breaks GGG on purpose, and the tests expect the checks to fail.

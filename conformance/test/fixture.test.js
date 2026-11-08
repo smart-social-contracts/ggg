@@ -23,10 +23,10 @@ before(async () => {
   pic = await PocketIc.create(server.getUrl());
   canisterId = await pic.createCanister();
   // Two members, so that the suite's member voting does not end the vote by itself.
-  const arg = IDL.encode([IDL.Vec(IDL.Principal)], [[member.getPrincipal(), colleague.getPrincipal()]]);
+  const arg = IDL.encode([IDL.Vec(IDL.Principal), IDL.Vec(IDL.Tuple(IDL.Text, IDL.Vec(IDL.Nat8)))], [[member.getPrincipal(), colleague.getPrincipal()], []]);
   await pic.installCode({ canisterId, wasm: wasm('ggg_fixture'), arg });
   soloId = await pic.createCanister();
-  const soloArg = IDL.encode([IDL.Vec(IDL.Principal)], [[soloMember.getPrincipal()]]);
+  const soloArg = IDL.encode([IDL.Vec(IDL.Principal), IDL.Vec(IDL.Tuple(IDL.Text, IDL.Vec(IDL.Nat8)))], [[soloMember.getPrincipal()], []]);
   await pic.installCode({ canisterId: soloId, wasm: wasm('ggg_fixture'), arg: soloArg });
   brokenId = await pic.createCanister();
   await pic.installCode({ canisterId: brokenId, wasm: wasm('broken'), arg: IDL.encode([], []) });

@@ -221,6 +221,7 @@ export const idlFactory = ({ IDL }) => {
   );
   const CodexSource = IDL.Variant({
     'Package' : IDL.Record({ 'source' : IDL.Text, 'manifest' : Value }),
+    'Release' : IDL.Record({ 'source' : IDL.Text, 'version' : IDL.Text }),
     'Registry' : IDL.Record({ 'codex' : IDL.Text, 'version' : IDL.Text }),
   });
   const ListArgs = IDL.Record({
@@ -862,6 +863,42 @@ export const idlFactory = ({ IDL }) => {
     'topic' : IDL.Text,
     'body' : Value,
   });
+  const FollowerArgs = IDL.Record({ 'follower' : IDL.Principal });
+  const LinkStatus = IDL.Variant({
+    'Ended' : IDL.Record({ 'at' : Timestamp, 'by' : IDL.Principal }),
+    'Active' : IDL.Null,
+    'Requested' : IDL.Null,
+  });
+  const Compliance = IDL.Variant({
+    'NonCompliant' : IDL.Record({
+      'since' : Timestamp,
+      'stale' : IDL.Vec(IDL.Text),
+    }),
+    'Unknown' : IDL.Null,
+    'Compliant' : IDL.Null,
+  });
+  const ReportedLayer = IDL.Record({
+    'version' : IDL.Text,
+    'checksum' : IDL.Text,
+  });
+  const Follower = IDL.Record({
+    'id' : IDL.Text,
+    'status' : LinkStatus,
+    'compliance' : Compliance,
+    'layers' : IDL.Vec(ReportedLayer),
+    'capital' : IDL.Principal,
+    'reported_at' : IDL.Opt(Timestamp),
+    'population' : IDL.Nat,
+  });
+  const FollowerPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Follower),
+  });
+  const FollowerReportArgs = IDL.Record({
+    'compliance' : Compliance,
+    'layers' : IDL.Vec(ReportedLayer),
+    'population' : IDL.Nat,
+  });
   const FundCreateArgs = IDL.Record({
     'fund' : IDL.Text,
     'kind' : IDL.Opt(IDL.Text),
@@ -1148,6 +1185,30 @@ export const idlFactory = ({ IDL }) => {
     'next' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(LedgerEntry),
   });
+  const ChapterRef = IDL.Record({ 'domain' : IDL.Text, 'checksum' : IDL.Text });
+  const LegislationReleasePublishArgs = IDL.Record({
+    'source' : IDL.Text,
+    'version' : IDL.Text,
+    'calendar' : IDL.Opt(IDL.Text),
+    'effective_from' : Timestamp,
+    'chapters' : IDL.Vec(ChapterRef),
+    'notes' : Value,
+    'commit' : IDL.Text,
+  });
+  const Release = IDL.Record({
+    'source' : IDL.Text,
+    'published' : Timestamp,
+    'version' : IDL.Text,
+    'calendar' : IDL.Opt(IDL.Text),
+    'effective_from' : Timestamp,
+    'chapters' : IDL.Vec(ChapterRef),
+    'notes' : Value,
+    'commit' : IDL.Text,
+  });
+  const ReleasePage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Release),
+  });
   const LicenseApplyArgs = IDL.Record({
     'evidence_ref' : IDL.Opt(IDL.Text),
     'kind' : IDL.Text,
@@ -1212,6 +1273,14 @@ export const idlFactory = ({ IDL }) => {
   const LicenseCheck = IDL.Record({
     'valid' : IDL.Bool,
     'license' : IDL.Opt(License),
+  });
+  const LinkSide = IDL.Variant({
+    'SyncSource' : IDL.Null,
+    'Follower' : IDL.Null,
+  });
+  const LinkNotifyArgs = IDL.Record({
+    'status' : LinkStatus,
+    'side' : LinkSide,
   });
   const Rate = IDL.Nat;
   const PeriodUnit = IDL.Variant({
@@ -1636,6 +1705,7 @@ export const idlFactory = ({ IDL }) => {
   const Quarter = IDL.Record({
     'id' : IDL.Text,
     'status' : QuarterStatus,
+    'compliance' : Compliance,
     'codex_version' : IDL.Opt(IDL.Text),
     'name' : IDL.Text,
     'last_activity_at' : IDL.Opt(Timestamp),
@@ -1707,6 +1777,15 @@ export const idlFactory = ({ IDL }) => {
     'trusted_principals' : IDL.Opt(IDL.Vec(IDL.Principal)),
     'trusted_approvers' : IDL.Opt(IDL.Vec(IDL.Text)),
   });
+  const SyncSourceRef = IDL.Variant({
+    'Record' : IDL.Record({ 'url' : IDL.Text, 'checksum' : IDL.Text }),
+    'Realm' : IDL.Principal,
+  });
+  const SyncSource = IDL.Record({
+    'status' : LinkStatus,
+    'source' : SyncSourceRef,
+    'name' : IDL.Text,
+  });
   const Realm = IDL.Record({
     'id' : IDL.Text,
     'status' : RealmStatus,
@@ -1724,6 +1803,7 @@ export const idlFactory = ({ IDL }) => {
     'logo_url' : IDL.Opt(IDL.Text),
     'open_registration' : IDL.Bool,
     'trusted_principals' : IDL.Vec(IDL.Principal),
+    'sync_sources' : IDL.Vec(SyncSource),
     'federation_realm_id' : IDL.Opt(IDL.Text),
     'accounting_currency_decimals' : IDL.Opt(IDL.Nat8),
     'welcome_message' : IDL.Text,
@@ -1892,6 +1972,11 @@ export const idlFactory = ({ IDL }) => {
     'Branding' : BrandingArgs,
     'Tokens' : TokensArgs,
   });
+  const SyncSourceAddArgs = IDL.Record({
+    'source' : SyncSourceRef,
+    'name' : IDL.Text,
+  });
+  const SyncSourceRemoveArgs = IDL.Record({ 'source' : SyncSourceRef });
   const TaskStatus = IDL.Variant({
     'Run' : IDL.Null,
     'Failed' : IDL.Null,
@@ -2620,6 +2705,26 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(Value), 'Err' : GggError })],
         [],
       ),
+    'ggg_follower_accept' : IDL.Func(
+        [FollowerArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_follower_list' : IDL.Func(
+        [ListArgs],
+        [IDL.Variant({ 'Ok' : FollowerPage, 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_follower_remove' : IDL.Func(
+        [FollowerArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_follower_report' : IDL.Func(
+        [FollowerReportArgs],
+        [IDL.Variant({ 'Ok' : Follower, 'Err' : GggError })],
+        [],
+      ),
     'ggg_fund_create' : IDL.Func(
         [FundCreateArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
@@ -2745,6 +2850,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : LedgerPage, 'Err' : GggError })],
         ['query'],
       ),
+    'ggg_legislation_chapter' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Vec(IDL.Nat8)), 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_legislation_release_publish' : IDL.Func(
+        [LegislationReleasePublishArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_legislation_releases' : IDL.Func(
+        [ListArgs],
+        [IDL.Variant({ 'Ok' : ReleasePage, 'Err' : GggError })],
+        ['query'],
+      ),
     'ggg_license_apply' : IDL.Func(
         [LicenseApplyArgs],
         [IDL.Variant({ 'Ok' : License, 'Err' : GggError })],
@@ -2779,6 +2899,11 @@ export const idlFactory = ({ IDL }) => {
         [LicenseVerifyArgs],
         [IDL.Variant({ 'Ok' : LicenseCheck, 'Err' : GggError })],
         ['query'],
+      ),
+    'ggg_link_notify' : IDL.Func(
+        [LinkNotifyArgs],
+        [IDL.Variant({ 'Ok' : LinkStatus, 'Err' : GggError })],
+        [],
       ),
     'ggg_loan_create' : IDL.Func(
         [LoanCreateArgs],
@@ -3149,6 +3274,16 @@ export const idlFactory = ({ IDL }) => {
     'ggg_setup_step' : IDL.Func(
         [SetupStep],
         [IDL.Variant({ 'Ok' : SetupState, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_sync_source_add' : IDL.Func(
+        [SyncSourceAddArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_sync_source_remove' : IDL.Func(
+        [SyncSourceRemoveArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
     'ggg_task_cancel' : IDL.Func(
