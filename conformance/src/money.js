@@ -36,14 +36,20 @@ export function share(amount, rate, decimals) {
  * bracket's share instead would move the total by up to half a cent per bracket.
  */
 export function progressiveTax(base, brackets, decimals) {
+  if (brackets.length === 0) throw new Error('a progressive tax has at least one bracket');
+  let bound = 0n;
+  brackets.forEach(({ upTo }, i) => {
+    const last = i === brackets.length - 1;
+    if (last && upTo != null) throw new Error('brackets have increasing bounds, and the last is open');
+    if (!last && (upTo == null || upTo <= bound)) throw new Error('brackets have increasing bounds, and the last is open');
+    if (upTo != null) bound = upTo;
+  });
   let numerator = 0n;
   let from = 0n;
-  brackets.forEach(({ upTo, rate }, i) => {
-    const last = i === brackets.length - 1;
-    if (last ? upTo != null : upTo == null || upTo <= from) throw new Error('brackets have increasing bounds, and the last is open');
+  for (const { upTo, rate } of brackets) {
     const to = upTo == null || upTo > base ? base : upTo;
     if (to > from) numerator += (to - from) * rate;
     from = to;
-  });
+  }
   return toCents(numerator, WHOLE, decimals);
 }

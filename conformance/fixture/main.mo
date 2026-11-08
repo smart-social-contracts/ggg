@@ -4,10 +4,10 @@
 /// policy applies at once), read the realm and manage their own profile; every other permission is
 /// held by nobody, so those operations are refused. There are four departments: the root, with a
 /// direct policy, so a governed call on a realm-wide proposal is applied at once; a council under
-/// it, deciding 2 of 3 with a 75 % quorum, so a governed call on one of its proposals files a proposal
-/// instead; and two
-/// committees under the council, each deciding alone, so that a proposal of the council can carry a
-/// call on a committee's records where a committee's cannot carry one on its sibling's (I-GOV-13).
+/// it, deciding 2 of 3 with a 60 % quorum, so a governed call on one of its proposals files a
+/// proposal instead; and two committees under the council, each deciding alone, so that a proposal
+/// of the council can carry a call on a committee's records where a committee's cannot carry one on
+/// its sibling's (I-GOV-13).
 /// Members may also edit a department (department_edit, governed by that department, or by the lowest
 /// department above both the old and the new parent when it moves) and delete one that has none below
 /// it (department_delete, governed by its parent), so a committee can be moved or removed while a
@@ -21,9 +21,9 @@
 /// (tally.seats), as I-GOV-3 says: two yes votes carry a council proposal whether two or twenty
 /// members vote. The fixture never ends a department vote early (I-GOV-7 allows it, it does not
 /// require it): that needs veto holders, who must hold a seat (I-ORG-5). Nor does it settle a
-/// proposal as its vote ends or run
-/// an accepted action as it finalizes (I-GOV-12): proposal_finalize records the outcome of a vote that
-/// has ended, and proposal_execute runs the action. Nobody has granted a delegation, so nobody acts on
+/// proposal as its vote ends or run an accepted action as it finalizes (I-GOV-12): proposal_finalize
+/// records the outcome of a vote that has ended, and proposal_execute runs the action. Nobody has
+/// granted a delegation, so nobody acts on
 /// another's behalf. Every other domain is empty, which the model allows. A proposal's rule is its
 /// scope's, the realm's over the votes cast or a department's m/n over its policy's n, unless the
 /// proposer states a stricter one, which the fixture stores and applies (I-GOV-3).
@@ -107,9 +107,9 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     department(ROOT_ID, "The realm itself.", null, DIRECT),
     department(
       "council",
-      "A council under the realm, deciding 2 of 3 with a 75 % quorum.",
+      "A council under the realm, deciding 2 of 3 with a 60 % quorum.",
       ?ROOT_ID,
-      { m = 2; n = 3; quorum = 75_000_000; veto = [] },
+      { m = 2; n = 3; quorum = 60_000_000; veto = [] },
     ),
     department("roads", "A committee under the council, deciding alone.", ?"council", DIRECT),
     department("parks", "A committee under the council, deciding alone.", ?"council", DIRECT),

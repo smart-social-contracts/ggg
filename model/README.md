@@ -337,8 +337,9 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 - I-GOV-3: A proposal is accepted only if its quorum and threshold are met when its vote ends. Its rule,
   `threshold`, `quorum`, `threshold_of` and `casting_vote`, states the one that decides it, and that rule
   is applied; it is fixed when the vote opens, together with `tally.eligible` and `tally.seats`: at
-  creation for a proposal filed open, at `proposal_open` for a draft, and after that it never moves,
-  like the action. One comparison per scope:
+  creation for a proposal filed open, at `proposal_open` for a draft, which then takes the stricter of
+  the rule it stated and the scope's default of that moment, never a weaker one; after that it never
+  moves, like the action. One comparison per scope:
   - A **realm-wide** proposal takes the realm's `voting_threshold` and `voting_quorum`, over the votes
     `cast`: it is accepted when the votes cast reach the quorum of the eligible voters and the yes votes
     *exceed* `threshold` of the yes and no votes. Over the `eligible` voters, the yes votes must exceed
@@ -355,11 +356,11 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   - Under `cast`, when the yes votes stand exactly at `threshold` of the yes and no votes (a tie at 50 %),
     the `casting_vote` member's yes accepts; without one, or if that member did not vote yes, the tie
     rejects. The casting vote is part of the realm's default rule, set by governed configuration:
-    `Realm.casting_vote` (`governance_update`, an active member). A realm-wide proposal copies it at
-    creation; the proposer never sets it, and a department's proposals have none, since they count over
-    the seats, where no tie arises. If the member later leaves, new proposals still copy them, their
-    vote does not count on those (I-GOV-2) and ties reject, until `governance_update` names another or
-    clears it.
+    `Realm.casting_vote` (`governance_update`, an active member). A realm-wide proposal copies it
+    when its vote opens; the proposer never sets it, and a department's proposals have none, since
+    they count over the seats, where no tie arises. If the member later leaves, new proposals still
+    copy them, their vote does not count on those (I-GOV-2) and ties reject, until
+    `governance_update` names another or clears it.
   - The proposer may state a stricter rule when creating the proposal, never a weaker one
     (`InvalidArgument`): a higher threshold or quorum, or `eligible` where the default is `cast`. Each
     change narrows what the default accepts, so legislation's guards, which may require them, only ever
@@ -1246,3 +1247,4 @@ There is no permission for raw database writes: everything is an operation.
 | D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3) |
 | D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the nearest cent (a multiple of 10^(decimals − 2) smallest units); never bracket by bracket (§5) |
 | D24 | What replaces a fund's extended lines, and what an adopted budget allows | Decided 9 Nov 2026: an adopted budget that replaces a fund's extended lines makes them `amended`, so a category it dropped does not come back at the next extension (`closed` keeps meaning closed with its period); once a fund has an adopted budget for a period, a transfer from it in a category with no adopted line is refused (`Conflict`), while a fund with only extended lines, or none, spends as before (§5) |
+| D25 | What `codex_revert` restores | Decided 8 Nov 2026: any earlier codex in the history, named by its checksum, or the one the active codex replaced when none is named (`opt CodexRevertArgs`, so existing callers keep working); never `on_codex_activate`; which rule decides the vote is the GOS's (§11) |
