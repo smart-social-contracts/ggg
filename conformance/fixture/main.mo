@@ -766,12 +766,18 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     });
   };
 
-  /// Within a fund and period a category is either revenue or expense (model §5).
-  func checkDraft(args : T.BudgetDraftArgs) : ?T.GggError {
+  /// Whether `period` already holds `category` of `fund` as a line of the other kind than `kind`, in any
+  /// status: within a fund and period a category is either revenue or expense (model §5).
+  func otherKindHeld(fund : Text, period : Text, category : Text, kind : T.BudgetKind) : Bool {
     for (b in Map.values(budgets)) {
-      if (b.fund == args.fund and b.period == args.period and b.category == args.category and b.kind != args.kind) {
-        return ?#InvalidArgument("category " # args.category # " of " # args.fund # " in " # args.period # " is of the other kind");
-      };
+      if (b.fund == fund and b.period == period and b.category == category and b.kind != kind) return true;
+    };
+    false;
+  };
+
+  func checkDraft(args : T.BudgetDraftArgs) : ?T.GggError {
+    if (otherKindHeld(args.fund, args.period, args.category, args.kind)) {
+      return ?#InvalidArgument("category " # args.category # " of " # args.fund # " in " # args.period # " is of the other kind");
     };
     null;
   };
@@ -894,8 +900,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     }));
   };
 
-  /// Copies the previous period's adopted lines into `period` as extended, fund by fund, for the funds
-  /// with no extended, proposed or adopted line in it yet (model §5). Replies how many lines it copied.
+  /// Copies the lines that stood at the previous period's end (adopted, extended or closed with it) into
+  /// `period` as extended, fund by fund, for the funds with no extended, proposed or adopted line in it
+  /// yet, leaving out a category the new period holds as the other kind (model §5). Replies how many
+  /// lines it copied.
   public shared ({ caller }) func ggg_budget_extend(period : Text) : async Result<Nat> {
     switch (requireMember(caller, "org.manage_budget")) { case (?e) return #Err(e); case null {} };
     if (not periodOpened(period)) return #Err(#NotFound);
@@ -909,7 +917,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     var copied = 0;
     for (f in Iter.toArray(Map.values(funds)).vals()) {
       if (linesOf(f.id, period, [#Extended, #Proposed, #Adopted]).size() == 0) {
-        for ((_, b) in linesOf(f.id, earlier, [#Adopted]).vals()) {
+        label carry for ((_, b) in linesOf(f.id, earlier, [#Adopted, #Extended, #Closed]).vals()) {
+          if (otherKindHeld(f.id, period, b.category, b.kind)) continue carry;
           let n = nextBudget;
           nextBudget += 1;
           Map.add(budgets, Nat.compare, n, { b with id = "B-" # Nat.toText(n); period; status = #Extended; proposal = null });
@@ -923,13 +932,15 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   };
 
   /// An adopted budget is exhaustive for its fund: in the current period, a transfer from a fund with an
-  /// adopted budget names a category with an adopted line (model §5, D24).
+  /// adopted budget names a category with an adopted expense line; one with no category is the
+  /// category "transfer" (model §5, D24).
   func checkSpending(args : T.TransferCreateArgs) : ?T.GggError {
     let ?period = currentPeriod() else return null;
-    if (linesOf(args.fund, period, [#Adopted]).size() == 0) return null;
-    let named = switch (args.category) { case (?c) c; case null "" };
-    let budgeted = Array.any<(Nat, T.Budget)>(linesOf(args.fund, period, [#Adopted]), func((_, b)) { b.category == named });
-    if (budgeted) null else ?#Conflict("the adopted budget of " # args.fund # " for " # period # " has no line for that category");
+    let adopted = linesOf(args.fund, period, [#Adopted]);
+    if (adopted.size() == 0) return null;
+    let named = switch (args.category) { case (?c) c; case null "transfer" };
+    let budgeted = Array.any<(Nat, T.Budget)>(adopted, func((_, b)) { b.category == named and b.kind == #Expense });
+    if (budgeted) null else ?#Conflict("the adopted budget of " # args.fund # " for " # period # " has no expense line for " # named);
   };
 
   /// Governed by the fund's owner (I-FIN-2). This fixture moves no money: it checks the budget and
