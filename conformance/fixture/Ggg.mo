@@ -2271,8 +2271,9 @@ module {
         #Ok : PendingAction;
         #Err : GggError;
       };
-    /// The delegate that prepared an approved read runs it once, as the grantor, at this moment: the reply,
-    /// Candid-encoded with the method's own type. A second call is Conflict, a call after expires_at too.
+    /// The delegate that prepared an approved read runs it once, as the grantor, at this moment, while the
+    /// grant is active and covers the group: the reply, Candid-encoded with the method's own type. A second
+    /// call is Conflict; so is one after expires_at (expired) or after the grant was revoked (void).
     ggg_action_collect : shared Text -> async { #Ok : Blob; #Err : GggError };
     ggg_action_decline : shared ActionDeclineArgs -> async {
         #Ok : PendingAction;

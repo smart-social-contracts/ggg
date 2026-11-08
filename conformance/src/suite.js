@@ -911,15 +911,17 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     err(result, ['NotFound', 'Forbidden', 'InvalidArgument'], 'ggg_action_approve(unknown)');
   });
 
-  await check('GGG', 'W24', 'ggg_read_for refuses a read that asks each time', async () => {
+  await check('GGG', 'W24', 'ggg_read_for refuses a read that asks each time, even under a grant that covers it', async () => {
     needMember();
     // The one read that asks each time (delegation.json): it goes through ggg_call_for, as a pending action.
     const method = 'ggg_attribute_pending_list';
     const bound = idlFactory({ IDL })._fields.find(([name]) => name === method);
     if (!bound) throw new Skip(`${method} is not in this ggg.did`);
-    const stranger = Ed25519KeyIdentity.generate().getPrincipal();
-    const result = await mine.ggg_read_for({ method, arg: encodeArgs(method, bound[1].argTypes.map(blank)), on_behalf_of: stranger });
-    err(result, ['Forbidden'], `ggg_read_for(${method})`);
+    const grant = (await grantsHeld()).find((d) => covers(d, 'attribute.review', 'sign'));
+    if (!grant) throw new Skip('the member holds no active grant that covers the sign group');
+    const result = await mine.ggg_read_for({ method, arg: encodeArgs(method, bound[1].argTypes.map(blank)), on_behalf_of: grant.grantor });
+    err(result, ['Forbidden'], `ggg_read_for(${method}, on behalf of a grantor whose grant covers it)`);
+    return `refused for ${grant.grantor.toText()}`;
   });
 
   await check('GGG', 'W25', 'collecting a pending action that does not exist is refused', async () => {
@@ -927,14 +929,19 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     err(await mine.ggg_action_collect(UNKNOWN), ['NotFound', 'Forbidden'], 'ggg_action_collect(unknown)');
   });
 
-  await check('GGG', 'W23', 'a delegate never votes on a proposal it filed, whichever grantor it votes for', async () => {
-    needMember();
+  /** The active grants the member holds as a delegate. */
+  const grantsHeld = async () => {
     const grants = await walk((a) => mine.ggg_delegation_list({ ...a, role: { Delegate: null } }), (d) => d.id);
     refused(grants.err, 'ggg_delegation_list');
     if (grants.err) throw new Error(`ggg_delegation_list returned Err ${show(grants.err)}`);
-    // A grant covers an operation by its permission (a grant made before groups) or by its group.
-    const covers = (grant, permission, group) => grant.scope.some((s) => [permission, `group:${group}`, 'group:*'].includes(s));
-    const active = grants.items.filter((d) => tag(d.status) === 'Active');
+    return grants.items.filter((d) => tag(d.status) === 'Active');
+  };
+  /** A grant covers an operation by its permission (a grant made before groups) or by its group. */
+  const covers = (grant, permission, group) => grant.scope.some((s) => [permission, `group:${group}`, 'group:*'].includes(s));
+
+  await check('GGG', 'W23', 'a delegate never votes on a proposal it filed, whichever grantor it votes for', async () => {
+    needMember();
+    const active = await grantsHeld();
     const filer = active.find((d) => covers(d, 'proposal.create', 'propose'));
     const voter = filer && active.find((d) => covers(d, 'proposal.vote', 'vote') && d.grantor.toText() !== filer.grantor.toText());
     if (!voter) throw new Skip('the member holds no two active grants: one to propose, and one from another member to vote');

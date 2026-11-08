@@ -186,8 +186,8 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 - `Attribute.status`: `pending` → `verified` | `rejected`.
 - `Delegation.status`: `pending` → `active` → `revoked` | `expired`; `pending` → `declined`.
 - `PendingAction.status`: an update `pending` → `approving` → `done` | `failed`; a read `pending` →
-  `approved` → `done` (collected) | `expired`; either `pending` → `declined` | `withdrawn` | `expired` |
-  `void`.
+  `approved` → `done` (collected) | `expired` | `void`; either `pending` → `declined` | `withdrawn` |
+  `expired` | `void`.
 
 ### Operations
 
@@ -337,17 +337,22 @@ approval runs it:
    never retried.
    **A read is approved, then collected.** Approving a `confirm` read stores nothing: it authorises
    exactly one run, and the action is `approved`. The delegate that prepared it calls `action_collect`
-   once, before `expires_at`: the GOS runs the stored read as the grantor at that moment, returns the
-   reply, Candid-encoded with the method's own type, and marks the action `done`. A second call is
-   `Conflict`, a call after `expires_at` is `Conflict` and the action reads `expired`, and a call by
-   anyone else is `Forbidden`. `result` stays empty, `action_get` and `action_list` never carry the
-   data, and what was decided between approval and collection is no longer returned (I-PRV-1).
+   once, before `expires_at`, while the grant is still active and covers the group: the GOS runs the
+   stored read as the grantor at that moment, with every check the grantor's own call would meet then,
+   returns the reply, Candid-encoded with the method's own type, and marks the action `done`. A second
+   call is `Conflict`; so is a call after `expires_at`, and the action reads `expired`, or after the
+   grant was revoked or replaced, and the action reads `void`: nothing is collected once the grantor
+   has revoked. A call by anyone else is `Forbidden`. `result` stays empty, `action_get` and
+   `action_list` never carry the data, and what was decided between approval and collection is no
+   longer returned (I-PRV-1).
 4. **Ending otherwise.** `expired` once `expires_at` passes; `void` once its grant is revoked,
-   replaced, expires or loses the group. Unlike a proposal filed under a grant (I-ID-10), a pending
-   action does not outlive its grant.
+   replaced, expires or loses the group, for an `approved` read as for a `pending` action. Unlike a
+   proposal filed under a grant (I-ID-10), a pending action does not outlive its grant.
 5. **The audit.** The filing writes an `Event` with the operation's name, `user` the grantor, `by` the
    delegate, `grant`, and the result `{pending: id}`. The approval writes an `Event` with `user` and
-   `by` both the grantor, origin `confirmed`, `prepared_by` the delegate and `grant`.
+   `by` both the grantor, origin `confirmed`, `prepared_by` the delegate and `grant`. A collection
+   writes an `Event` with `op` the read's name, `user` the grantor, `by` and `prepared_by` the delegate,
+   `grant`, and the result `{collected: id}`, never the reply (I-ALL-4).
 
 `action_get` returns an action to its grantor or its delegate, and `Ok(null)` to anyone else;
 `action_list` pages the caller's actions as grantor or as delegate, optionally by status. `read_for`
@@ -393,7 +398,7 @@ are the grantor's, for the method they carry. A call in its confirm form through
   [pending actions](#pending-actions).
 - I-ID-11: A pending action runs at most once, only on its grantor's own approval that sends its hash,
   within 24 hours of filing, and only while the grant it was filed under is active and still covers
-  its group; its call never changes after filing. Neither a delegate, nor another member, nor
+  its group, at approval and, for a read, at collection; its call never changes after filing. Neither a delegate, nor another member, nor
   `call_for`, a codex, a task, a replayed proposal or any caller an implementation adds can approve or
   decline it.
 - I-ID-12: A setup grant ends at launch: `setup_launch` removes the `setup` group from every grant,
