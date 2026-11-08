@@ -366,10 +366,6 @@
           "min": 0,
           "max": "9223372036854775807",
           "optional": true
-        },
-        "on_behalf_of": {
-          "type": "principal",
-          "optional": true
         }
       }
     },
@@ -2492,10 +2488,6 @@
         "organization": {
           "type": "text",
           "optional": true
-        },
-        "on_behalf_of": {
-          "type": "principal",
-          "optional": true
         }
       }
     },
@@ -2507,10 +2499,6 @@
         },
         "organization": {
           "type": "text",
-          "optional": true
-        },
-        "on_behalf_of": {
-          "type": "principal",
           "optional": true
         }
       }
@@ -4437,10 +4425,6 @@
       "facts": {
         "quarter": {
           "type": "text"
-        },
-        "on_behalf_of": {
-          "type": "principal",
-          "optional": true
         }
       }
     },

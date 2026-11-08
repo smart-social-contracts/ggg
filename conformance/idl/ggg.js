@@ -884,7 +884,6 @@ export const idlFactory = ({ IDL }) => {
     'kind' : IDL.Text,
     'issuer' : IDL.Opt(IDL.Text),
     'category' : IDL.Opt(IDL.Text),
-    'on_behalf_of' : IDL.Opt(IDL.Principal),
     'expires_at' : IDL.Opt(Timestamp),
   });
   const InviteCreateArgs = IDL.Record({
@@ -1358,7 +1357,6 @@ export const idlFactory = ({ IDL }) => {
     'network' : IDL.Text,
     'label' : IDL.Opt(IDL.Text),
     'address' : IDL.Text,
-    'on_behalf_of' : IDL.Opt(IDL.Principal),
     'organization' : IDL.Opt(IDL.Text),
     'symbol' : IDL.Opt(IDL.Text),
   });
@@ -1373,7 +1371,6 @@ export const idlFactory = ({ IDL }) => {
   });
   const PaymentAccountRemoveArgs = IDL.Record({
     'account' : IDL.Text,
-    'on_behalf_of' : IDL.Opt(IDL.Principal),
     'organization' : IDL.Opt(IDL.Text),
   });
   const PayrollRunArgs = IDL.Record({
@@ -1838,10 +1835,7 @@ export const idlFactory = ({ IDL }) => {
     'department' : IDL.Opt(IDL.Text),
     'profile' : IDL.Text,
   });
-  const ChangeQuarterArgs = IDL.Record({
-    'quarter' : IDL.Text,
-    'on_behalf_of' : IDL.Opt(IDL.Principal),
-  });
+  const ChangeQuarterArgs = IDL.Record({ 'quarter' : IDL.Text });
   const Forward = IDL.Record({
     'id' : IDL.Text,
     'destination' : IDL.Text,

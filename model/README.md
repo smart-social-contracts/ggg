@@ -181,7 +181,7 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `user_edit` | `user.edit` | | Dana fixes a typo in Bob's nickname, and moves him to the district he lives in |
 | `user_set_status` | `user.update_status` | governed | `{user: "mallory", status: "suspended"}` → proposal `P-9` under Civil Registry's policy |
 | `user_remove` | `user.delete` | governed | Remove Bob's duplicate test account |
-| `identity_submit` | `identity.submit` | delegable | Alice submits her passport proof |
+| `identity_submit` | `identity.submit` | | Alice submits her passport proof |
 | `identity_review` | `identity.review` | signing | Dana approves Alice's passport proof |
 | `attribute_submit` | `attribute.submit` | delegable | Alice submits her large-family title |
 | `attribute_review` | `attribute.review` | signing | Dana verifies it |
@@ -214,6 +214,10 @@ argument (it must hold that permission through its positions or grants); otherwi
 - I-ID-8: Every delegated act records both the grantor and the delegate.
 - I-ID-9: An identity or attribute authorizes nothing once `rejected`, or past its `expires_at`. What a
   verified one means is legislation's to say, never GGG's.
+- I-ID-10: A proposal filed by a delegate records the grant it was filed under. When it replays, its action is
+  allowed only if that grant is still active and could call the action directly, and a delegate does not vote on a
+  proposal it filed. Power of attorney itself, payout accounts, identity proofs and moving to another quarter are
+  never delegable.
 
 ## 3. Departments and organizations
 
@@ -469,7 +473,7 @@ There is no balance entity: the ledgers are the source of truth.
 | `tax_policy_draft`, `tax_policy_propose` | `tax.manage` | governed | `TAX-POLICY-4` drafted with `property_tax` at 0.5 %, then proposed → realm-wide vote; legislation checks each entry at the draft and again at the proposal |
 | `tax_assess` | `tax.assess` | | Annual run: 1,180 property-tax invoices |
 | `tax_declare` | `tax.declare` | delegable | `{organization: "clinic-b", period: "2026-Q3", base: "revenue", amount: 182000}` → `INV-412` |
-| `payment_account_add`, `payment_account_remove` | `self.data_manage` | delegable | Bob adds his ckBTC address |
+| `payment_account_add`, `payment_account_remove` | `self.data_manage` | | Bob adds his ckBTC address |
 | `token_force_transfer`, `token_freeze` | `token.force_transfer`, `token.freeze` | signing, governed | Court-ordered restitution: 500 REALM from Mallory to Alice; freeze Mallory's account meanwhile |
 
 A tax policy's `taxes` are typed entries, so legislation can check them one by one: a rule on
@@ -743,7 +747,7 @@ whole federation.
 | `quarter_secede` | `quarter.secede` | governed | South leaves the federation after its own vote |
 | `quarter_join_federation` | `quarter.join_federation` | governed | The independent realm Harbor joins Agora as a quarter |
 | `quarter_directory`, `join_targets` | — (public) | read | Quarters and their populations; the least-populated active quarter a new member joins |
-| `self_change_quarter` | `self.change_quarter` | delegable | Bob moves to South |
+| `self_change_quarter` | `self.change_quarter` | | Bob moves to South |
 | `quarter_sync`, `quarter_report` (quarter → capital) | `quarter.sync` | | North reports population 1,240 and codex 1.4.2 to the capital |
 | `federal_vote_propose` | `federal_vote.propose` | delegable | Propose `FV-3` |
 | `federal_vote_cancel` | `federal_vote.manage` | governed | Withdraw `FV-3` before its deadline |
