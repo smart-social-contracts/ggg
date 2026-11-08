@@ -20,19 +20,29 @@
 /// realm's over the votes cast unless the proposer states a stricter one, which the fixture stores and
 /// applies (I-GOV-3); the departments have no seats, so their proposals keep that rule too, while a GOS
 /// with seats sets a department proposal's threshold to the policy's m/n over the eligible seats.
+/// Links between realms (I-NEST-1 to 3): members vote to take legislation from a sync source and to
+/// accept a follower, which the root's direct policy applies at once; the fixture tells the other
+/// side's capital with link_notify, refuses notices and reports from anyone else, and reads the
+/// candidate source's realm_info, and its sources' below it, to refuse a cycle. The chapters a realm
+/// holds, by checksum, are fixed at install time too (the fixture runs no install job), so it can
+/// publish releases that name them and serve them with legislation_chapter. codex_install with a
+/// Release found in an active sync source's record adds that release to this realm's record as a
+/// relayed layer, and installs nothing else.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
+import List "mo:core/List";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
+import Set "mo:core/Set";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
 import T "Ggg";
 
-persistent actor class GggFixture(initMembers : [Principal]) {
+persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Text, Blob)]) = this {
 
   type Result<A> = { #Ok : A; #Err : T.GggError };
   type Page<A> = { items : [A]; next : ?Text };
@@ -115,6 +125,27 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let events = Map.empty<Nat, T.Event>();
   var nextProposal = 1;
 
+  // Links between realms (I-NEST-1 to 3). A side's record exists once that side has voted; `theirs`
+  // is learnt from the other side's notice.
+  type Link = { mine : Bool; theirs : Bool; ended : ?{ by : Principal; at : T.Timestamp } };
+  type Source = { source : T.SyncSourceRef; name : Text; link : Link };
+  type FollowerEntry = {
+    capital : Principal;
+    link : Link;
+    layers : [T.ReportedLayer];
+    compliance : T.Compliance;
+    population : Nat;
+    reported_at : ?T.Timestamp;
+  };
+  let sources = Map.empty<Text, Source>();
+  let followers = Map.empty<Principal, FollowerEntry>();
+  // The chapters this realm holds, by checksum, and its published record: the releases it relays, as
+  // it installed them, then its own (model §11).
+  let chapters = Map.empty<Text, Blob>();
+  for ((checksum, bytes) in initChapters.vals()) Map.add(chapters, Text.compare, checksum, bytes);
+  var relayed : [T.Release] = [];
+  var published : [T.Release] = [];
+
   func pageSize(limit : ?Nat32) : Nat {
     switch (limit) {
       case null DEFAULT_LIMIT;
@@ -178,6 +209,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       case "ggg_proposal_withdraw" { let a : ?T.ProposalWithdrawArgs = from_candid (arg); a != null };
       case "ggg_proposal_stop" { let a : ?Text = from_candid (arg); a != null };
       case "ggg_department_edit" { let a : ?T.DepartmentEditArgs = from_candid (arg); a != null };
+      case "ggg_codex_install" { let a : ?T.CodexSource = from_candid (arg); a != null };
       case "ggg_profile_update" { let a : ?T.ProfileUpdateArgs = from_candid (arg); a != null };
       case _ return ?#InvalidArgument(method # " is not an update method of this canister");
     };
@@ -801,35 +833,36 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     #Ok(stopped);
   };
 
-  /// Applies an accepted action as the realm, within the proposal's scope as the departments stand now
-  /// (I-GOV-13), or returns null for a motion, which has nothing to execute. This fixture replays
-  /// ggg_proposal_stop and ggg_department_edit only.
-  func replay(caller : Principal, p : T.Proposal) : ?(T.ProposalStatus, ?T.ProposalResult) {
-    func failed(e : T.GggError) : ?(T.ProposalStatus, ?T.ProposalResult) = ?(#Failed, ?#Error(debug_show (e)));
-    switch (p.action) {
-      case (#Motion) null;
-      case (#Code _) ?(#Failed, ?#Error("this fixture installs no codex"));
-      case (#Call { method; arg }) {
-        switch (checkScope(p.department, method, arg)) { case (?e) return failed(e); case null {} };
-        let error : ?T.GggError = switch (method) {
-          case "ggg_proposal_stop" {
-            let ?id : ?Text = from_candid (arg) else return ?(#Failed, ?#Error("arg does not decode"));
-            switch (stopProposal(caller, id)) { case (#Err(e)) ?e; case (#Ok(_)) null };
-          };
-          case "ggg_department_edit" {
-            let ?edit : ?T.DepartmentEditArgs = from_candid (arg) else return ?(#Failed, ?#Error("arg does not decode"));
-            switch (editDepartment(caller, edit)) { case (#Err(e)) ?e; case (#Ok(_)) null };
-          };
-          case _ return ?(#Failed, ?#Error(method # " is not replayed by this fixture"));
-        };
-        switch (error) {
-          case (?e) failed(e);
-          case null {
-            // What either call replies when it applies at once: Done, with no id.
-            let reply : Result<T.Governed> = #Ok(#Done(null));
-            ?(#Executed, ?#Reply(to_candid (reply)));
-          };
-        };
+  type Ran = (T.ProposalStatus, ?T.ProposalResult);
+
+  /// Applies an accepted call as the realm, within the proposal's scope (`scope`) as the departments
+  /// stand now (I-GOV-13). This fixture replays ggg_proposal_stop, ggg_department_edit and
+  /// ggg_codex_install, which may await another realm.
+  func replay(caller : Principal, scope : ?Text, method : Text, arg : Blob) : async* Ran {
+    func failed(e : T.GggError) : Ran = (#Failed, ?#Error(debug_show (e)));
+    switch (checkScope(scope, method, arg)) { case (?e) return failed(e); case null {} };
+    let error : ?T.GggError = switch (method) {
+      case "ggg_proposal_stop" {
+        let ?id : ?Text = from_candid (arg) else return (#Failed, ?#Error("arg does not decode"));
+        switch (stopProposal(caller, id)) { case (#Err(e)) ?e; case (#Ok(_)) null };
+      };
+      case "ggg_department_edit" {
+        let ?edit : ?T.DepartmentEditArgs = from_candid (arg) else return (#Failed, ?#Error("arg does not decode"));
+        switch (editDepartment(caller, edit)) { case (#Err(e)) ?e; case (#Ok(_)) null };
+      };
+      case "ggg_codex_install" {
+        let ?source : ?T.CodexSource = from_candid (arg) else return (#Failed, ?#Error("arg does not decode"));
+        let (#Release({ source = id; version })) = source else return (#Failed, ?#Error(NOT_A_RELEASE));
+        switch (await* installRelease(id, version)) { case (#Err(e)) ?e; case (#Ok(_)) null };
+      };
+      case _ return (#Failed, ?#Error(method # " is not replayed by this fixture"));
+    };
+    switch (error) {
+      case (?e) failed(e);
+      case null {
+        // What each call replies when it applies at once: Done, with no id.
+        let reply : Result<T.Governed> = #Ok(#Done(null));
+        (#Executed, ?#Reply(to_candid (reply)));
       };
     };
   };
@@ -844,7 +877,16 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       case (?e) { if (e > now()) return #Err(#Conflict("this proposal takes effect at " # Nat64.toText(e))) };
       case null {};
     };
-    let ?(status, result) = replay(caller, p) else return #Err(#Conflict("a motion has nothing to execute"));
+    let (status, result) = switch (p.action) {
+      case (#Motion) return #Err(#Conflict("a motion has nothing to execute"));
+      case (#Code _) (#Failed, ?#Error("this fixture installs no codex"));
+      case (#Call { method; arg }) {
+        // Claimed before the call runs, which may await another realm: a second execute meanwhile is a
+        // Conflict, so the action runs once (I-GOV-1).
+        Map.add(proposals, Nat.compare, n, { p with status = #Executed; result = null });
+        await* replay(caller, p.department, method, arg);
+      };
+    };
     let executed = { p with status; result };
     Map.add(proposals, Nat.compare, n, executed);
     audit("proposal_execute", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (status)));
@@ -1012,6 +1054,308 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     #Ok({ default = null; targets = []; mode = null });
   };
 
+  // ---- Links between realms (I-NEST-1 to 3)
+
+  func linkStatus(link : Link) : T.LinkStatus {
+    switch (link.ended) {
+      case (?e) #Ended(e);
+      case null { if (link.mine and link.theirs) #Active else #Requested };
+    };
+  };
+
+  func open(link : Link) : Bool = link.ended == null;
+
+  func sourceKey(ref : T.SyncSourceRef) : Text {
+    switch (ref) { case (#Realm(p)) Principal.toText(p); case (#Record { url }) url };
+  };
+
+  func sourceView(s : Source) : T.SyncSource = { source = s.source; name = s.name; status = linkStatus(s.link) };
+
+  func followerView(f : FollowerEntry) : T.Follower = {
+    id = Principal.toText(f.capital);
+    capital = f.capital;
+    status = linkStatus(f.link);
+    layers = f.layers;
+    compliance = f.compliance;
+    population = f.population;
+    reported_at = f.reported_at;
+  };
+
+  func statusValue(status : T.LinkStatus) : T.Value {
+    switch (status) {
+      case (#Requested) #Text("Requested");
+      case (#Active) #Text("Active");
+      case (#Ended { by; at }) #Map([("Ended", #Map([("by", #Text(Principal.toText(by))), ("at", #Nat(Nat64.toNat(at)))]))]);
+    };
+  };
+
+  func sideText(side : T.LinkSide) : Text = switch (side) { case (#SyncSource) "SyncSource"; case (#Follower) "Follower" };
+
+  func me() : Principal = Principal.fromActor(this);
+
+  /// What this realm calls on another realm's capital.
+  type Peer = actor {
+    ggg_link_notify : shared T.LinkNotifyArgs -> async Result<T.LinkStatus>;
+    ggg_realm_info : shared query () -> async T.Realm;
+    ggg_legislation_releases : shared query T.ListArgs -> async Result<T.ReleasePage>;
+  };
+  func peer(capital : Principal) : Peer = actor (Principal.toText(capital));
+
+  /// Tells the capital at the other side what this side's vote made of the link. A refusal is theirs to
+  /// give (they may not have voted yet, I-NEST-3) and changes nothing here.
+  func notify(capital : Principal, side : T.LinkSide, status : T.LinkStatus) : async () {
+    try { ignore await peer(capital).ggg_link_notify({ side; status }) } catch (_) {};
+  };
+
+  /// Whether `realm` takes legislation from `target`, directly or through other realms, over links not
+  /// ended, as their realm_info says now (I-NEST-2). A realm that cannot be read counts as having none.
+  func takesLegislationFrom(realm : Principal, target : Principal) : async* Bool {
+    let todo = List.singleton<Principal>(realm);
+    let seen = Set.empty<Principal>();
+    while (not List.isEmpty(todo)) {
+      let ?p = List.removeLast(todo) else return false;
+      if (p == target) return true;
+      if (not Set.contains(seen, Principal.compare, p)) {
+        Set.add(seen, Principal.compare, p);
+        let info = try { ?(await peer(p).ggg_realm_info()) } catch (_) { null };
+        switch (info) {
+          case (?realm) {
+            for (s in realm.sync_sources.vals()) {
+              switch (s.source, s.status) {
+                case (#Realm _, #Ended _) {};
+                case (#Realm(q), _) List.add(todo, q);
+                case _ {};
+              };
+            };
+          };
+          case null {};
+        };
+      };
+    };
+    false;
+  };
+
+  /// Governed by the root, whose direct policy applies it at once. A realm is refused as a source when
+  /// it takes legislation from this one, at any remove (I-NEST-2). A stand-in record's link is active
+  /// on this vote alone, and a second add of the same URL pins a new checksum (I-NEST-1).
+  public shared ({ caller }) func ggg_sync_source_add(args : T.SyncSourceAddArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "sync_source.manage")) { case (?e) return #Err(e); case null {} };
+    if (Text.size(args.name) == 0) return #Err(#InvalidArgument("name is empty"));
+    let key = sourceKey(args.source);
+    let link = switch (args.source) {
+      case (#Record _) ({ mine = true; theirs = true; ended = null });
+      case (#Realm(capital)) {
+        if (capital == me()) return #Err(#Conflict("a realm does not take legislation from itself"));
+        switch (Map.get(sources, Text.compare, key)) {
+          case (?s) { if (open(s.link)) return #Err(#Conflict("already a sync source")) };
+          case null {};
+        };
+        if (await* takesLegislationFrom(capital, me())) return #Err(#Conflict("that realm takes legislation from this one: a cycle"));
+        ({ mine = true; theirs = false; ended = null });
+      };
+    };
+    Map.add(sources, Text.compare, key, { source = args.source; name = args.name; link });
+    audit("sync_source_add", caller, #Map([("source", #Text(key))]), statusValue(linkStatus(link)));
+    switch (args.source) { case (#Realm(capital)) await notify(capital, #Follower, linkStatus(link)); case _ {} };
+    #Ok(#Done(null));
+  };
+
+  public shared ({ caller }) func ggg_sync_source_remove(args : T.SyncSourceRemoveArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "sync_source.manage")) { case (?e) return #Err(e); case null {} };
+    let key = sourceKey(args.source);
+    let ?s = Map.get(sources, Text.compare, key) else return #Err(#NotFound);
+    if (not open(s.link)) return #Err(#Conflict("this link has ended"));
+    let ended = { by = me(); at = now() };
+    Map.add(sources, Text.compare, key, { s with link = { s.link with ended = ?ended } });
+    audit("sync_source_remove", caller, #Map([("source", #Text(key))]), statusValue(#Ended(ended)));
+    switch (s.source) { case (#Realm(capital)) await notify(capital, #Follower, #Ended(ended)); case _ {} };
+    #Ok(#Done(null));
+  };
+
+  /// Governed by the root, whose direct policy applies it at once.
+  public shared ({ caller }) func ggg_follower_accept(args : T.FollowerArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "follower.manage")) { case (?e) return #Err(e); case null {} };
+    if (args.follower == me()) return #Err(#Conflict("a realm is not its own follower"));
+    switch (Map.get(followers, Principal.compare, args.follower)) {
+      case (?f) { if (open(f.link)) return #Err(#Conflict("already a follower")) };
+      case null {};
+    };
+    let link = { mine = true; theirs = false; ended = null };
+    let entry = { capital = args.follower; link; layers = []; compliance = #Unknown; population = 0; reported_at = null };
+    Map.add(followers, Principal.compare, args.follower, entry);
+    audit("follower_accept", caller, #Map([("follower", #Text(Principal.toText(args.follower)))]), statusValue(linkStatus(link)));
+    await notify(args.follower, #SyncSource, linkStatus(link));
+    #Ok(#Done(null));
+  };
+
+  public shared ({ caller }) func ggg_follower_remove(args : T.FollowerArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "follower.manage")) { case (?e) return #Err(e); case null {} };
+    let ?f = Map.get(followers, Principal.compare, args.follower) else return #Err(#NotFound);
+    if (not open(f.link)) return #Err(#Conflict("this link has ended"));
+    let ended = { by = me(); at = now() };
+    Map.add(followers, Principal.compare, args.follower, { f with link = { f.link with ended = ?ended } });
+    audit("follower_remove", caller, #Map([("follower", #Text(Principal.toText(args.follower)))]), statusValue(#Ended(ended)));
+    await notify(args.follower, #SyncSource, #Ended(ended));
+    #Ok(#Done(null));
+  };
+
+  /// The link after the other side's notice: their vote is in, or they ended it. A notice about a link
+  /// that has ended is a Conflict, unless it says the same.
+  func received(link : Link, status : T.LinkStatus) : Result<Link> {
+    switch (link.ended, status) {
+      case (?_, #Ended _) #Ok(link);
+      case (?_, _) #Err(#Conflict("this link has ended"));
+      case (null, #Ended(e)) #Ok({ link with ended = ?e });
+      case (null, _) #Ok({ link with theirs = true });
+    };
+  };
+
+  /// Accepted from the capital at the other side of a link this realm has voted on (I-NEST-3). A notice
+  /// that completes the link is answered with one saying so.
+  public shared ({ caller }) func ggg_link_notify(args : T.LinkNotifyArgs) : async Result<T.LinkStatus> {
+    if (Principal.isAnonymous(caller)) return #Err(#Unauthenticated);
+    let noLink : T.GggError = #Forbidden({ permission = ?"link.sync"; message = "Only the capital at the other side of a link this realm has voted on may call this." });
+    let link = switch (args.side) {
+      case (#SyncSource) {
+        let key = Principal.toText(caller);
+        let ?s = Map.get(sources, Text.compare, key) else return #Err(noLink);
+        let link = switch (received(s.link, args.status)) { case (#Err(e)) return #Err(e); case (#Ok(l)) l };
+        Map.add(sources, Text.compare, key, { s with link });
+        link;
+      };
+      case (#Follower) {
+        let ?f = Map.get(followers, Principal.compare, caller) else return #Err(noLink);
+        let link = switch (received(f.link, args.status)) { case (#Err(e)) return #Err(e); case (#Ok(l)) l };
+        Map.add(followers, Principal.compare, caller, { f with link });
+        link;
+      };
+    };
+    let status = linkStatus(link);
+    audit("link_notify", caller, #Map([("side", #Text(sideText(args.side))), ("status", statusValue(args.status))]), statusValue(status));
+    // The other side voted without knowing this one had: tell it the link is active.
+    if (args.status == #Requested and status == #Active) {
+      let side = switch (args.side) { case (#SyncSource) #Follower; case (#Follower) #SyncSource };
+      await notify(caller, side, #Active);
+    };
+    #Ok(status);
+  };
+
+  /// From a follower's capital, over an active link (I-NEST-3).
+  public shared ({ caller }) func ggg_follower_report(args : T.FollowerReportArgs) : async Result<T.Follower> {
+    if (Principal.isAnonymous(caller)) return #Err(#Unauthenticated);
+    let ?f = Map.get(followers, Principal.compare, caller) else {
+      return #Err(#Forbidden({ permission = ?"link.sync"; message = "Only the capital of a follower this realm has accepted reports." }));
+    };
+    if (linkStatus(f.link) != #Active) return #Err(#Conflict("the link is not active"));
+    let reported = { f with layers = args.layers; compliance = args.compliance; population = args.population; reported_at = ?now() };
+    Map.add(followers, Principal.compare, caller, reported);
+    audit("follower_report", caller, #Map([("population", #Nat(args.population))]), #Text("ok"));
+    #Ok(followerView(reported));
+  };
+
+  public query func ggg_follower_list(args : T.ListArgs) : async Result<T.FollowerPage> {
+    page(Iter.map<FollowerEntry, T.Follower>(Map.values(followers), followerView), args.cursor, args.limit);
+  };
+
+  // ---- Releases: the published record (model §11)
+
+  /// Whether this realm holds the bytes of `checksum`, or installed a release that names it.
+  func stored(checksum : Text) : Bool {
+    if (Map.containsKey(chapters, Text.compare, checksum)) return true;
+    for (r in relayed.vals()) {
+      if (r.calendar == ?checksum) return true;
+      for (c in r.chapters.vals()) { if (c.checksum == checksum) return true };
+    };
+    false;
+  };
+
+  /// Governed by the root, whose direct policy applies it at once. Every checksum named is stored here
+  /// (InvalidArgument), the source id is the realm's own, the one of its first release
+  /// (InvalidArgument), and a version is published once (Conflict); a release is never edited.
+  public shared ({ caller }) func ggg_legislation_release_publish(args : T.ReleasePublishArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "legislation.publish")) { case (?e) return #Err(e); case null {} };
+    if (Text.size(args.source) == 0 or Text.size(args.version) == 0) return #Err(#InvalidArgument("source and version are not empty"));
+    if (published.size() > 0 and published[0].source != args.source) {
+      return #Err(#InvalidArgument("this realm publishes as " # published[0].source));
+    };
+    for (r in published.vals()) { if (r.version == args.version) return #Err(#Conflict("version " # args.version # " is published already")) };
+    for (c in args.chapters.vals()) {
+      if (not stored(c.checksum)) return #Err(#InvalidArgument("chapter " # c.domain # " names a checksum this realm does not hold: " # c.checksum));
+    };
+    switch (args.calendar) {
+      case (?c) { if (not stored(c)) return #Err(#InvalidArgument("the calendar names a checksum this realm does not hold: " # c)) };
+      case null {};
+    };
+    let release : T.Release = {
+      source = args.source;
+      version = args.version;
+      published = now();
+      effective_from = args.effective_from;
+      commit = args.commit;
+      chapters = args.chapters;
+      calendar = args.calendar;
+      notes = args.notes;
+    };
+    published := Array.concat(published, [release]);
+    audit("legislation_release_publish", caller, #Map([("source", #Text(args.source)), ("version", #Text(args.version))]), #Text("ok"));
+    #Ok(#Done(null));
+  };
+
+  /// The record: the releases this realm relays, as it installed them, then its own.
+  public query func ggg_legislation_releases(args : T.ListArgs) : async Result<T.ReleasePage> {
+    page(Iter.concat<T.Release>(relayed.vals(), published.vals()), args.cursor, args.limit);
+  };
+
+  public query func ggg_legislation_chapter(checksum : Text) : async Result<?Blob> {
+    #Ok(Map.get(chapters, Text.compare, checksum));
+  };
+
+  /// A relayed release takes the place of an earlier release of its layer, or joins the record last.
+  func relay(release : T.Release) {
+    if (Array.any<T.Release>(relayed, func(r) { r.source == release.source })) {
+      relayed := Array.map<T.Release, T.Release>(relayed, func(r) { if (r.source == release.source) release else r });
+    } else {
+      relayed := Array.concat(relayed, [release]);
+    };
+  };
+
+  /// Installs a release found in an active sync source's record, the record that vouches for it: it
+  /// joins this realm's record as a relayed layer. Nothing else is installed here.
+  func installRelease(source : Text, version : Text) : async* Result<T.Release> {
+    for (s in Iter.toArray(Map.values(sources)).vals()) {
+      switch (s.source, linkStatus(s.link)) {
+        case (#Realm(capital), #Active) {
+          let reply = try { ?(await peer(capital).ggg_legislation_releases({ cursor = null; limit = ?100 })) } catch (_) { null };
+          switch (reply) {
+            case (?(#Ok({ items }))) {
+              for (r in items.vals()) {
+                if (r.source == source and r.version == version) { relay(r); return #Ok(r) };
+              };
+            };
+            case _ {};
+          };
+        };
+        case _ {};
+      };
+    };
+    #Err(#NotFound);
+  };
+
+  let NOT_A_RELEASE = "this fixture installs a codex only as a release of a sync source's layer";
+
+  /// Governed by the root, whose direct policy applies it at once (see installRelease).
+  public shared ({ caller }) func ggg_codex_install(source : T.CodexSource) : async Result<T.Governed> {
+    switch (requireMember(caller, "codex.install")) { case (?e) return #Err(e); case null {} };
+    let (#Release({ source = id; version })) = source else return #Err(#InvalidArgument(NOT_A_RELEASE));
+    switch (await* installRelease(id, version)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        audit("codex_install", caller, #Map([("source", #Text(id)), ("version", #Text(version))]), #Text("ok"));
+        #Ok(#Done(null));
+      };
+    };
+  };
+
   // §11
 
   public query func ggg_codex_status(args : T.ListArgs) : async Result<T.CodexView> {
@@ -1078,6 +1422,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       federation_realm_id = null;
       federation_codex = null;
       quarter_join_mode = null;
+      sync_sources = Iter.toArray(Iter.map<Source, T.SyncSource>(Map.values(sources), sourceView));
       trusted_principals = [];
       require_marketplace_approval = false;
       trusted_approvers = [];
@@ -1244,7 +1589,6 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_quarter_report(_ : T.QuarterReportArgs) : async Result<T.QuarterReport> { nobody(caller, "quarter.sync") };
 
   // §11
-  public shared ({ caller }) func ggg_codex_install(_ : T.CodexSource) : async Result<T.Governed> { nobody(caller, "codex.install") };
   public shared ({ caller }) func ggg_codex_uninstall() : async Result<T.Governed> { nobody(caller, "codex.install") };
   public shared ({ caller }) func ggg_codex_revert() : async Result<T.Governed> { nobody(caller, "codex.install") };
   public shared ({ caller }) func ggg_codex_activate(_ : T.CodexActivateArgs) : async Result<T.Governed> { nobody(caller, "codex.install") };

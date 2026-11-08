@@ -24,6 +24,7 @@ persistent actor {
       federation_realm_id = null;
       federation_codex = null;
       quarter_join_mode = null;
+      sync_sources = [];
       trusted_principals = [];
       require_marketplace_approval = false;
       trusted_approvers = [];

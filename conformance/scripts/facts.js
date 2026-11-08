@@ -67,6 +67,13 @@ const DERIVED = {
     revenue: { type: { name: 'Money' }, derived: "the sum of planned over the period's Revenue lines" },
     expense: { type: { name: 'Money' }, derived: "the sum of planned over the period's Expense lines" },
   },
+  // Operations between realms carry the other realm's compliance, as it last reported it (model §10).
+  transfer_create: {
+    follower_compliance: { type: { name: 'Compliance' }, derived: 'the compliance the follower whose capital `to` names last reported; Unknown for any other recipient' },
+  },
+  quarter_report: {
+    follower_compliance: { type: { name: 'Compliance' }, derived: "the reporting quarter's compliance" },
+  },
 };
 
 // Lists an operation's rules may range over although the operation's argument is only an id: the list
