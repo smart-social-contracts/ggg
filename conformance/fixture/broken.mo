@@ -35,6 +35,7 @@ persistent actor {
       installed_version = "0";
       network = "local";
       timezone = "CET"; // not an Area/Location name
+      languages = [];
       member_count = 0;
     };
   };

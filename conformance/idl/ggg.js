@@ -82,6 +82,44 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
     'position' : IDL.Text,
   });
+  const AttributeListArgs = IDL.Record({
+    'cursor' : IDL.Opt(IDL.Text),
+    'kind' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
+  });
+  const AttributeStatus = IDL.Variant({
+    'Rejected' : IDL.Null,
+    'Verified' : IDL.Null,
+    'Pending' : IDL.Null,
+  });
+  const Attribute = IDL.Record({
+    'id' : IDL.Text,
+    'ref' : IDL.Text,
+    'status' : AttributeStatus,
+    'human' : IDL.Text,
+    'value' : IDL.Text,
+    'kind' : IDL.Text,
+    'issuer' : IDL.Text,
+    'verified_at' : IDL.Opt(Timestamp),
+    'expires_at' : IDL.Opt(Timestamp),
+  });
+  const AttributePage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Attribute),
+  });
+  const AttributeReviewArgs = IDL.Record({
+    'status' : IDL.Variant({ 'Rejected' : IDL.Null, 'Verified' : IDL.Null }),
+    'attribute' : IDL.Text,
+  });
+  const AttributeSubmitArgs = IDL.Record({
+    'ref' : IDL.Text,
+    'value' : IDL.Text,
+    'kind' : IDL.Text,
+    'issuer' : IDL.Opt(IDL.Text),
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
+    'expires_at' : IDL.Opt(Timestamp),
+  });
   const AuthorityGrantArgs = IDL.Record({
     'target' : Ref,
     'operations' : IDL.Vec(IDL.Text),
@@ -135,6 +173,14 @@ export const idlFactory = ({ IDL }) => {
     'planned' : Money,
     'category' : IDL.Text,
   });
+  const BudgetExtendArgs = IDL.Record({
+    'period' : IDL.Text,
+    'from_period' : IDL.Text,
+  });
+  const BudgetProposeArgs = IDL.Record({
+    'period' : IDL.Text,
+    'years' : IDL.Opt(IDL.Nat),
+  });
   const CaseAssignArgs = IDL.Record({ 'case' : IDL.Text, 'judge' : IDL.Text });
   const CaseStatus = IDL.Variant({
     'VerdictIssued' : IDL.Null,
@@ -159,6 +205,10 @@ export const idlFactory = ({ IDL }) => {
     'evidence' : IDL.Vec(Sealed),
     'dispute' : IDL.Opt(IDL.Text),
     'plaintiff' : Ref,
+  });
+  const CodexActivateArgs = IDL.Record({
+    'at' : IDL.Opt(Timestamp),
+    'codex' : IDL.Text,
   });
   Value.fill(
     IDL.Variant({
@@ -187,6 +237,7 @@ export const idlFactory = ({ IDL }) => {
     'delegable' : IDL.Vec(IDL.Text),
   });
   const CodexView = IDL.Record({
+    'pending' : IDL.Opt(IDL.Text),
     'signing' : SigningPolicy,
     'next' : IDL.Opt(IDL.Text),
     'history' : IDL.Vec(IDL.Text),
@@ -199,8 +250,11 @@ export const idlFactory = ({ IDL }) => {
     'starts_at' : IDL.Opt(Timestamp),
     'value' : Money,
     'ends_at' : IDL.Opt(Timestamp),
+    'kind' : IDL.Opt(IDL.Text),
     'terms_hash' : IDL.Text,
     'terms_ref' : IDL.Text,
+    'procedure' : IDL.Opt(IDL.Text),
+    'tender' : IDL.Opt(IDL.Text),
     'parties' : IDL.Vec(Ref),
     'symbol' : IDL.Text,
   });
@@ -219,8 +273,11 @@ export const idlFactory = ({ IDL }) => {
     'starts_at' : IDL.Opt(Timestamp),
     'value' : Money,
     'ends_at' : IDL.Opt(Timestamp),
+    'kind' : IDL.Opt(IDL.Text),
     'terms_hash' : IDL.Text,
     'terms_ref' : IDL.Text,
+    'procedure' : IDL.Opt(IDL.Text),
+    'tender' : IDL.Opt(IDL.Text),
     'parties' : IDL.Vec(Ref),
     'symbol' : IDL.Text,
   });
@@ -388,6 +445,7 @@ export const idlFactory = ({ IDL }) => {
     'is_root' : IDL.Bool,
     'fund' : IDL.Opt(IDL.Text),
     'head' : IDL.Opt(IDL.Principal),
+    'kind' : IDL.Opt(IDL.Text),
     'description' : IDL.Text,
     'target_policy' : IDL.Opt(Policy),
     'parent' : IDL.Opt(IDL.Text),
@@ -402,6 +460,7 @@ export const idlFactory = ({ IDL }) => {
     'positions' : IDL.Nat,
   });
   const DepartmentCreateArgs = IDL.Record({
+    'kind' : IDL.Opt(IDL.Text),
     'description' : IDL.Text,
     'department' : IDL.Text,
     'parent' : IDL.Opt(IDL.Text),
@@ -410,6 +469,7 @@ export const idlFactory = ({ IDL }) => {
     'head' : IDL.Opt(
       IDL.Variant({ 'Set' : IDL.Principal, 'Clear' : IDL.Null })
     ),
+    'kind' : IDL.Opt(IDL.Text),
     'description' : IDL.Opt(IDL.Text),
     'department' : IDL.Text,
     'parent' : IDL.Opt(IDL.Text),
@@ -478,6 +538,46 @@ export const idlFactory = ({ IDL }) => {
     'department' : IDL.Text,
     'policy' : Policy,
   });
+  const DispatchConfirmArgs = IDL.Record({
+    'at' : IDL.Opt(Timestamp),
+    'dispatch' : IDL.Text,
+    'receipt' : IDL.Opt(IDL.Text),
+  });
+  const DispatchStatus = IDL.Variant({
+    'Queued' : IDL.Null,
+    'Failed' : IDL.Text,
+    'Confirmed' : IDL.Record({
+      'at' : Timestamp,
+      'receipt' : IDL.Opt(IDL.Text),
+    }),
+  });
+  const Dispatch = IDL.Record({
+    'id' : IDL.Text,
+    'to' : IDL.Text,
+    'status' : DispatchStatus,
+    'title' : IDL.Text,
+    'topic' : IDL.Text,
+    'body' : Value,
+    'codex' : IDL.Opt(IDL.Text),
+    'document' : IDL.Opt(IDL.Text),
+    'queued_at' : Timestamp,
+  });
+  const DispatchListArgs = IDL.Record({
+    'to' : IDL.Opt(IDL.Text),
+    'status' : IDL.Opt(
+      IDL.Variant({
+        'Queued' : IDL.Null,
+        'Failed' : IDL.Null,
+        'Confirmed' : IDL.Null,
+      })
+    ),
+    'cursor' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+  });
+  const DispatchPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Dispatch),
+  });
   const DisputeAcceptArgs = IDL.Record({
     'court' : IDL.Text,
     'dispute' : IDL.Text,
@@ -530,14 +630,25 @@ export const idlFactory = ({ IDL }) => {
     'deleted' : IDL.Bool,
     'revoked' : IDL.Nat,
   });
+  const Publication = IDL.Record({
+    'ref' : IDL.Opt(IDL.Text),
+    'dispatch' : IDL.Text,
+    'journal' : IDL.Text,
+    'published_at' : IDL.Opt(Timestamp),
+  });
   const Document = IDL.Record({
     'at' : Timestamp,
     'id' : IDL.Text,
     'ref' : IDL.Text,
     'title' : IDL.Text,
     'hash' : IDL.Text,
+    'kind' : IDL.Opt(IDL.Text),
+    'languages' : IDL.Vec(IDL.Text),
+    'public' : IDL.Bool,
     'author' : IDL.Principal,
+    'publications' : IDL.Vec(Publication),
     'department' : IDL.Text,
+    'facts' : Value,
   });
   const DocumentAccess = IDL.Record({
     'envelope' : IDL.Opt(KeyEnvelope),
@@ -546,28 +657,46 @@ export const idlFactory = ({ IDL }) => {
   });
   const DocumentListArgs = IDL.Record({
     'cursor' : IDL.Opt(IDL.Text),
+    'kind' : IDL.Opt(IDL.Text),
     'limit' : IDL.Opt(IDL.Nat32),
+    'language' : IDL.Opt(IDL.Text),
     'department' : IDL.Text,
   });
   const DocumentPage = IDL.Record({
     'next' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Document),
   });
+  const DocumentPublishArgs = IDL.Record({
+    'to' : IDL.Opt(IDL.Text),
+    'document' : IDL.Text,
+  });
   const DocumentRevokeArgs = IDL.Record({
     'document' : IDL.Text,
     'principals' : IDL.Vec(IDL.Principal),
   });
+  const ShareBasis = IDL.Record({
+    'special_category' : IDL.Bool,
+    'legislation' : IDL.Opt(IDL.Text),
+    'purpose' : IDL.Text,
+    'legal_basis' : IDL.Text,
+  });
   const DocumentShareArgs = IDL.Record({
     'keys' : IDL.Vec(WrappedKey),
+    'recipient' : Ref,
     'document' : IDL.Text,
+    'basis' : IDL.Opt(ShareBasis),
+    'facts' : IDL.Opt(Value),
   });
   const DocumentStoreArgs = IDL.Record({
     'ref' : IDL.Text,
     'title' : IDL.Text,
     'hash' : IDL.Text,
     'keys' : IDL.Vec(WrappedKey),
+    'kind' : IDL.Opt(IDL.Text),
+    'languages' : IDL.Vec(IDL.Text),
     'document' : IDL.Opt(IDL.Text),
     'department' : IDL.Text,
+    'facts' : IDL.Opt(Value),
   });
   const DocumentStored = IDL.Record({
     'scope' : IDL.Text,
@@ -627,6 +756,28 @@ export const idlFactory = ({ IDL }) => {
     'case' : IDL.Text,
     'hash' : IDL.Text,
     'on_behalf_of' : IDL.Opt(IDL.Principal),
+  });
+  const ExternalAddArgs = IDL.Record({
+    'kind' : IDL.Text,
+    'name' : IDL.Text,
+    'channel' : IDL.Text,
+    'external' : IDL.Text,
+  });
+  const External = IDL.Record({
+    'id' : IDL.Text,
+    'kind' : IDL.Text,
+    'name' : IDL.Text,
+    'channel' : IDL.Text,
+  });
+  const ExternalPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(External),
+  });
+  const ExternalReportArgs = IDL.Record({
+    'evidence_ref' : IDL.Opt(IDL.Text),
+    'topic' : IDL.Text,
+    'body' : Value,
+    'external' : IDL.Text,
   });
   const FederalVoteStatus = IDL.Variant({
     'Failed' : IDL.Null,
@@ -713,12 +864,16 @@ export const idlFactory = ({ IDL }) => {
     'kind' : IDL.Text,
     'issuer' : IDL.Text,
     'verified_at' : IDL.Opt(Timestamp),
+    'category' : IDL.Opt(IDL.Text),
+    'expires_at' : IDL.Opt(Timestamp),
   });
   const IdentitySubmitArgs = IDL.Record({
     'ref' : IDL.Text,
     'kind' : IDL.Text,
     'issuer' : IDL.Opt(IDL.Text),
+    'category' : IDL.Opt(IDL.Text),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
+    'expires_at' : IDL.Opt(Timestamp),
   });
   const InviteCreateArgs = IDL.Record({
     'max_uses' : IDL.Opt(IDL.Nat),
@@ -755,22 +910,34 @@ export const idlFactory = ({ IDL }) => {
     'Cancelled' : IDL.Null,
     'Pending' : IDL.Null,
   });
+  const SignedMoney = IDL.Int;
+  const InvoiceItem = IDL.Record({
+    'concept' : IDL.Text,
+    'unit' : IDL.Opt(IDL.Text),
+    'legislation' : IDL.Opt(IDL.Text),
+    'quantity' : IDL.Opt(IDL.Nat),
+    'amount' : SignedMoney,
+  });
   const Invoice = IDL.Record({
     'id' : IDL.Text,
     'status' : InvoiceStatus,
     'due_at' : IDL.Opt(Timestamp),
     'paid_at' : IDL.Opt(Timestamp),
     'payer' : Ref,
+    'items' : IDL.Vec(InvoiceItem),
     'amount' : Money,
     'payment' : IDL.Opt(Value),
     'symbol' : IDL.Text,
+    'facts' : Value,
     'reason' : IDL.Opt(Ref),
   });
   const InvoiceCreateArgs = IDL.Record({
     'due_at' : IDL.Opt(Timestamp),
     'payer' : Ref,
+    'items' : IDL.Vec(InvoiceItem),
     'amount' : Money,
     'symbol' : IDL.Opt(IDL.Text),
+    'facts' : IDL.Opt(Value),
     'reason' : IDL.Opt(Ref),
   });
   const Account = IDL.Record({
@@ -780,6 +947,10 @@ export const idlFactory = ({ IDL }) => {
   const InvoiceCreated = IDL.Record({
     'invoice' : Invoice,
     'pay_to' : Account,
+  });
+  const InvoiceItemAddArgs = IDL.Record({
+    'invoice' : IDL.Text,
+    'item' : InvoiceItem,
   });
   const InvoiceRefreshArgs = IDL.Record({
     'cursor' : IDL.Opt(IDL.Text),
@@ -800,6 +971,13 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
     'specialization' : IDL.Opt(IDL.Text),
   });
+  const LandAssessArgs = IDL.Record({
+    'value' : IDL.Opt(Money),
+    'area' : IDL.Opt(IDL.Nat),
+    'land' : IDL.Text,
+    'reference' : IDL.Opt(IDL.Text),
+    'legislation' : IDL.Opt(IDL.Text),
+  });
   const LandFreezeArgs = IDL.Record({
     'land' : IDL.Text,
     'reason' : IDL.Opt(IDL.Text),
@@ -818,7 +996,11 @@ export const idlFactory = ({ IDL }) => {
     'token_id' : IDL.Opt(IDL.Nat),
     'owner' : Ref,
     'metadata' : Value,
+    'area' : IDL.Opt(IDL.Nat),
     'kind' : IDL.Text,
+    'assessment_ref' : IDL.Opt(IDL.Text),
+    'assessed_value' : IDL.Opt(Money),
+    'assessed_at' : IDL.Opt(Timestamp),
     'width' : IDL.Nat,
     'registered_by' : IDL.Principal,
   });
@@ -846,6 +1028,7 @@ export const idlFactory = ({ IDL }) => {
     'land' : IDL.Opt(IDL.Text),
     'name' : IDL.Text,
     'user' : IDL.Opt(IDL.Principal),
+    'population' : IDL.Nat,
   });
   const LandMap = IDL.Record({
     'next' : IDL.Opt(IDL.Text),
@@ -934,6 +1117,7 @@ export const idlFactory = ({ IDL }) => {
     'issued_at' : IDL.Opt(Timestamp),
     'issued_by' : IDL.Text,
     'applied_at' : Timestamp,
+    'decision_due' : IDL.Opt(Timestamp),
     'kind' : IDL.Text,
     'conditions' : Value,
     'holder' : Ref,
@@ -975,6 +1159,49 @@ export const idlFactory = ({ IDL }) => {
     'valid' : IDL.Bool,
     'license' : IDL.Opt(License),
   });
+  const PeriodUnit = IDL.Variant({
+    'Day' : IDL.Null,
+    'Year' : IDL.Null,
+    'WorkingDay' : IDL.Null,
+    'Month' : IDL.Null,
+  });
+  const Period = IDL.Record({ 'count' : IDL.Nat, 'unit' : PeriodUnit });
+  const LoanCreateArgs = IDL.Record({
+    'fund' : IDL.Text,
+    'rate' : Ratio,
+    'term' : Period,
+    'lender' : IDL.Text,
+    'amount' : Money,
+    'symbol' : IDL.Opt(IDL.Text),
+    'facts' : IDL.Opt(Value),
+  });
+  const LoanStatus = IDL.Variant({ 'Repaid' : IDL.Null, 'Active' : IDL.Null });
+  const LoanListArgs = IDL.Record({
+    'status' : IDL.Opt(LoanStatus),
+    'cursor' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+  });
+  const Loan = IDL.Record({
+    'id' : IDL.Text,
+    'status' : LoanStatus,
+    'outstanding' : Money,
+    'fund' : IDL.Text,
+    'rate' : Ratio,
+    'term' : Period,
+    'lender' : IDL.Text,
+    'amount' : Money,
+    'symbol' : IDL.Text,
+    'facts' : Value,
+  });
+  const LoanPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Loan),
+  });
+  const LoanRepayArgs = IDL.Record({
+    'loan' : IDL.Text,
+    'amount' : Money,
+    'reason' : IDL.Opt(IDL.Text),
+  });
   const MandateExecutorArgs = IDL.Record({
     'mandate' : IDL.Text,
     'executor' : IDL.Text,
@@ -1006,6 +1233,8 @@ export const idlFactory = ({ IDL }) => {
     'private_data' : IDL.Opt(IDL.Vec(IDL.Nat8)),
     'nickname' : IDL.Opt(IDL.Text),
     'home_quarter' : IDL.Opt(IDL.Text),
+    'language' : IDL.Opt(IDL.Text),
+    'home_zone' : IDL.Opt(IDL.Text),
     'profiles' : IDL.Vec(IDL.Text),
     'avatar' : IDL.Opt(IDL.Text),
   });
@@ -1057,12 +1286,22 @@ export const idlFactory = ({ IDL }) => {
     'next' : IDL.Opt(IDL.Text),
     'read' : IDL.Nat,
   });
+  const Translation = IDL.Record({
+    'title' : IDL.Text,
+    'body' : IDL.Opt(IDL.Text),
+    'language' : IDL.Text,
+  });
   const NotificationSendArgs = IDL.Record({
     'title' : IDL.Text,
     'topic' : IDL.Opt(IDL.Text),
     'body' : IDL.Opt(IDL.Text),
     'href' : IDL.Opt(IDL.Text),
     'recipient' : Ref,
+    'translations' : IDL.Opt(IDL.Vec(Translation)),
+  });
+  const Delivery = IDL.Variant({
+    'Notification' : Notification,
+    'Dispatch' : Dispatch,
   });
   const OrganizationEditArgs = IDL.Record({
     'description' : IDL.Opt(IDL.Text),
@@ -1174,6 +1413,28 @@ export const idlFactory = ({ IDL }) => {
     'position' : IDL.Text,
     'profile' : IDL.Opt(IDL.Text),
   });
+  const ProcedureDefineArgs = IDL.Record({
+    'silence' : IDL.Opt(IDL.Text),
+    'kind' : IDL.Text,
+    'legislation' : IDL.Opt(IDL.Text),
+    'decision_deadline' : IDL.Opt(Period),
+    'matter' : IDL.Opt(IDL.Text),
+    'initiated_by' : IDL.Text,
+    'facts' : IDL.Opt(Value),
+  });
+  const Procedure = IDL.Record({
+    'id' : IDL.Text,
+    'silence' : IDL.Opt(IDL.Text),
+    'legislation' : IDL.Opt(IDL.Text),
+    'decision_deadline' : IDL.Opt(Period),
+    'matter' : IDL.Opt(IDL.Text),
+    'initiated_by' : IDL.Text,
+    'facts' : Value,
+  });
+  const ProcedurePage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Procedure),
+  });
   const ProfileCreateArgs = IDL.Record({
     'allowed_to' : IDL.Vec(IDL.Text),
     'description' : IDL.Text,
@@ -1188,8 +1449,13 @@ export const idlFactory = ({ IDL }) => {
   });
   const ProfileUpdateArgs = IDL.Record({
     'nickname' : IDL.Opt(IDL.Text),
+    'language' : IDL.Opt(IDL.Text),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'avatar' : IDL.Opt(IDL.Text),
+  });
+  const ThresholdBasis = IDL.Variant({
+    'Cast' : IDL.Null,
+    'Eligible' : IDL.Null,
   });
   const ProposalLinkKind = IDL.Variant({
     'RelatesTo' : IDL.Null,
@@ -1202,11 +1468,17 @@ export const idlFactory = ({ IDL }) => {
   const ProposalCreateArgs = IDL.Record({
     'title' : IDL.Text,
     'action' : ProposalAction,
+    'threshold' : IDL.Opt(Ratio),
     'effective_at' : IDL.Opt(Timestamp),
+    'kind' : IDL.Opt(IDL.Text),
     'description' : IDL.Text,
+    'threshold_of' : IDL.Opt(ThresholdBasis),
     'links' : IDL.Opt(IDL.Vec(ProposalLink)),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
+    'matter' : IDL.Opt(IDL.Text),
+    'casting_vote' : IDL.Opt(IDL.Principal),
     'department' : IDL.Opt(IDL.Text),
+    'quorum' : IDL.Opt(Ratio),
   });
   const ProposalStatus = IDL.Variant({
     'Failed' : IDL.Null,
@@ -1239,11 +1511,15 @@ export const idlFactory = ({ IDL }) => {
     'action' : ProposalAction,
     'threshold' : Ratio,
     'effective_at' : IDL.Opt(Timestamp),
+    'kind' : IDL.Opt(IDL.Text),
     'description' : IDL.Text,
     'deadline' : IDL.Opt(Timestamp),
+    'threshold_of' : ThresholdBasis,
     'links' : IDL.Vec(ProposalLink),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'proposer' : IDL.Principal,
+    'matter' : IDL.Opt(IDL.Text),
+    'casting_vote' : IDL.Opt(IDL.Principal),
     'department' : IDL.Opt(IDL.Text),
     'quorum' : Ratio,
   });
@@ -1360,6 +1636,7 @@ export const idlFactory = ({ IDL }) => {
     'timezone' : IDL.Opt(IDL.Text),
     'name' : IDL.Opt(IDL.Text),
     'manifesto' : IDL.Opt(IDL.Text),
+    'languages' : IDL.Opt(IDL.Vec(IDL.Text)),
     'quarter_join_mode' : IDL.Opt(IDL.Text),
     'open_registration' : IDL.Opt(IDL.Bool),
     'welcome_message' : IDL.Opt(IDL.Text),
@@ -1385,6 +1662,7 @@ export const idlFactory = ({ IDL }) => {
     'is_quarter' : IDL.Bool,
     'name' : IDL.Text,
     'manifesto' : IDL.Text,
+    'languages' : IDL.Vec(IDL.Text),
     'network' : IDL.Text,
     'federation_codex' : IDL.Opt(IDL.Text),
     'quarter_join_mode' : IDL.Opt(IDL.Text),
@@ -1408,6 +1686,7 @@ export const idlFactory = ({ IDL }) => {
   const JoinArgs = IDL.Record({
     'nickname' : IDL.Opt(IDL.Text),
     'code' : IDL.Opt(IDL.Text),
+    'language' : IDL.Opt(IDL.Text),
   });
   const UserEntry = IDL.Record({ 'member' : IDL.Opt(Member), 'user' : User });
   const Monitor = IDL.Record({
@@ -1429,6 +1708,7 @@ export const idlFactory = ({ IDL }) => {
   const ReportIssueArgs = IDL.Record({
     'period' : IDL.Text,
     'kind' : IDL.Opt(IDL.Text),
+    'adjustments' : IDL.Opt(Value),
   });
   const FinancialReport = IDL.Record({
     'id' : IDL.Text,
@@ -1458,6 +1738,53 @@ export const idlFactory = ({ IDL }) => {
     'organization' : IDL.Text,
     'position' : IDL.Text,
     'profile' : IDL.Opt(IDL.Text),
+  });
+  const RequestDecideArgs = IDL.Record({
+    'decision' : IDL.Text,
+    'request' : IDL.Text,
+    'reply' : IDL.Opt(IDL.Text),
+  });
+  const RequestStatus = IDL.Variant({
+    'Filed' : IDL.Null,
+    'Decided' : IDL.Null,
+  });
+  const Request = IDL.Record({
+    'by' : Ref,
+    'id' : IDL.Text,
+    'status' : RequestStatus,
+    'decision' : IDL.Opt(IDL.Text),
+    'body' : Value,
+    'kind' : IDL.Text,
+    'filed_at' : Timestamp,
+    'due_at' : IDL.Opt(Timestamp),
+    'reply' : IDL.Opt(IDL.Text),
+    'decided_at' : IDL.Opt(Timestamp),
+    'extension_limit' : IDL.Opt(Timestamp),
+  });
+  const RequestFileArgs = IDL.Record({
+    'body' : Value,
+    'kind' : IDL.Text,
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
+    'organization' : IDL.Opt(IDL.Text),
+  });
+  const RequestGetArgs = IDL.Record({
+    'id' : IDL.Text,
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
+  });
+  const RequestListArgs = IDL.Record({
+    'status' : IDL.Opt(RequestStatus),
+    'cursor' : IDL.Opt(IDL.Text),
+    'kind' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+  });
+  const RequestPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Request),
+  });
+  const RequestSetDueArgs = IDL.Record({
+    'request' : IDL.Text,
+    'due_at' : Timestamp,
+    'extension_limit' : IDL.Opt(Timestamp),
   });
   const ResolutionQueryArgs = IDL.Record({
     'cursor' : IDL.Opt(IDL.Text),
@@ -1512,6 +1839,42 @@ export const idlFactory = ({ IDL }) => {
     'Realm' : RealmConfigureArgs,
     'Branding' : BrandingArgs,
     'Tokens' : TokensArgs,
+  });
+  const TaskStatus = IDL.Variant({
+    'Run' : IDL.Null,
+    'Failed' : IDL.Null,
+    'Scheduled' : IDL.Null,
+    'Cancelled' : IDL.Null,
+  });
+  const Task = IDL.Record({
+    'at' : Timestamp,
+    'id' : IDL.Text,
+    'op' : IDL.Text,
+    'status' : TaskStatus,
+    'args' : Value,
+    'event' : IDL.Opt(IDL.Text),
+    'scheduled_by' : Ref,
+    'reason' : IDL.Opt(IDL.Text),
+  });
+  const TaskListArgs = IDL.Record({
+    'op' : IDL.Opt(IDL.Text),
+    'status' : IDL.Opt(TaskStatus),
+    'cursor' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+  });
+  const TaskPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Task),
+  });
+  const TaskRescheduleArgs = IDL.Record({
+    'at' : Timestamp,
+    'task' : IDL.Text,
+  });
+  const TaskScheduleArgs = IDL.Record({
+    'at' : Timestamp,
+    'op' : IDL.Text,
+    'args' : Value,
+    'reason' : IDL.Opt(IDL.Text),
   });
   const TaxAssessArgs = IDL.Record({
     'tax' : IDL.Opt(IDL.Text),
@@ -1573,9 +1936,12 @@ export const idlFactory = ({ IDL }) => {
     'opens_at' : IDL.Opt(Timestamp),
     'title' : IDL.Text,
     'requester' : IDL.Text,
+    'estimated_value' : IDL.Opt(Money),
     'closes_at' : IDL.Opt(Timestamp),
     'rubric' : IDL.Vec(Criterion),
+    'kind' : IDL.Opt(IDL.Text),
     'description' : IDL.Opt(IDL.Text),
+    'procedure' : IDL.Opt(IDL.Text),
   });
   const TenderStatus = IDL.Variant({
     'Open' : IDL.Null,
@@ -1586,17 +1952,26 @@ export const idlFactory = ({ IDL }) => {
     'Cancelled' : IDL.Null,
     'Contracted' : IDL.Null,
   });
+  const Notice = IDL.Record({
+    'ref' : IDL.Opt(IDL.Text),
+    'journal' : IDL.Text,
+    'published_at' : Timestamp,
+  });
   const Tender = IDL.Record({
     'id' : IDL.Text,
     'opens_at' : IDL.Opt(Timestamp),
     'status' : TenderStatus,
     'title' : IDL.Text,
     'requester' : IDL.Text,
+    'estimated_value' : IDL.Opt(Money),
     'closes_at' : IDL.Opt(Timestamp),
     'rubric' : IDL.Vec(Criterion),
     'contract' : IDL.Opt(IDL.Text),
+    'kind' : IDL.Opt(IDL.Text),
+    'notices' : IDL.Vec(Notice),
     'winner' : IDL.Opt(IDL.Text),
     'description' : IDL.Text,
+    'procedure' : IDL.Opt(IDL.Text),
   });
   const TenderDetail = IDL.Record({
     'bids' : IDL.Vec(Bid),
@@ -1611,6 +1986,11 @@ export const idlFactory = ({ IDL }) => {
   const TenderPage = IDL.Record({
     'next' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Tender),
+  });
+  const TenderNoticeArgs = IDL.Record({
+    'ref' : IDL.Opt(IDL.Text),
+    'journal' : IDL.Text,
+    'tender' : IDL.Text,
   });
   const ForceTransferArgs = IDL.Record({
     'to' : IDL.Principal,
@@ -1684,7 +2064,11 @@ export const idlFactory = ({ IDL }) => {
     'source_fund' : IDL.Text,
     'anchor_month' : IDL.Nat8,
   });
-  const Treasury = IDL.Record({ 'id' : IDL.Text, 'config' : TreasuryConfig });
+  const Treasury = IDL.Record({
+    'id' : IDL.Text,
+    'debt_outstanding' : Money,
+    'config' : TreasuryConfig,
+  });
   const TreasuryView = IDL.Record({
     'funds' : IDL.Vec(Fund),
     'next' : IDL.Opt(IDL.Text),
@@ -1701,6 +2085,8 @@ export const idlFactory = ({ IDL }) => {
     'nickname' : IDL.Opt(IDL.Text),
     'home_quarter' : IDL.Opt(IDL.Text),
     'user' : IDL.Principal,
+    'language' : IDL.Opt(IDL.Text),
+    'home_zone' : IDL.Opt(IDL.Text),
     'avatar' : IDL.Opt(IDL.Text),
   });
   const NewUser = IDL.Record({
@@ -1786,6 +2172,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
+    'ggg_attribute_list' : IDL.Func(
+        [AttributeListArgs],
+        [IDL.Variant({ 'Ok' : AttributePage, 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_attribute_review' : IDL.Func(
+        [AttributeReviewArgs],
+        [IDL.Variant({ 'Ok' : Attribute, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_attribute_submit' : IDL.Func(
+        [AttributeSubmitArgs],
+        [IDL.Variant({ 'Ok' : Attribute, 'Err' : GggError })],
+        [],
+      ),
     'ggg_authority_grant' : IDL.Func(
         [AuthorityGrantArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
@@ -1826,14 +2227,24 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
+    'ggg_budget_extend' : IDL.Func(
+        [BudgetExtendArgs],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : GggError })],
+        [],
+      ),
     'ggg_budget_propose' : IDL.Func(
-        [IDL.Text],
+        [BudgetProposeArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
     'ggg_case_assign' : IDL.Func(
         [CaseAssignArgs],
         [IDL.Variant({ 'Ok' : Case, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_codex_activate' : IDL.Func(
+        [CodexActivateArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
     'ggg_codex_install' : IDL.Func(
@@ -1996,6 +2407,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
+    'ggg_dispatch_confirm' : IDL.Func(
+        [DispatchConfirmArgs],
+        [IDL.Variant({ 'Ok' : Dispatch, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_dispatch_list' : IDL.Func(
+        [DispatchListArgs],
+        [IDL.Variant({ 'Ok' : DispatchPage, 'Err' : GggError })],
+        ['query'],
+      ),
     'ggg_dispute_accept' : IDL.Func(
         [DisputeAcceptArgs],
         [IDL.Variant({ 'Ok' : Case, 'Err' : GggError })],
@@ -2041,6 +2462,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : DocumentPage, 'Err' : GggError })],
         ['query'],
       ),
+    'ggg_document_publish' : IDL.Func(
+        [DocumentPublishArgs],
+        [IDL.Variant({ 'Ok' : Document, 'Err' : GggError })],
+        [],
+      ),
     'ggg_document_revoke' : IDL.Func(
         [DocumentRevokeArgs],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : GggError })],
@@ -2084,6 +2510,21 @@ export const idlFactory = ({ IDL }) => {
     'ggg_evidence_submit' : IDL.Func(
         [EvidenceSubmitArgs],
         [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_external_add' : IDL.Func(
+        [ExternalAddArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_external_list' : IDL.Func(
+        [ListArgs],
+        [IDL.Variant({ 'Ok' : ExternalPage, 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_external_report' : IDL.Func(
+        [ExternalReportArgs],
+        [IDL.Variant({ 'Ok' : Event, 'Err' : GggError })],
         [],
       ),
     'ggg_federal_vote_cancel' : IDL.Func(
@@ -2161,6 +2602,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : InvoiceCreated, 'Err' : GggError })],
         [],
       ),
+    'ggg_invoice_item_add' : IDL.Func(
+        [InvoiceItemAddArgs],
+        [IDL.Variant({ 'Ok' : Invoice, 'Err' : GggError })],
+        [],
+      ),
     'ggg_invoice_refresh' : IDL.Func(
         [InvoiceRefreshArgs],
         [IDL.Variant({ 'Ok' : InvoicePage, 'Err' : GggError })],
@@ -2178,6 +2624,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'ggg_judge_revoke' : IDL.Func(
         [IDL.Text],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_land_assess' : IDL.Func(
+        [LandAssessArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
@@ -2256,6 +2707,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : LicenseCheck, 'Err' : GggError })],
         ['query'],
       ),
+    'ggg_loan_create' : IDL.Func(
+        [LoanCreateArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_loan_list' : IDL.Func(
+        [LoanListArgs],
+        [IDL.Variant({ 'Ok' : LoanPage, 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_loan_repay' : IDL.Func(
+        [LoanRepayArgs],
+        [IDL.Variant({ 'Ok' : Loan, 'Err' : GggError })],
+        [],
+      ),
     'ggg_mandate_assign_executor' : IDL.Func(
         [MandateExecutorArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
@@ -2298,7 +2764,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'ggg_notification_send' : IDL.Func(
         [NotificationSendArgs],
-        [IDL.Variant({ 'Ok' : Notification, 'Err' : GggError })],
+        [IDL.Variant({ 'Ok' : Delivery, 'Err' : GggError })],
         [],
       ),
     'ggg_organization_edit' : IDL.Func(
@@ -2375,6 +2841,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Nat8)],
         [IDL.Variant({ 'Ok' : User, 'Err' : GggError })],
         [],
+      ),
+    'ggg_procedure_define' : IDL.Func(
+        [ProcedureDefineArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_procedure_list' : IDL.Func(
+        [ListArgs],
+        [IDL.Variant({ 'Ok' : ProcedurePage, 'Err' : GggError })],
+        ['query'],
       ),
     'ggg_profile_create' : IDL.Func(
         [ProfileCreateArgs],
@@ -2542,6 +3018,31 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Appointment, 'Err' : GggError })],
         [],
       ),
+    'ggg_request_decide' : IDL.Func(
+        [RequestDecideArgs],
+        [IDL.Variant({ 'Ok' : Request, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_request_file' : IDL.Func(
+        [RequestFileArgs],
+        [IDL.Variant({ 'Ok' : Request, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_request_get' : IDL.Func(
+        [RequestGetArgs],
+        [IDL.Variant({ 'Ok' : IDL.Opt(Request), 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_request_list' : IDL.Func(
+        [RequestListArgs],
+        [IDL.Variant({ 'Ok' : RequestPage, 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_request_set_due' : IDL.Func(
+        [RequestSetDueArgs],
+        [IDL.Variant({ 'Ok' : Request, 'Err' : GggError })],
+        [],
+      ),
     'ggg_resolution_query' : IDL.Func(
         [ResolutionQueryArgs],
         [IDL.Variant({ 'Ok' : ResolutionPage, 'Err' : GggError })],
@@ -2575,6 +3076,26 @@ export const idlFactory = ({ IDL }) => {
     'ggg_setup_step' : IDL.Func(
         [SetupStep],
         [IDL.Variant({ 'Ok' : SetupState, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_task_cancel' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Task, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_task_list' : IDL.Func(
+        [TaskListArgs],
+        [IDL.Variant({ 'Ok' : TaskPage, 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_task_reschedule' : IDL.Func(
+        [TaskRescheduleArgs],
+        [IDL.Variant({ 'Ok' : Task, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_task_schedule' : IDL.Func(
+        [TaskScheduleArgs],
+        [IDL.Variant({ 'Ok' : Task, 'Err' : GggError })],
         [],
       ),
     'ggg_tax_assess' : IDL.Func(
@@ -2626,6 +3147,11 @@ export const idlFactory = ({ IDL }) => {
         [TenderListArgs],
         [IDL.Variant({ 'Ok' : TenderPage, 'Err' : GggError })],
         ['query'],
+      ),
+    'ggg_tender_notice' : IDL.Func(
+        [TenderNoticeArgs],
+        [IDL.Variant({ 'Ok' : Tender, 'Err' : GggError })],
+        [],
       ),
     'ggg_tender_open' : IDL.Func(
         [IDL.Text],

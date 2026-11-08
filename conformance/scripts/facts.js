@@ -11,40 +11,40 @@ const OUT = new URL('../../facts.json', import.meta.url);
 // Every ratio is in hundred-millionths: 100 % is 100 000 000.
 const WHOLE = 100_000_000;
 
-// The kinds the fact schema adds to Candid's types, each the named alias of ggg.did that declares it.
-// A fact's unit comes from here, never from a suffix in its name.
+// The kinds the fact schema adds to Candid's types, each declared by named aliases of ggg.did, with the
+// range of each alias. A fact's unit comes from here, never from a suffix in its name.
 export const KINDS = {
-  Ratio: {
-    kind: 'ratio',
+  ratio: {
+    aliases: { Ratio: { min: 0, max: WHOLE } },
     unit: 'hundred-millionths',
-    min: 0,
-    max: WHOLE,
     rule: 'One scale for every ratio: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456. People read and write decimals; the value is the integer.',
   },
-  Money: {
-    kind: 'money',
+  money: {
+    aliases: { Money: { min: 0 }, SignedMoney: {} },
     unit: "the token's smallest unit (Token.decimals)",
-    min: 0,
-    rule: 'Money computed from a ratio is rounded to the nearest cent, an exact half away from zero. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units.',
+    rule: 'Money computed from a ratio is rounded to the nearest cent, an exact half away from zero. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units. Money is never negative; SignedMoney may be, for a discount or bonus line.',
   },
-  Timestamp: { kind: 'timestamp', unit: 'nanoseconds since 1970-01-01 UTC', min: 0 },
-  Duration: { kind: 'duration', unit: 'nanoseconds', min: 0 },
-  Period: {
-    kind: 'period',
+  timestamp: { aliases: { Timestamp: { min: 0 } }, unit: 'nanoseconds since 1970-01-01 UTC' },
+  duration: { aliases: { Duration: { min: 0 } }, unit: 'nanoseconds' },
+  period: {
+    aliases: { Period: {} },
     unit: 'a count of one calendar unit: Day, WorkingDay, Month or Year',
     rule: 'Periods compare only within one unit; comparing two units fails closed, with no conversion through the calendar.',
   },
 };
+const ALIAS_KIND = Object.fromEntries(
+  Object.entries(KINDS).flatMap(([kind, { aliases }]) => Object.keys(aliases).map((alias) => [alias, kind])),
+);
 
-// Facts that are not arguments. A GOS computes each from its own records, deterministically, when the
-// operation is called, and legislation reads it like an argument (docs/layered-codex.md §1).
+// Facts that are not arguments. A GOS computes each from its own records when the operation is called,
+// deterministically, and legislation reads it like an argument (docs/layered-codex.md §1).
 const DERIVED = {
   tender_award: {
-    published_in: { type: 'vec', element: { type: 'text' }, derived: 'the journals of the notices the tender has' },
+    published_in: { type: { vec: { name: 'text' } }, derived: "the journals of the tender's notices" },
   },
   budget_propose: {
-    revenue: { type: 'Money', derived: "the sum of the period's revenue lines" },
-    expense: { type: 'Money', derived: "the sum of the period's expense lines" },
+    revenue: { type: { name: 'Money' }, derived: "the sum of the period's revenue lines" },
+    expense: { type: { name: 'Money' }, derived: "the sum of the period's expense lines" },
   },
 };
 
@@ -188,8 +188,9 @@ function describer(types) {
     if (type.variant) return variantOf(type.variant);
     const { name } = type;
     if (name === 'Value') return { type: 'Value' };
-    if (KINDS[name]) {
-      const { kind, min, max } = KINDS[name];
+    if (ALIAS_KIND[name]) {
+      const kind = ALIAS_KIND[name];
+      const { min, max } = KINDS[kind].aliases[name];
       const base = types.get(name);
       const described = base.record ? { type: name, kind, fields: fieldsOf(base.record) } : { type: base.name, kind };
       if (min !== undefined) described.min = min;
@@ -232,7 +233,10 @@ export function generate(source = readFileSync(DID, 'utf8')) {
   const { types, methods } = parseDid(source);
   const describe = describer(types);
   const kinds = Object.fromEntries(
-    Object.entries(KINDS).map(([alias, { kind, ...rest }]) => [kind, { alias, candid: candidOf(types.get(alias)), ...rest }]),
+    Object.entries(KINDS).map(([kind, { aliases, ...rest }]) => [
+      kind,
+      { aliases: Object.keys(aliases), candid: Object.keys(aliases).map((alias) => candidOf(types.get(alias))), ...rest },
+    ]),
   );
   const actions = {};
   for (const { name, args, query } of methods) {
@@ -253,9 +257,8 @@ export function generate(source = readFileSync(DID, 'utf8')) {
     } else if (args.length > 1) {
       throw new Error(`${name} takes ${args.length} arguments; the schema expects one record`);
     }
-    for (const [fact, description] of Object.entries(DERIVED[operation] ?? {})) {
-      const { type, derived, ...rest } = description;
-      action.facts[fact] = { ...describe(type === 'vec' ? { vec: { name: rest.element.type } } : { name: type }), derived };
+    for (const [fact, { type, derived }] of Object.entries(DERIVED[operation] ?? {})) {
+      action.facts[fact] = { ...describe(type), derived };
     }
     const lists = { ...recordLists(types, argFields), ...(SAVED_LISTS[operation] ?? {}) };
     if (Object.keys(lists).length) action.lists = Object.fromEntries(Object.keys(lists).map((list) => [list, `${operation}.${list}`]));

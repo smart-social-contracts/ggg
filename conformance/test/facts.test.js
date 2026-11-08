@@ -39,15 +39,34 @@ test('a per-list action names its operation and the list it ranges over, and its
   assert.deepEqual(committed.actions['tax_policy_propose.taxes'].facts, committed.actions['tax_policy_draft.taxes'].facts);
 });
 
-test('every kind is declared by a named alias of ggg.did, with the ratio scale and the Period units', () => {
-  const { kinds } = committed;
-  assert.deepEqual(Object.keys(kinds).sort(), [...new Set(Object.values(KINDS).map((k) => k.kind))].sort());
-  for (const [kind, { alias }] of Object.entries(kinds)) assert.ok(types.has(alias), `${kind}: ggg.did has no type ${alias}`);
-  assert.equal(kinds.ratio.min, 0);
-  assert.equal(kinds.ratio.max, WHOLE);
-  assert.equal(kinds.money.min, 0);
-  assert.equal(kinds.period.candid, 'record { count : nat; unit : PeriodUnit }');
-  assert.deepEqual(types.get('PeriodUnit').variant.map((unit) => unit.name), ['Day', 'WorkingDay', 'Month', 'Year']);
+test('every kind is declared by named aliases of ggg.did, with the ratio scale and the Period units', () => {
+  const { kinds, actions } = committed;
+  assert.deepEqual(Object.keys(kinds).sort(), Object.keys(KINDS).sort());
+  for (const [kind, { aliases }] of Object.entries(kinds)) {
+    for (const alias of aliases) assert.ok(types.has(alias), `${kind}: ggg.did has no type ${alias}`);
+  }
+  const quorum = actions.department_set_policy.facts.policy.fields.quorum;
+  assert.deepEqual([quorum.kind, quorum.min, quorum.max], ['ratio', 0, WHOLE]);
+  const amount = actions.invoice_create.facts.amount;
+  assert.deepEqual([amount.kind, amount.type, amount.min], ['money', 'nat', 0]);
+  const line = actions['invoice_create.items'].facts.amount;
+  assert.deepEqual([line.kind, line.type, line.min], ['money', 'int', undefined]);
+  const deadline = actions.procedure_define.facts.decision_deadline;
+  assert.deepEqual([deadline.kind, deadline.optional, deadline.fields.count.min], ['period', true, 0]);
+  assert.deepEqual(deadline.fields.unit.values, ['Day', 'WorkingDay', 'Month', 'Year']);
+});
+
+test('a derived fact says what the GOS computes it from', () => {
+  const { published_in } = committed.actions.tender_award.facts;
+  assert.equal(published_in.type, 'vec');
+  assert.match(published_in.derived, /notices/);
+  for (const total of ['revenue', 'expense']) {
+    const fact = committed.actions.budget_propose.facts[total];
+    assert.equal(fact.kind, 'money');
+    assert.match(fact.derived, /sum/);
+  }
+  const derived = Object.values(committed.actions).flatMap((a) => Object.values(a.facts)).filter((f) => f.derived);
+  assert.equal(derived.length, 3, 'derived facts are few and declared one by one');
 });
 
 test('a fact\'s unit is in its schema entry, never in its name', () => {
@@ -66,9 +85,10 @@ test('a fact\'s unit is in its schema entry, never in its name', () => {
 test('the kinds table in docs/layered-codex.md is the kinds of facts.json', () => {
   const page = read('docs/layered-codex.md');
   const section = page.slice(page.indexOf('### 3.3'), page.indexOf('## 4.'));
-  const rows = [...section.matchAll(/^\| `(\w+)` \| `(\w+)` \| (.+?) \|/gm)].map(([, kind, alias, candid]) => ({ kind, alias, candid }));
+  const code = (names) => names.map((n) => `\`${n}\``).join(', ');
+  const rows = [...section.matchAll(/^\| `(\w+)` \| (.+?) \| (.+?) \|/gm)].map(([, kind, aliases, candid]) => ({ kind, aliases, candid }));
   assert.deepEqual(
     rows,
-    Object.entries(committed.kinds).map(([kind, k]) => ({ kind, alias: k.alias, candid: `\`${k.candid}\`` })),
+    Object.entries(committed.kinds).map(([kind, k]) => ({ kind, aliases: code(k.aliases), candid: code(k.candid) })),
   );
 });

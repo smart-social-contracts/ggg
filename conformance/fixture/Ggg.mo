@@ -74,6 +74,42 @@ module {
   };
   public type AppointmentKind = { #Acting; #Substantive };
   public type AppointmentStatus = { #Ended; #Active };
+  /// A certified attribute of a person: a status another body certifies and the realm verifies, as it
+  /// verifies identities, such as a disability, a family status or being a student. The kinds and their
+  /// values are legislation's; GGG records the attestation.
+  public type Attribute = {
+    id : Text;
+    ref : Text;
+    status : AttributeStatus;
+    human : Text;
+    value : Text;
+    kind : Text;
+    issuer : Text;
+    verified_at : ?Timestamp;
+    expires_at : ?Timestamp;
+  };
+  /// The caller's own attributes, of one kind or all.
+  public type AttributeListArgs = {
+    cursor : ?Text;
+    kind : ?Text;
+    limit : ?Nat32;
+    on_behalf_of : ?Principal;
+  };
+  public type AttributePage = { next : ?Text; items : [Attribute] };
+  public type AttributeReviewArgs = {
+    status : { #Rejected; #Verified };
+    attribute : Text;
+  };
+  public type AttributeStatus = { #Rejected; #Verified; #Pending };
+  /// For the caller's own person. `ref` points to the proof, stored encrypted or off-chain.
+  public type AttributeSubmitArgs = {
+    ref : Text;
+    value : Text;
+    kind : Text;
+    issuer : ?Text;
+    on_behalf_of : ?Principal;
+    expires_at : ?Timestamp;
+  };
   public type Authority = {
     id : Text;
     grantor : Text;
@@ -141,7 +177,22 @@ module {
     planned : Money;
     category : Text;
   };
-  public type BudgetStatus = { #Closed; #Draft; #Proposed; #Amended; #Adopted };
+  /// Copies the adopted budget of `from_period` into `period` as Extended lines, without a vote; replies
+  /// how many lines it copied.
+  public type BudgetExtendArgs = { period : Text; from_period : Text };
+  /// Proposes every draft line of the period together. `years` is how many periods the plan covers, when
+  /// more than one. Legislation reads the period's totals, `revenue` and `expense`, as facts of the call.
+  public type BudgetProposeArgs = { period : Text; years : ?Nat };
+  /// Extended: copied from the previous period's adopted budget by budget_extend, in force until an adopted
+  /// budget replaces it.
+  public type BudgetStatus = {
+    #Closed;
+    #Draft;
+    #Proposed;
+    #Amended;
+    #Extended;
+    #Adopted;
+  };
   public type Calendar = {
     id : Text;
     codex_release_cycle : ?Duration;
@@ -204,14 +255,19 @@ module {
     checksum : Text;
     manifest : Value;
   };
+  /// `at` defaults to now; a time ahead schedules the activation.
+  public type CodexActivateArgs = { at : ?Timestamp; codex : Text };
   public type CodexSource = {
     #Package : { source : Text; manifest : Value };
     #Registry : { codex : Text; version : Text };
   };
-  public type CodexStatus = { #Inactive; #Active; #Reverted };
+  /// Pending: installed and checked, waiting for codex_activate or its proposal's effective_at.
+  public type CodexStatus = { #Inactive; #Active; #Reverted; #Pending };
   /// The active codex and a page of earlier ones, each named by its checksum ("sha256:<hex>").
   /// No method returns a Codex record.
   public type CodexView = {
+    /// A codex installed and waiting to be activated, by its checksum.
+    pending : ?Text;
     signing : SigningPolicy;
     next : ?Text;
     history : [Text];
@@ -226,8 +282,13 @@ module {
     starts_at : ?Timestamp;
     value : Money;
     ends_at : ?Timestamp;
+    /// What is contracted (works, supplies, services), by which procedure, and the tender it came from, which
+    /// gave it its kind and procedure.
+    kind : ?Text;
     terms_hash : Text;
     terms_ref : Text;
+    procedure : ?Text;
+    tender : ?Text;
     parties : [Ref];
     symbol : Text;
   };
@@ -237,8 +298,11 @@ module {
     starts_at : ?Timestamp;
     value : Money;
     ends_at : ?Timestamp;
+    kind : ?Text;
     terms_hash : Text;
     terms_ref : Text;
+    procedure : ?Text;
+    tender : ?Text;
     parties : [Ref];
     symbol : Text;
   };
@@ -372,17 +436,22 @@ module {
     #Expired;
     #Pending;
   };
+  public type Delivery = { #Notification : Notification; #Dispatch : Dispatch };
   public type Department = {
     id : Text;
     is_root : Bool;
     fund : ?Text;
     head : ?Principal;
+    /// What kind of body it is, such as the realm's plenary, so legislation from a source above can name the
+    /// kind without naming the department.
+    kind : ?Text;
     description : Text;
     target_policy : ?Policy;
     parent : ?Text;
     policy : Policy;
   };
   public type DepartmentCreateArgs = {
+    kind : ?Text;
     description : Text;
     department : Text;
     parent : ?Text;
@@ -395,12 +464,45 @@ module {
   /// The parent is never the department itself or one of its sub-departments; the root has none.
   public type DepartmentEditArgs = {
     head : ?{ #Set : Principal; #Clear };
+    kind : ?Text;
     description : ?Text;
     department : Text;
     parent : ?Text;
   };
   public type DepartmentPage = { next : ?Text; items : [Department] };
   public type DepartmentPolicyArgs = { department : Text; policy : Policy };
+  /// One notice to an External, queued by the realm and confirmed by whoever delivered it. `document` is
+  /// the document it carries, `codex` the codex it concerns, when either applies.
+  public type Dispatch = {
+    id : Text;
+    to : Text;
+    status : DispatchStatus;
+    title : Text;
+    topic : Text;
+    body : Value;
+    codex : ?Text;
+    document : ?Text;
+    queued_at : Timestamp;
+  };
+  /// `at` defaults to now.
+  public type DispatchConfirmArgs = {
+    at : ?Timestamp;
+    dispatch : Text;
+    receipt : ?Text;
+  };
+  public type DispatchListArgs = {
+    to : ?Text;
+    status : ?{ #Queued; #Failed; #Confirmed };
+    cursor : ?Text;
+    limit : ?Nat32;
+  };
+  public type DispatchPage = { next : ?Text; items : [Dispatch] };
+  public type DispatchStatus = {
+    #Queued;
+    #Failed : Text;
+    /// When it was delivered, and the receipt that proves it (a bulletin number, a filing reference).
+    #Confirmed : { at : Timestamp; receipt : ?Text };
+  };
   public type Dispute = {
     id : Text;
     status : DisputeStatus;
@@ -437,8 +539,17 @@ module {
     ref : Text;
     title : Text;
     hash : Text;
+    /// What the document is (minutes, an ordinance, an award), and the BCP 47 tags of its languages.
+    kind : ?Text;
+    languages : [Text];
+    /// Published to everyone, so readable without signing in, with `ref` pointing to content in clear.
+    public_ : Bool;
     author : Principal;
+    publications : [Publication];
     department : Text;
+    /// What legislation reads about the document when it is shared, such as its source and whether it was
+    /// given freely.
+    facts : Value;
   };
   /// The document's ciphertext reference, its key scope, and the caller's envelope if it has one.
   public type DocumentAccess = {
@@ -451,23 +562,38 @@ module {
   public type DocumentDeleted = { deleted : Bool; revoked : Nat };
   public type DocumentListArgs = {
     cursor : ?Text;
+    kind : ?Text;
     limit : ?Nat32;
+    language : ?Text;
     department : Text;
   };
   public type DocumentPage = { next : ?Text; items : [Document] };
+  /// With no `to`, the document becomes public. With an External journal, a Dispatch to it is queued too.
+  public type DocumentPublishArgs = { to : ?Text; document : Text };
   public type DocumentRevokeArgs = {
     document : Text;
     principals : [Principal];
   };
-  public type DocumentShareArgs = { keys : [WrappedKey]; document : Text };
+  /// `recipient` is whom the keys are for: a User, an Organization or an External. `facts` is what
+  /// legislation reads about this share beyond the basis.
+  public type DocumentShareArgs = {
+    keys : [WrappedKey];
+    recipient : Ref;
+    document : Text;
+    basis : ?ShareBasis;
+    facts : ?Value;
+  };
   /// Stores a new document, or replaces `document`.
   public type DocumentStoreArgs = {
     ref : Text;
     title : Text;
     hash : Text;
     keys : [WrappedKey];
+    kind : ?Text;
+    languages : [Text];
     document : ?Text;
     department : Text;
+    facts : ?Value;
   };
   public type DocumentStored = { scope : Text; document : Document };
   /// Nanoseconds.
@@ -514,6 +640,30 @@ module {
     on_behalf_of : ?Principal;
   };
   public type ExpelArgs = { user : Principal; department : Text };
+  /// A body outside the realm and outside the Internet Computer: an authority, a journal, a lender, a
+  /// bank. `channel` is how a dispatch reaches it: `manual` (an operator delivers it) or an https URL (a
+  /// bridge does).
+  public type External = {
+    id : Text;
+    kind : Text;
+    name : Text;
+    channel : Text;
+  };
+  public type ExternalAddArgs = {
+    kind : Text;
+    name : Text;
+    channel : Text;
+    external : Text;
+  };
+  public type ExternalPage = { next : ?Text; items : [External] };
+  /// A report that reached the realm from an External, entered by whoever received it, with the file as
+  /// evidence. It is audited as an Event, which legislation hooks.
+  public type ExternalReportArgs = {
+    evidence_ref : ?Text;
+    topic : Text;
+    body : Value;
+    external : Text;
+  };
   public type FederalVote = {
     id : Text;
     status : FederalVoteStatus;
@@ -662,6 +812,8 @@ module {
     user : Principal;
     date_of_birth : ?Timestamp;
   };
+  /// Standard kinds: `national_id`, `passport`, `residence_permit`, `driver_license`; a realm may add its own.
+  /// The issuer of a national id or passport is the country, so it says the nationality.
   public type Identity = {
     id : Text;
     ref : Text;
@@ -670,6 +822,9 @@ module {
     kind : Text;
     issuer : Text;
     verified_at : ?Timestamp;
+    /// A subdivision of the kind, such as a long-term residence permit.
+    category : ?Text;
+    expires_at : ?Timestamp;
   };
   public type IdentityReviewArgs = {
     status : { #Rejected; #Verified };
@@ -680,7 +835,9 @@ module {
     ref : Text;
     kind : Text;
     issuer : ?Text;
+    category : ?Text;
     on_behalf_of : ?Principal;
+    expires_at : ?Timestamp;
   };
   public type Invite = {
     id : Text;
@@ -711,21 +868,39 @@ module {
     due_at : ?Timestamp;
     paid_at : ?Timestamp;
     payer : Ref;
+    /// The items sum to `amount`. `facts` is what legislation reads about the invoice beyond its items.
+    items : [InvoiceItem];
     amount : Money;
     payment : ?Value;
     symbol : Text;
+    facts : Value;
     reason : ?Ref;
   };
   public type InvoiceCheckArgs = { invoice : Text; on_behalf_of : ?Principal };
+  /// The items, if any, must sum to `amount` (InvalidArgument otherwise).
   public type InvoiceCreateArgs = {
     due_at : ?Timestamp;
     payer : Ref;
+    items : [InvoiceItem];
     amount : Money;
     symbol : ?Text;
+    facts : ?Value;
     reason : ?Ref;
   };
   /// The invoice, and the account to pay it into.
   public type InvoiceCreated = { invoice : Invoice; pay_to : Account };
+  /// One line of an invoice. A negative amount is a discount or bonus. `legislation` is the provision that
+  /// charges it.
+  public type InvoiceItem = {
+    concept : Text;
+    unit : ?Text;
+    legislation : ?Text;
+    quantity : ?Nat;
+    amount : SignedMoney;
+  };
+  /// Adds a line to a pending invoice and raises (or, for a negative amount, lowers) its amount by the
+  /// line's; Conflict once the invoice is paid, overdue or cancelled, InvalidArgument below zero.
+  public type InvoiceItemAddArgs = { invoice : Text; item : InvoiceItem };
   public type InvoicePage = { next : ?Text; items : [Invoice] };
   /// One invoice, or a batch of the pending and overdue ones (at most 20 per call).
   public type InvoiceRefreshArgs = {
@@ -734,7 +909,7 @@ module {
     limit : ?Nat32;
   };
   public type InvoiceStatus = { #Paid; #Overdue; #Cancelled; #Pending };
-  public type JoinArgs = { nickname : ?Text; code : ?Text };
+  public type JoinArgs = { nickname : ?Text; code : ?Text; language : ?Text };
   public type JoinFederationArgs = { name : ?Text; capital : Principal };
   /// The least-populated active quarter a new member joins, and every quarter that takes joins.
   public type JoinTargets = { mode : ?Text; targets : [Text]; default : ?Text };
@@ -772,9 +947,24 @@ module {
     token_id : ?Nat;
     owner : Ref;
     metadata : Value;
+    area : ?Nat;
     kind : Text;
+    assessment_ref : ?Text;
+    /// What an assessor set for taxes based on the parcel, its value in the accounting currency and its area
+    /// in square metres, when, and under which reference in the assessor's register.
+    assessed_value : ?Money;
+    assessed_at : ?Timestamp;
     width : Nat;
     registered_by : Principal;
+  };
+  /// What the assessor set; a field left absent keeps its value. `legislation` is the provision the
+  /// assessment follows.
+  public type LandAssessArgs = {
+    value : ?Money;
+    area : ?Nat;
+    land : Text;
+    reference : ?Text;
+    legislation : ?Text;
   };
   public type LandFreezeArgs = { land : Text; reason : ?Text };
   public type LandListArgs = { owner : ?Ref; cursor : ?Text; limit : ?Nat32 };
@@ -843,6 +1033,8 @@ module {
     issued_at : ?Timestamp;
     issued_by : Text;
     applied_at : Timestamp;
+    /// When a decision is due, from the Procedure of the licence's kind.
+    decision_due : ?Timestamp;
     kind : Text;
     conditions : Value;
     holder : Ref;
@@ -891,6 +1083,38 @@ module {
   /// A licence by id, or the one of `kind` that `holder` holds.
   public type LicenseVerifyArgs = { id : ?Text; kind : ?Text; holder : ?Ref };
   public type ListArgs = { cursor : ?Text; limit : ?Nat32 };
+  /// Money the realm owes an outside lender. The money itself moves outside the realm; GGG records the debt
+  /// and its repayments.
+  public type Loan = {
+    id : Text;
+    status : LoanStatus;
+    outstanding : Money;
+    fund : Text;
+    rate : Ratio;
+    term : Period;
+    lender : Text;
+    amount : Money;
+    symbol : Text;
+    facts : Value;
+  };
+  /// `lender` is an External. `symbol` defaults to the accounting currency.
+  public type LoanCreateArgs = {
+    fund : Text;
+    rate : Ratio;
+    term : Period;
+    lender : Text;
+    amount : Money;
+    symbol : ?Text;
+    facts : ?Value;
+  };
+  public type LoanListArgs = {
+    status : ?LoanStatus;
+    cursor : ?Text;
+    limit : ?Nat32;
+  };
+  public type LoanPage = { next : ?Text; items : [Loan] };
+  public type LoanRepayArgs = { loan : Text; amount : Money; reason : ?Text };
+  public type LoanStatus = { #Repaid; #Active };
   public type Mandate = {
     id : Text;
     status : MandateStatus;
@@ -968,6 +1192,12 @@ module {
     symbol : Text;
   };
   public type NewUser = { nickname : ?Text; user : Principal };
+  /// A notice of the tender published in a journal, recorded with tender_notice.
+  public type Notice = {
+    ref : ?Text;
+    journal : Text;
+    published_at : Timestamp;
+  };
   public type Notification = {
     at : Timestamp;
     id : Text;
@@ -996,12 +1226,15 @@ module {
     limit : ?Nat32;
     on_behalf_of : ?Principal;
   };
+  /// To a user, department or organization, a Notification; to an External, a Dispatch. With translations,
+  /// each reader gets the one in their language, else the title and body given.
   public type NotificationSendArgs = {
     title : Text;
     topic : ?Text;
     body : ?Text;
     href : ?Text;
     recipient : Ref;
+    translations : ?[Translation];
   };
   public type NotificationsRead = { next : ?Text; read : Nat };
   public type Organization = {
@@ -1154,6 +1387,28 @@ module {
   };
   public type PositionStatus = { #Open; #Closed; #Frozen };
   public type PrincipalPage = { next : ?Text; items : [Principal] };
+  /// How a kind of application is decided: who starts it, the deadline for a decision, and what the realm's
+  /// silence means (`positive` grants, `negative` refuses). Keyed by the licence kind it governs.
+  public type Procedure = {
+    id : Text;
+    silence : ?Text;
+    legislation : ?Text;
+    decision_deadline : ?Period;
+    matter : ?Text;
+    initiated_by : Text;
+    facts : Value;
+  };
+  /// Defines, or redefines, the procedure of licences of `kind`.
+  public type ProcedureDefineArgs = {
+    silence : ?Text;
+    kind : Text;
+    legislation : ?Text;
+    decision_deadline : ?Period;
+    matter : ?Text;
+    initiated_by : Text;
+    facts : ?Value;
+  };
+  public type ProcedurePage = { next : ?Text; items : [Procedure] };
   public type ProfileCreateArgs = {
     allowed_to : [Text];
     description : Text;
@@ -1168,6 +1423,7 @@ module {
   };
   public type ProfileUpdateArgs = {
     nickname : ?Text;
+    language : ?Text;
     on_behalf_of : ?Principal;
     avatar : ?Text;
   };
@@ -1179,14 +1435,22 @@ module {
     tally : Tally;
     title : Text;
     action : ProposalAction;
+    /// The rule that decides it (I-GOV-3): yes votes reach `threshold` of the basis, with the quorum met.
     threshold : Ratio;
     /// When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
     effective_at : ?Timestamp;
+    /// What the proposal is (a change of legislation, a budget, a motion) and the matter it decides, in the
+    /// realm's own words, for legislation to read.
+    kind : ?Text;
     description : Text;
     deadline : ?Timestamp;
+    threshold_of : ThresholdBasis;
     links : [ProposalLink];
     on_behalf_of : ?Principal;
     proposer : Principal;
+    matter : ?Text;
+    /// A member whose vote decides a tie under the Cast basis.
+    casting_vote : ?Principal;
     department : ?Text;
     quorum : Ratio;
   };
@@ -1205,12 +1469,20 @@ module {
   public type ProposalCreateArgs = {
     title : Text;
     action : ProposalAction;
+    /// Stricter than the realm's or the department's rule, never weaker (InvalidArgument): a higher threshold
+    /// or quorum, Eligible where the default is Cast, a casting vote where there is none.
+    threshold : ?Ratio;
     /// Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
     effective_at : ?Timestamp;
+    kind : ?Text;
     description : Text;
+    threshold_of : ?ThresholdBasis;
     links : ?[ProposalLink];
     on_behalf_of : ?Principal;
+    matter : ?Text;
+    casting_vote : ?Principal;
     department : ?Text;
+    quorum : ?Ratio;
   };
   /// The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
   /// links to it are in ggg_proposal_linked_from.
@@ -1259,6 +1531,14 @@ module {
   public type ProposalWithdrawArgs = {
     on_behalf_of : ?Principal;
     proposal : Text;
+  };
+  /// A publication of the document in a journal: the dispatch that carried it, and when and under which
+  /// reference the journal published it, from the dispatch's confirmation.
+  public type Publication = {
+    ref : ?Text;
+    dispatch : Text;
+    journal : Text;
+    published_at : ?Timestamp;
   };
   public type Quarter = {
     id : Text;
@@ -1314,6 +1594,8 @@ module {
     is_quarter : Bool;
     name : Text;
     manifesto : Text;
+    /// BCP 47 tags of the realm's languages, the first the default.
+    languages : [Text];
     network : Text;
     federation_codex : ?Text;
     quarter_join_mode : ?Text;
@@ -1341,6 +1623,8 @@ module {
     timezone : ?Text;
     name : ?Text;
     manifesto : ?Text;
+    /// BCP 47 tags, the first the default.
+    languages : ?[Text];
     quarter_join_mode : ?Text;
     open_registration : ?Bool;
     welcome_message : ?Text;
@@ -1369,7 +1653,12 @@ module {
   };
   /// One report by id, or a page of reports.
   public type ReportArgs = { id : ?Text; cursor : ?Text; limit : ?Nat32 };
-  public type ReportIssueArgs = { period : Text; kind : ?Text };
+  /// `adjustments` are figures the issuer adds to the ledger's, for a report in terms the ledger doesn't keep.
+  public type ReportIssueArgs = {
+    period : Text;
+    kind : ?Text;
+    adjustments : ?Value;
+  };
   public type ReportPage = { next : ?Text; items : [FinancialReport] };
   /// Seats the user in the organization's position, creating the position if it is new.
   public type RepresentativeAddArgs = {
@@ -1382,6 +1671,49 @@ module {
     position : Text;
     profile : ?Text;
   };
+  /// A request to the realm by a person or a body: a petition, a complaint, a request for information or
+  /// for personal data. The kinds are the realm's; legislation sets the deadline and decides silence.
+  public type Request = {
+    by : Ref;
+    id : Text;
+    status : RequestStatus;
+    decision : ?Text;
+    body : Value;
+    kind : Text;
+    filed_at : Timestamp;
+    due_at : ?Timestamp;
+    reply : ?Text;
+    decided_at : ?Timestamp;
+    extension_limit : ?Timestamp;
+  };
+  /// `decision` is the realm's word for the outcome (`granted`, `refused`, `refused_by_silence`).
+  public type RequestDecideArgs = {
+    decision : Text;
+    request : Text;
+    reply : ?Text;
+  };
+  /// For the caller, or an organization they administer.
+  public type RequestFileArgs = {
+    body : Value;
+    kind : Text;
+    on_behalf_of : ?Principal;
+    organization : ?Text;
+  };
+  public type RequestGetArgs = { id : Text; on_behalf_of : ?Principal };
+  public type RequestListArgs = {
+    status : ?RequestStatus;
+    cursor : ?Text;
+    kind : ?Text;
+    limit : ?Nat32;
+  };
+  public type RequestPage = { next : ?Text; items : [Request] };
+  /// Sets or moves the deadline; `extension_limit` is the latest it may be moved to.
+  public type RequestSetDueArgs = {
+    request : Text;
+    due_at : Timestamp;
+    extension_limit : ?Timestamp;
+  };
+  public type RequestStatus = { #Filed; #Decided };
   public type Resolution = { verdict : Verdict; penalties : [Penalty] };
   public type ResolutionPage = { next : ?Text; items : [Resolution] };
   /// Verdicts past draft, newest first.
@@ -1414,12 +1746,51 @@ module {
     #Branding : BrandingArgs;
     #Tokens : TokensArgs;
   };
+  /// On what basis personal data is shared: the legal basis and purpose in the realm's own words, the
+  /// legislation that sets the duty or task, and whether the data is of a special category.
+  public type ShareBasis = {
+    special_category : Bool;
+    legislation : ?Text;
+    purpose : Text;
+    legal_basis : Text;
+  };
+  /// Money that may be negative, such as a discount line of an invoice. Rounded as Money is.
+  public type SignedMoney = Int;
   public type SigningPolicy = {
     supervision : { #Required; #Optional };
     agents : [Text];
     delegable : [Text];
   };
   public type Tally = { no : Nat; yes : Nat; abstain : Nat; eligible : ?Nat };
+  /// One operation scheduled for a time. It runs with the authority of whoever scheduled it, never as the
+  /// realm's controller, and every guard and rule runs again when it does, so a task scheduled under old
+  /// legislation obeys the legislation in force on its date. `event` is the Event of its run.
+  public type Task = {
+    at : Timestamp;
+    id : Text;
+    op : Text;
+    status : TaskStatus;
+    args : Value;
+    event : ?Text;
+    scheduled_by : Ref;
+    reason : ?Text;
+  };
+  public type TaskListArgs = {
+    op : ?Text;
+    status : ?TaskStatus;
+    cursor : ?Text;
+    limit : ?Nat32;
+  };
+  public type TaskPage = { next : ?Text; items : [Task] };
+  public type TaskRescheduleArgs = { at : Timestamp; task : Text };
+  /// `op` is an operation name (`user_set_status`), `args` its arguments as the Event records them.
+  public type TaskScheduleArgs = {
+    at : Timestamp;
+    op : Text;
+    args : Value;
+    reason : ?Text;
+  };
+  public type TaskStatus = { #Run; #Failed; #Scheduled; #Cancelled };
   /// Bills one batch of taxpayers for the period; those already billed are skipped.
   public type TaxAssessArgs = {
     tax : ?Text;
@@ -1488,11 +1859,16 @@ module {
     status : TenderStatus;
     title : Text;
     requester : Text;
+    estimated_value : ?Money;
     closes_at : ?Timestamp;
     rubric : [Criterion];
     contract : ?Text;
+    /// What is tendered (works, supplies, services), by which procedure, and for how much.
+    kind : ?Text;
+    notices : [Notice];
     winner : ?Text;
     description : Text;
+    procedure : ?Text;
   };
   /// `bid` defaults to the best-scored revealed bid; a lower-scored one needs a justification.
   public type TenderAwardArgs = {
@@ -1505,9 +1881,12 @@ module {
     opens_at : ?Timestamp;
     title : Text;
     requester : Text;
+    estimated_value : ?Money;
     closes_at : ?Timestamp;
     rubric : [Criterion];
+    kind : ?Text;
     description : ?Text;
+    procedure : ?Text;
   };
   /// A sealed bid shows no price or score.
   public type TenderDetail = { bids : [Bid]; next : ?Text; tender : Tender };
@@ -1516,6 +1895,8 @@ module {
     cursor : ?Text;
     limit : ?Nat32;
   };
+  /// Records that a notice of the tender appeared in `journal`, now.
+  public type TenderNoticeArgs = { ref : ?Text; journal : Text; tender : Text };
   public type TenderPage = { next : ?Text; items : [Tender] };
   public type TenderStatus = {
     #Open;
@@ -1526,6 +1907,8 @@ module {
     #Cancelled;
     #Contracted;
   };
+  /// What a threshold is measured against: the yes and no votes cast, or every eligible voter.
+  public type ThresholdBasis = { #Cast; #Eligible };
   /// Nanoseconds since 1970-01-01 UTC, as returned by ic0.time.
   public type Timestamp = Nat64;
   public type Token = {
@@ -1579,7 +1962,14 @@ module {
   };
   public type TransferRevertArgs = { transfer : Text; reason : ?Text };
   public type TransferStatus = { #Failed; #Sending; #Completed; #Pending };
-  public type Treasury = { id : Text; config : TreasuryConfig };
+  /// A title and body in one language, for a notice sent in several.
+  public type Translation = { title : Text; body : ?Text; language : Text };
+  public type Treasury = {
+    id : Text;
+    /// The sum of the active loans' `outstanding`.
+    debt_outstanding : Money;
+    config : TreasuryConfig;
+  };
   public type TreasuryConfig = {
     auto_allocate : Bool;
     epoch : Duration;
@@ -1610,6 +2000,10 @@ module {
     private_data : ?Blob;
     nickname : ?Text;
     home_quarter : ?Text;
+    /// A BCP 47 language tag, for notices to the user.
+    language : ?Text;
+    /// The Zone the user lives in, a district without a canister of its own.
+    home_zone : ?Text;
     profiles : [Text];
     avatar : ?Text;
   };
@@ -1622,6 +2016,8 @@ module {
     nickname : ?Text;
     home_quarter : ?Text;
     user : Principal;
+    language : ?Text;
+    home_zone : ?Text;
     avatar : ?Text;
   };
   public type UserEntry = { member : ?Member; user : User };
@@ -1691,6 +2087,8 @@ module {
     land : ?Text;
     name : Text;
     user : ?Principal;
+    /// Members whose home_zone this is.
+    population : Nat;
   };
   public type ZoneClearArgs = { zone : Text; on_behalf_of : ?Principal };
   /// An h3 cell as the caller's home; it replaces the previous one.
@@ -1729,6 +2127,18 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
+    ggg_attribute_list : shared query AttributeListArgs -> async {
+        #Ok : AttributePage;
+        #Err : GggError;
+      };
+    ggg_attribute_review : shared AttributeReviewArgs -> async {
+        #Ok : Attribute;
+        #Err : GggError;
+      };
+    ggg_attribute_submit : shared AttributeSubmitArgs -> async {
+        #Ok : Attribute;
+        #Err : GggError;
+      };
     ggg_authority_grant : shared AuthorityGrantArgs -> async {
         #Ok : Governed;
         #Err : GggError;
@@ -1758,12 +2168,20 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
-    ggg_budget_propose : shared Text -> async {
+    ggg_budget_extend : shared BudgetExtendArgs -> async {
+        #Ok : Nat;
+        #Err : GggError;
+      };
+    ggg_budget_propose : shared BudgetProposeArgs -> async {
         #Ok : Governed;
         #Err : GggError;
       };
     ggg_case_assign : shared CaseAssignArgs -> async {
         #Ok : Case;
+        #Err : GggError;
+      };
+    ggg_codex_activate : shared CodexActivateArgs -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     ggg_codex_install : shared CodexSource -> async {
@@ -1891,6 +2309,14 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
+    ggg_dispatch_confirm : shared DispatchConfirmArgs -> async {
+        #Ok : Dispatch;
+        #Err : GggError;
+      };
+    ggg_dispatch_list : shared query DispatchListArgs -> async {
+        #Ok : DispatchPage;
+        #Err : GggError;
+      };
     ggg_dispute_accept : shared DisputeAcceptArgs -> async {
         #Ok : Case;
         #Err : GggError;
@@ -1928,6 +2354,10 @@ module {
         #Ok : DocumentPage;
         #Err : GggError;
       };
+    ggg_document_publish : shared DocumentPublishArgs -> async {
+        #Ok : Document;
+        #Err : GggError;
+      };
     ggg_document_revoke : shared DocumentRevokeArgs -> async {
         #Ok : Nat;
         #Err : GggError;
@@ -1962,6 +2392,18 @@ module {
       };
     ggg_evidence_submit : shared EvidenceSubmitArgs -> async {
         #Ok : Text;
+        #Err : GggError;
+      };
+    ggg_external_add : shared ExternalAddArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_external_list : shared query ListArgs -> async {
+        #Ok : ExternalPage;
+        #Err : GggError;
+      };
+    ggg_external_report : shared ExternalReportArgs -> async {
+        #Ok : Event;
         #Err : GggError;
       };
     ggg_federal_vote_cancel : shared Text -> async {
@@ -2021,6 +2463,10 @@ module {
         #Ok : InvoiceCreated;
         #Err : GggError;
       };
+    ggg_invoice_item_add : shared InvoiceItemAddArgs -> async {
+        #Ok : Invoice;
+        #Err : GggError;
+      };
     ggg_invoice_refresh : shared InvoiceRefreshArgs -> async {
         #Ok : InvoicePage;
         #Err : GggError;
@@ -2034,6 +2480,10 @@ module {
         #Err : GggError;
       };
     ggg_judge_revoke : shared Text -> async { #Ok : Governed; #Err : GggError };
+    ggg_land_assess : shared LandAssessArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
     ggg_land_freeze : shared LandFreezeArgs -> async {
         #Ok : Land;
         #Err : GggError;
@@ -2093,6 +2543,18 @@ module {
         #Ok : LicenseCheck;
         #Err : GggError;
       };
+    ggg_loan_create : shared LoanCreateArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_loan_list : shared query LoanListArgs -> async {
+        #Ok : LoanPage;
+        #Err : GggError;
+      };
+    ggg_loan_repay : shared LoanRepayArgs -> async {
+        #Ok : Loan;
+        #Err : GggError;
+      };
     ggg_mandate_assign_executor : shared MandateExecutorArgs -> async {
         #Ok : Governed;
         #Err : GggError;
@@ -2123,7 +2585,7 @@ module {
         #Err : GggError;
       };
     ggg_notification_send : shared NotificationSendArgs -> async {
-        #Ok : Notification;
+        #Ok : Delivery;
         #Err : GggError;
       };
     ggg_organization_edit : shared OrganizationEditArgs -> async {
@@ -2181,6 +2643,14 @@ module {
       };
     ggg_private_data_update : shared Blob -> async {
         #Ok : User;
+        #Err : GggError;
+      };
+    ggg_procedure_define : shared ProcedureDefineArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_procedure_list : shared query ListArgs -> async {
+        #Ok : ProcedurePage;
         #Err : GggError;
       };
     ggg_profile_create : shared ProfileCreateArgs -> async {
@@ -2318,6 +2788,26 @@ module {
         #Ok : Appointment;
         #Err : GggError;
       };
+    ggg_request_decide : shared RequestDecideArgs -> async {
+        #Ok : Request;
+        #Err : GggError;
+      };
+    ggg_request_file : shared RequestFileArgs -> async {
+        #Ok : Request;
+        #Err : GggError;
+      };
+    ggg_request_get : shared query RequestGetArgs -> async {
+        #Ok : ?Request;
+        #Err : GggError;
+      };
+    ggg_request_list : shared query RequestListArgs -> async {
+        #Ok : RequestPage;
+        #Err : GggError;
+      };
+    ggg_request_set_due : shared RequestSetDueArgs -> async {
+        #Ok : Request;
+        #Err : GggError;
+      };
     ggg_resolution_query : shared query ResolutionQueryArgs -> async {
         #Ok : ResolutionPage;
         #Err : GggError;
@@ -2338,6 +2828,19 @@ module {
     ggg_setup_state : shared () -> async { #Ok : SetupState; #Err : GggError };
     ggg_setup_step : shared SetupStep -> async {
         #Ok : SetupState;
+        #Err : GggError;
+      };
+    ggg_task_cancel : shared Text -> async { #Ok : Task; #Err : GggError };
+    ggg_task_list : shared query TaskListArgs -> async {
+        #Ok : TaskPage;
+        #Err : GggError;
+      };
+    ggg_task_reschedule : shared TaskRescheduleArgs -> async {
+        #Ok : Task;
+        #Err : GggError;
+      };
+    ggg_task_schedule : shared TaskScheduleArgs -> async {
+        #Ok : Task;
         #Err : GggError;
       };
     ggg_tax_assess : shared TaxAssessArgs -> async {
@@ -2376,6 +2879,10 @@ module {
     /// §9
     ggg_tender_list : shared query TenderListArgs -> async {
         #Ok : TenderPage;
+        #Err : GggError;
+      };
+    ggg_tender_notice : shared TenderNoticeArgs -> async {
+        #Ok : Tender;
         #Err : GggError;
       };
     ggg_tender_open : shared Text -> async { #Ok : Governed; #Err : GggError };

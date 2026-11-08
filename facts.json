@@ -1,35 +1,52 @@
 {
   "kinds": {
     "ratio": {
-      "alias": "Ratio",
-      "candid": "nat",
+      "aliases": [
+        "Ratio"
+      ],
+      "candid": [
+        "nat"
+      ],
       "unit": "hundred-millionths",
-      "min": 0,
-      "max": 100000000,
       "rule": "One scale for every ratio: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456. People read and write decimals; the value is the integer."
     },
     "money": {
-      "alias": "Money",
-      "candid": "nat",
+      "aliases": [
+        "Money",
+        "SignedMoney"
+      ],
+      "candid": [
+        "nat",
+        "int"
+      ],
       "unit": "the token's smallest unit (Token.decimals)",
-      "min": 0,
-      "rule": "Money computed from a ratio is rounded to the nearest cent, an exact half away from zero. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units."
+      "rule": "Money computed from a ratio is rounded to the nearest cent, an exact half away from zero. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units. Money is never negative; SignedMoney may be, for a discount or bonus line."
     },
     "timestamp": {
-      "alias": "Timestamp",
-      "candid": "nat64",
-      "unit": "nanoseconds since 1970-01-01 UTC",
-      "min": 0
+      "aliases": [
+        "Timestamp"
+      ],
+      "candid": [
+        "nat64"
+      ],
+      "unit": "nanoseconds since 1970-01-01 UTC"
     },
     "duration": {
-      "alias": "Duration",
-      "candid": "nat64",
-      "unit": "nanoseconds",
-      "min": 0
+      "aliases": [
+        "Duration"
+      ],
+      "candid": [
+        "nat64"
+      ],
+      "unit": "nanoseconds"
     },
     "period": {
-      "alias": "Period",
-      "candid": "record { count : nat; unit : PeriodUnit }",
+      "aliases": [
+        "Period"
+      ],
+      "candid": [
+        "record { count : nat; unit : PeriodUnit }"
+      ],
       "unit": "a count of one calendar unit: Day, WorkingDay, Month or Year",
       "rule": "Periods compare only within one unit; comparing two units fails closed, with no conversion through the calendar."
     }
@@ -99,6 +116,30 @@
       },
       "read": true
     },
+    "attribute_list": {
+      "operation": "ggg_attribute_list",
+      "facts": {
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      },
+      "read": true
+    },
     "delegable_operations": {
       "operation": "ggg_delegable_operations",
       "facts": {},
@@ -124,6 +165,10 @@
         "nickname": {
           "type": "text",
           "optional": true
+        },
+        "language": {
+          "type": "text",
+          "optional": true
         }
       }
     },
@@ -135,6 +180,10 @@
           "optional": true
         },
         "avatar": {
+          "type": "text",
+          "optional": true
+        },
+        "language": {
           "type": "text",
           "optional": true
         },
@@ -229,6 +278,14 @@
         "home_quarter": {
           "type": "text",
           "optional": true
+        },
+        "language": {
+          "type": "text",
+          "optional": true
+        },
+        "home_zone": {
+          "type": "text",
+          "optional": true
         }
       }
     },
@@ -271,12 +328,22 @@
         "kind": {
           "type": "text"
         },
+        "category": {
+          "type": "text",
+          "optional": true
+        },
         "issuer": {
           "type": "text",
           "optional": true
         },
         "ref": {
           "type": "text"
+        },
+        "expires_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
         },
         "on_behalf_of": {
           "type": "principal",
@@ -288,6 +355,49 @@
       "operation": "ggg_identity_review",
       "facts": {
         "identity": {
+          "type": "text"
+        },
+        "status": {
+          "type": "variant",
+          "values": [
+            "Verified",
+            "Rejected"
+          ]
+        }
+      }
+    },
+    "attribute_submit": {
+      "operation": "ggg_attribute_submit",
+      "facts": {
+        "kind": {
+          "type": "text"
+        },
+        "value": {
+          "type": "text"
+        },
+        "issuer": {
+          "type": "text",
+          "optional": true
+        },
+        "ref": {
+          "type": "text"
+        },
+        "expires_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "attribute_review": {
+      "operation": "ggg_attribute_review",
+      "facts": {
+        "attribute": {
           "type": "text"
         },
         "status": {
@@ -626,6 +736,10 @@
         },
         "description": {
           "type": "text"
+        },
+        "kind": {
+          "type": "text",
+          "optional": true
         }
       }
     },
@@ -636,6 +750,10 @@
           "type": "text"
         },
         "description": {
+          "type": "text",
+          "optional": true
+        },
+        "kind": {
           "type": "text",
           "optional": true
         },
@@ -1041,6 +1159,40 @@
           "type": "text",
           "optional": true
         },
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "matter": {
+          "type": "text",
+          "optional": true
+        },
+        "threshold": {
+          "type": "nat",
+          "kind": "ratio",
+          "min": 0,
+          "max": 100000000,
+          "optional": true
+        },
+        "quorum": {
+          "type": "nat",
+          "kind": "ratio",
+          "min": 0,
+          "max": 100000000,
+          "optional": true
+        },
+        "threshold_of": {
+          "type": "ThresholdBasis",
+          "values": [
+            "Cast",
+            "Eligible"
+          ],
+          "optional": true
+        },
+        "casting_vote": {
+          "type": "principal",
+          "optional": true
+        },
         "action": {
           "type": "ProposalAction",
           "values": [
@@ -1265,6 +1417,18 @@
           "type": "text",
           "optional": true
         },
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "procedure": {
+          "type": "text",
+          "optional": true
+        },
+        "tender": {
+          "type": "text",
+          "optional": true
+        },
         "value": {
           "type": "nat",
           "kind": "money",
@@ -1419,6 +1583,30 @@
           "type": "nat32",
           "min": 0,
           "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "loan_list": {
+      "operation": "ggg_loan_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "status": {
+          "type": "LoanStatus",
+          "values": [
+            "Active",
+            "Repaid"
+          ],
           "optional": true
         }
       },
@@ -1603,6 +1791,71 @@
             }
           },
           "optional": true
+        },
+        "items": {
+          "type": "vec",
+          "element": {
+            "type": "InvoiceItem",
+            "fields": {
+              "concept": {
+                "type": "text"
+              },
+              "amount": {
+                "type": "int",
+                "kind": "money"
+              },
+              "quantity": {
+                "type": "nat",
+                "min": 0,
+                "optional": true
+              },
+              "unit": {
+                "type": "text",
+                "optional": true
+              },
+              "legislation": {
+                "type": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        "facts": {
+          "type": "Value",
+          "optional": true
+        }
+      },
+      "lists": {
+        "items": "invoice_create.items"
+      }
+    },
+    "invoice_create.items": {
+      "operation": "ggg_invoice_create",
+      "list": {
+        "field": "items",
+        "of": "the argument",
+        "element": "InvoiceItem"
+      },
+      "facts": {
+        "concept": {
+          "type": "text"
+        },
+        "amount": {
+          "type": "int",
+          "kind": "money"
+        },
+        "quantity": {
+          "type": "nat",
+          "min": 0,
+          "optional": true
+        },
+        "unit": {
+          "type": "text",
+          "optional": true
+        },
+        "legislation": {
+          "type": "text",
+          "optional": true
         }
       }
     },
@@ -1654,6 +1907,39 @@
           "min": 0,
           "max": 4294967295,
           "optional": true
+        }
+      }
+    },
+    "invoice_item_add": {
+      "operation": "ggg_invoice_item_add",
+      "facts": {
+        "invoice": {
+          "type": "text"
+        },
+        "item": {
+          "type": "InvoiceItem",
+          "fields": {
+            "concept": {
+              "type": "text"
+            },
+            "amount": {
+              "type": "int",
+              "kind": "money"
+            },
+            "quantity": {
+              "type": "nat",
+              "min": 0,
+              "optional": true
+            },
+            "unit": {
+              "type": "text",
+              "optional": true
+            },
+            "legislation": {
+              "type": "text",
+              "optional": true
+            }
+          }
         }
       }
     },
@@ -1733,8 +2019,13 @@
     "budget_propose": {
       "operation": "ggg_budget_propose",
       "facts": {
-        "id": {
+        "period": {
           "type": "text"
+        },
+        "years": {
+          "type": "nat",
+          "min": 0,
+          "optional": true
         },
         "revenue": {
           "type": "nat",
@@ -1747,6 +2038,17 @@
           "kind": "money",
           "min": 0,
           "derived": "the sum of the period's expense lines"
+        }
+      }
+    },
+    "budget_extend": {
+      "operation": "ggg_budget_extend",
+      "facts": {
+        "period": {
+          "type": "text"
+        },
+        "from_period": {
+          "type": "text"
         }
       }
     },
@@ -1833,6 +2135,72 @@
         }
       }
     },
+    "loan_create": {
+      "operation": "ggg_loan_create",
+      "facts": {
+        "lender": {
+          "type": "text"
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0
+        },
+        "symbol": {
+          "type": "text",
+          "optional": true
+        },
+        "term": {
+          "type": "Period",
+          "kind": "period",
+          "fields": {
+            "count": {
+              "type": "nat",
+              "min": 0
+            },
+            "unit": {
+              "type": "PeriodUnit",
+              "values": [
+                "Day",
+                "WorkingDay",
+                "Month",
+                "Year"
+              ]
+            }
+          }
+        },
+        "rate": {
+          "type": "nat",
+          "kind": "ratio",
+          "min": 0,
+          "max": 100000000
+        },
+        "fund": {
+          "type": "text"
+        },
+        "facts": {
+          "type": "Value",
+          "optional": true
+        }
+      }
+    },
+    "loan_repay": {
+      "operation": "ggg_loan_repay",
+      "facts": {
+        "loan": {
+          "type": "text"
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0
+        },
+        "reason": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
     "report_issue": {
       "operation": "ggg_report_issue",
       "facts": {
@@ -1841,6 +2209,10 @@
         },
         "kind": {
           "type": "text",
+          "optional": true
+        },
+        "adjustments": {
+          "type": "Value",
           "optional": true
         }
       }
@@ -2263,6 +2635,33 @@
         }
       }
     },
+    "land_assess": {
+      "operation": "ggg_land_assess",
+      "facts": {
+        "land": {
+          "type": "text"
+        },
+        "value": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "optional": true
+        },
+        "area": {
+          "type": "nat",
+          "min": 0,
+          "optional": true
+        },
+        "reference": {
+          "type": "text",
+          "optional": true
+        },
+        "legislation": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
     "land_freeze": {
       "operation": "ggg_land_freeze",
       "facts": {
@@ -2453,6 +2852,63 @@
       },
       "read": true
     },
+    "procedure_list": {
+      "operation": "ggg_procedure_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "request_get": {
+      "operation": "ggg_request_get",
+      "facts": {
+        "id": {
+          "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "request_list": {
+      "operation": "ggg_request_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "status": {
+          "type": "RequestStatus",
+          "values": [
+            "Filed",
+            "Decided"
+          ],
+          "optional": true
+        }
+      },
+      "read": true
+    },
     "license_apply": {
       "operation": "ggg_license_apply",
       "facts": {
@@ -2546,6 +3002,106 @@
       "facts": {
         "id": {
           "type": "text"
+        }
+      }
+    },
+    "procedure_define": {
+      "operation": "ggg_procedure_define",
+      "facts": {
+        "kind": {
+          "type": "text"
+        },
+        "initiated_by": {
+          "type": "text"
+        },
+        "matter": {
+          "type": "text",
+          "optional": true
+        },
+        "decision_deadline": {
+          "type": "Period",
+          "kind": "period",
+          "fields": {
+            "count": {
+              "type": "nat",
+              "min": 0
+            },
+            "unit": {
+              "type": "PeriodUnit",
+              "values": [
+                "Day",
+                "WorkingDay",
+                "Month",
+                "Year"
+              ]
+            }
+          },
+          "optional": true
+        },
+        "silence": {
+          "type": "text",
+          "optional": true
+        },
+        "legislation": {
+          "type": "text",
+          "optional": true
+        },
+        "facts": {
+          "type": "Value",
+          "optional": true
+        }
+      }
+    },
+    "request_file": {
+      "operation": "ggg_request_file",
+      "facts": {
+        "kind": {
+          "type": "text"
+        },
+        "body": {
+          "type": "Value"
+        },
+        "organization": {
+          "type": "text",
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "request_set_due": {
+      "operation": "ggg_request_set_due",
+      "facts": {
+        "request": {
+          "type": "text"
+        },
+        "due_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0
+        },
+        "extension_limit": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        }
+      }
+    },
+    "request_decide": {
+      "operation": "ggg_request_decide",
+      "facts": {
+        "request": {
+          "type": "text"
+        },
+        "decision": {
+          "type": "text"
+        },
+        "reply": {
+          "type": "text",
+          "optional": true
         }
       }
     },
@@ -3316,6 +3872,20 @@
           "type": "text",
           "optional": true
         },
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "procedure": {
+          "type": "text",
+          "optional": true
+        },
+        "estimated_value": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "optional": true
+        },
         "opens_at": {
           "type": "nat64",
           "kind": "timestamp",
@@ -3519,7 +4089,22 @@
           "element": {
             "type": "text"
           },
-          "derived": "the journals of the notices the tender has"
+          "derived": "the journals of the tender's notices"
+        }
+      }
+    },
+    "tender_notice": {
+      "operation": "ggg_tender_notice",
+      "facts": {
+        "tender": {
+          "type": "text"
+        },
+        "journal": {
+          "type": "text"
+        },
+        "ref": {
+          "type": "text",
+          "optional": true
         }
       }
     },
@@ -3850,6 +4435,81 @@
       },
       "read": true
     },
+    "external_list": {
+      "operation": "ggg_external_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "dispatch_list": {
+      "operation": "ggg_dispatch_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "to": {
+          "type": "text",
+          "optional": true
+        },
+        "status": {
+          "type": "variant",
+          "values": [
+            "Queued",
+            "Confirmed",
+            "Failed"
+          ],
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "task_list": {
+      "operation": "ggg_task_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "op": {
+          "type": "text",
+          "optional": true
+        },
+        "status": {
+          "type": "TaskStatus",
+          "values": [
+            "Scheduled",
+            "Run",
+            "Failed",
+            "Cancelled"
+          ],
+          "optional": true
+        }
+      },
+      "read": true
+    },
     "codex_install": {
       "operation": "ggg_codex_install",
       "facts": {
@@ -3893,6 +4553,20 @@
     "codex_revert": {
       "operation": "ggg_codex_revert",
       "facts": {}
+    },
+    "codex_activate": {
+      "operation": "ggg_codex_activate",
+      "facts": {
+        "codex": {
+          "type": "text"
+        },
+        "at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        }
+      }
     },
     "notification_read": {
       "operation": "ggg_notification_read",
@@ -3957,6 +4631,142 @@
         "topic": {
           "type": "text",
           "optional": true
+        },
+        "translations": {
+          "type": "vec",
+          "element": {
+            "type": "Translation",
+            "fields": {
+              "language": {
+                "type": "text"
+              },
+              "title": {
+                "type": "text"
+              },
+              "body": {
+                "type": "text",
+                "optional": true
+              }
+            }
+          },
+          "optional": true
+        }
+      },
+      "lists": {
+        "translations": "notification_send.translations"
+      }
+    },
+    "notification_send.translations": {
+      "operation": "ggg_notification_send",
+      "list": {
+        "field": "translations",
+        "of": "the argument",
+        "element": "Translation"
+      },
+      "facts": {
+        "language": {
+          "type": "text"
+        },
+        "title": {
+          "type": "text"
+        },
+        "body": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "external_add": {
+      "operation": "ggg_external_add",
+      "facts": {
+        "external": {
+          "type": "text"
+        },
+        "name": {
+          "type": "text"
+        },
+        "kind": {
+          "type": "text"
+        },
+        "channel": {
+          "type": "text"
+        }
+      }
+    },
+    "external_report": {
+      "operation": "ggg_external_report",
+      "facts": {
+        "external": {
+          "type": "text"
+        },
+        "topic": {
+          "type": "text"
+        },
+        "body": {
+          "type": "Value"
+        },
+        "evidence_ref": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "dispatch_confirm": {
+      "operation": "ggg_dispatch_confirm",
+      "facts": {
+        "dispatch": {
+          "type": "text"
+        },
+        "at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
+        },
+        "receipt": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "task_schedule": {
+      "operation": "ggg_task_schedule",
+      "facts": {
+        "op": {
+          "type": "text"
+        },
+        "args": {
+          "type": "Value"
+        },
+        "at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0
+        },
+        "reason": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "task_reschedule": {
+      "operation": "ggg_task_reschedule",
+      "facts": {
+        "task": {
+          "type": "text"
+        },
+        "at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0
+        }
+      }
+    },
+    "task_cancel": {
+      "operation": "ggg_task_cancel",
+      "facts": {
+        "id": {
+          "type": "text"
         }
       }
     },
@@ -4007,6 +4817,13 @@
                 },
                 "quarter_join_mode": {
                   "type": "text",
+                  "optional": true
+                },
+                "languages": {
+                  "type": "vec",
+                  "element": {
+                    "type": "text"
+                  },
                   "optional": true
                 },
                 "timezone": {
@@ -4140,6 +4957,13 @@
         },
         "quarter_join_mode": {
           "type": "text",
+          "optional": true
+        },
+        "languages": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          },
           "optional": true
         },
         "timezone": {
@@ -4285,6 +5109,14 @@
           "min": 0,
           "max": 4294967295,
           "optional": true
+        },
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "language": {
+          "type": "text",
+          "optional": true
         }
       },
       "read": true
@@ -4378,11 +5210,25 @@
         "title": {
           "type": "text"
         },
+        "kind": {
+          "type": "text",
+          "optional": true
+        },
+        "languages": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          }
+        },
         "ref": {
           "type": "text"
         },
         "hash": {
           "type": "text"
+        },
+        "facts": {
+          "type": "Value",
+          "optional": true
         },
         "keys": {
           "type": "vec",
@@ -4425,6 +5271,40 @@
         "document": {
           "type": "text"
         },
+        "recipient": {
+          "type": "Ref",
+          "fields": {
+            "kind": {
+              "type": "text"
+            },
+            "id": {
+              "type": "text"
+            }
+          }
+        },
+        "basis": {
+          "type": "ShareBasis",
+          "fields": {
+            "legal_basis": {
+              "type": "text"
+            },
+            "purpose": {
+              "type": "text"
+            },
+            "legislation": {
+              "type": "text",
+              "optional": true
+            },
+            "special_category": {
+              "type": "bool"
+            }
+          },
+          "optional": true
+        },
+        "facts": {
+          "type": "Value",
+          "optional": true
+        },
         "keys": {
           "type": "vec",
           "element": {
@@ -4457,6 +5337,18 @@
         },
         "wrapped_dek": {
           "type": "blob"
+        }
+      }
+    },
+    "document_publish": {
+      "operation": "ggg_document_publish",
+      "facts": {
+        "document": {
+          "type": "text"
+        },
+        "to": {
+          "type": "text",
+          "optional": true
         }
       }
     },
