@@ -272,7 +272,7 @@ or the call is refused with `InvalidArgument`. The rules:
   against, and its quorum is met. Only an acceptance ends a department vote this early: until its
   deadline, or until every eligible member has voted, a `no` can still be replaced, even when `m`
   approvals are out of reach, and a veto holder yet to vote keeps it open. The end at which every
-  eligible member has voted can still reject, and realm-wide votes are unchanged. When it is
+  eligible member has voted can still reject, and a realm-wide vote has no such early end. When it is
   finalized doesn't matter: a vote that ended before `effective_at` does
   not expire. Finalized before `effective_at` the proposal is scheduled, even if its `deadline` is
   later, and finalized after it the proposal is accepted and its action executes at once. A GOS may do
