@@ -99,7 +99,8 @@ addition is in the [model](../model/README.md) and `ggg.did`; the model's sectio
   votes cast, or over every eligible voter) and `casting_vote`. A majority is a property of the
   proposal, not a forbid on `proposal_finalize`: the proposer may state a stricter rule than the realm's
   or the department's, never a weaker one, and a guard on `proposal_create` requires the majority the
-  matter needs (model I-GOV-3);
+  matter needs. A realm-wide proposal's yes votes exceed the threshold of the basis, a department's reach
+  it over the eligible seats (model I-GOV-3);
 - **outside bodies**: `External` parties with a `Dispatch` outbox (`external_add`, `dispatch_confirm`,
   `dispatch_list`). An outside body is not a realm; a dispatch to it is a plain notice that gates
   nothing, confirmed by the operator or bridge that delivered it;
@@ -128,7 +129,8 @@ addition is in the [model](../model/README.md) and `ggg.did`; the model's sectio
   are documented text, and `kind` stays text;
 - a document's **kind and languages**; the **languages of a realm and of a user**: `Document.kind` and
   `languages`, `Realm.languages`, `User.language`, and `translations` on `notification_send`;
-- a **district without a canister**: `Zone`, `User.home_zone` and `Zone.population`;
+- a **district without a canister**: a `Zone` the realm defines with `zone_define`, `User.home_zone`
+  (stated at join, changed with `user_edit`) and `Zone.population`;
 - a procedure's **deadline and silence**: `Procedure`, `procedure_define` and `License.decision_due`. A
   deadline is a `Period` (§3.3), not a `Duration`.
 
@@ -193,6 +195,7 @@ The kinds are the named aliases of `ggg.did`:
 |---|---|---|---|---|
 | `ratio` | `Ratio` | `nat` | hundred-millionths | 0 to 100 000 000 |
 | `money` | `Money`, `SignedMoney` | `nat`, `int` | the token's smallest unit (`Token.decimals`) | `Money` 0 and up; `SignedMoney` may be negative, for a discount line |
+| `area` | `Area` | `nat` | square metres | 0 and up |
 | `timestamp` | `Timestamp` | `nat64` | nanoseconds since 1970-01-01 UTC | 0 and up |
 | `duration` | `Duration` | `nat64` | nanoseconds | 0 and up |
 | `period` | `Period` | `record { count : nat; unit : PeriodUnit }` | a count of one calendar unit | `count` 0 and up; `unit` one of `Day`, `WorkingDay`, `Month`, `Year` |
@@ -339,10 +342,11 @@ or the call is refused with `InvalidArgument`. The rules:
 - A vote that ends after `effective_at` does not execute: the proposal ends `Expired`, whatever was
   decided, and the proposer submits a new one. A vote ends at its deadline, or earlier at the moment
   every eligible member has voted. The vote of a department under an m-of-n policy may also end as
-  soon as it can only be accepted: it has `m` approvals, every veto holder has voted and none of them
-  against, and its quorum is met. Only an acceptance ends a department vote this early: until its
-  deadline, or until every eligible member has voted, a `no` can still be replaced, even when `m`
-  approvals are out of reach, and a veto holder yet to vote keeps it open. The end at which every
+  soon as it can only be accepted: its yes votes reach its threshold of the eligible seats (`m` under
+  the policy's own rule, more under a stricter one the proposer stated), every veto holder has voted
+  and none of them against, and its quorum is met. Only an acceptance ends a department vote this
+  early: until its deadline, or until every eligible member has voted, a `no` can still be replaced,
+  even when the threshold is out of reach, and a veto holder yet to vote keeps it open. The end at which every
   eligible member has voted can still reject, and a realm-wide vote has no such early end. When it is
   finalized doesn't matter: a vote that ended before `effective_at` does
   not expire. Finalized before `effective_at` the proposal is scheduled, even if its `deadline` is

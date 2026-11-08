@@ -10,9 +10,10 @@
 /// veto holders, who must hold a seat (I-ORG-5). Nor does it settle a proposal as its vote ends or run
 /// an accepted action as it finalizes (I-GOV-12): proposal_finalize records the outcome of a vote that
 /// has ended, and proposal_execute runs the action. Nobody has granted a delegation, so nobody acts on
-/// another's behalf. Every other domain is empty, which the model allows. Its department has no seats,
-/// so its proposals keep the realm's rule over the votes cast; a GOS with seats sets a department
-/// proposal's threshold to the policy's m/n over the eligible seats (I-GOV-3).
+/// another's behalf. Every other domain is empty, which the model allows. A proposal's rule is the
+/// realm's over the votes cast unless the proposer states a stricter one, which the fixture stores and
+/// applies (I-GOV-3); its department has no seats, so its proposals keep that rule too, while a GOS with
+/// seats sets a department proposal's threshold to the policy's m/n over the eligible seats.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
@@ -38,6 +39,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let VOTING_THRESHOLD = 50_000_000; // 50 %
   let VOTING_QUORUM = 0;
   let MAX_LINKS = 16; // a proposal's own links
+  /// The rule that decides a proposal (I-GOV-3). The realm's, over the votes cast, unless the proposer
+  /// states a stricter one.
+  type Rule = { threshold : T.Ratio; quorum : T.Ratio; threshold_of : T.ThresholdBasis; casting_vote : ?Principal };
+  let DEFAULT_RULE : Rule = { threshold = VOTING_THRESHOLD; quorum = VOTING_QUORUM; threshold_of = #Cast; casting_vote = null };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
@@ -209,6 +214,26 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       if (link.kind == #Replaces) return ?link.proposal;
     };
     null;
+  };
+
+  /// The rule a proposer states, checked against the default: stricter is allowed, weaker is refused
+  /// (I-GOV-3). A casting vote decides a tie over the votes cast only, and names an eligible member.
+  func statedRule(args : T.ProposalCreateArgs) : Result<Rule> {
+    let threshold = switch (args.threshold) { case (?t) t; case null DEFAULT_RULE.threshold };
+    let quorum = switch (args.quorum) { case (?q) q; case null DEFAULT_RULE.quorum };
+    let threshold_of = switch (args.threshold_of) { case (?b) b; case null DEFAULT_RULE.threshold_of };
+    if (threshold < DEFAULT_RULE.threshold or quorum < DEFAULT_RULE.quorum) {
+      return #Err(#InvalidArgument("the rule is weaker than the realm's: a proposer may only tighten it"));
+    };
+    if (threshold > WHOLE or quorum > WHOLE) return #Err(#InvalidArgument("a ratio is at most 100 000 000 (100 %)"));
+    switch (args.casting_vote) {
+      case (?caster) {
+        if (threshold_of == #Eligible) return #Err(#InvalidArgument("a casting vote decides a tie over the votes cast only"));
+        if (requireMember(caster, "proposal.vote") != null) return #Err(#InvalidArgument("the casting vote names a member who is not eligible"));
+      };
+      case null {};
+    };
+    #Ok({ threshold; quorum; threshold_of; casting_vote = args.casting_vote });
   };
 
   /// The member a proposal was filed for: the grantor when it was filed on their behalf.
@@ -494,7 +519,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       case (?e) { if (e <= now()) return #Err(#InvalidArgument("effective_at must lie in the future")) };
       case null {};
     };
-    let p = fileProposal(caller, args.title, args.description, args.department, args.action, args.effective_at, links);
+    let rule = switch (statedRule(args)) { case (#Err(e)) return #Err(e); case (#Ok(r)) r };
+    let p = fileProposal(caller, args.title, args.description, args.department, args.kind, args.matter, args.action, rule, args.effective_at, links);
     audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
     #Ok(p.id);
   };
@@ -505,7 +531,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     title : Text,
     description : Text,
     department : ?Text,
+    kind : ?Text,
+    matter : ?Text,
     action : T.ProposalAction,
+    rule : Rule,
     effective_at : ?T.Timestamp,
     links : [T.ProposalLink],
   ) : T.Proposal {
@@ -519,17 +548,17 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       proposer;
       on_behalf_of = null;
       department = switch (department) { case (?d) { if (d == ROOT.id) null else ?d }; case null null };
-      kind = null;
-      matter = null;
+      kind;
+      matter;
       action;
       status = #Voting;
       opens_at = ?t;
       deadline = ?(t + VOTING_WINDOW_NS);
       effective_at;
-      threshold = VOTING_THRESHOLD;
-      quorum = VOTING_QUORUM;
-      threshold_of = #Cast;
-      casting_vote = null;
+      threshold = rule.threshold;
+      quorum = rule.quorum;
+      threshold_of = rule.threshold_of;
+      casting_vote = rule.casting_vote;
       tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members) };
       result = null;
       links;
@@ -594,20 +623,41 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
   };
 
+  /// Whether the yes votes exceed the proposal's threshold of its basis (I-GOV-3, a realm-wide rule: this
+  /// fixture's department has no seats, so its proposals keep the realm's rule). A tie over the votes
+  /// cast is decided by the casting vote's yes.
+  func thresholdMet(n : Nat, p : T.Proposal) : Bool {
+    let { yes; no; eligible } = p.tally;
+    let basis = switch (p.threshold_of) {
+      case (#Cast) yes + no;
+      case (#Eligible) { switch (eligible) { case (?e) e; case null yes + no } };
+    };
+    if (yes * WHOLE > p.threshold * basis) return true;
+    switch (p.threshold_of, p.casting_vote) {
+      case (#Cast, ?caster) {
+        if (yes * WHOLE != p.threshold * basis) return false;
+        switch (Map.get(ballots(n), Principal.compare, caster)) {
+          case (?v) v.choice == #Yes;
+          case null false;
+        };
+      };
+      case _ false;
+    };
+  };
+
   /// How a vote that ended at `ended` and is finalized at `t` turns out. A vote that ended after
   /// `effective_at` expires the proposal, whatever was decided. Otherwise quorum and threshold decide,
   /// and an accepted proposal with an action whose `effective_at` is still ahead is scheduled. A
   /// motion has nothing to execute, so it stays accepted; so does an action whose `effective_at` has
   /// passed by the time the vote is finalized, which then executes at once.
-  func outcome(p : T.Proposal, ended : T.Timestamp, t : T.Timestamp) : T.ProposalStatus {
+  func outcome(n : Nat, p : T.Proposal, ended : T.Timestamp, t : T.Timestamp) : T.ProposalStatus {
     switch (p.effective_at) {
       case (?e) { if (ended > e) return #Expired };
       case null {};
     };
     let { yes; no; abstain; eligible } = p.tally;
-    let quorumMet = switch (eligible) { case (?n) (yes + no + abstain) * WHOLE >= p.quorum * n; case null true };
-    let thresholdMet = yes * WHOLE > p.threshold * (yes + no);
-    if (not (quorumMet and thresholdMet)) return #Rejected;
+    let quorumMet = switch (eligible) { case (?m) (yes + no + abstain) * WHOLE >= p.quorum * m; case null true };
+    if (not (quorumMet and thresholdMet(n, p))) return #Rejected;
     switch (p.action, p.effective_at) {
       case (#Motion, _) #Accepted;
       case (_, ?e) { if (e > t) #ExecutionScheduled else #Accepted };
@@ -628,7 +678,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       case (null, ?d) { if (t <= d) return #Err(#Conflict("voting is still open")); d };
       case (null, null) t; // no deadline: it may be finalized at any time, and ends then
     };
-    let finalized = { p with status = outcome(p, ended, t) };
+    let finalized = { p with status = outcome(n, p, ended, t) };
     Map.add(proposals, Nat.compare, n, finalized);
     audit("proposal_finalize", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (finalized.status)));
     #Ok(finalized);
@@ -698,7 +748,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       };
     } else {
       let call = #Call({ method = "ggg_proposal_stop"; arg = to_candid (id) });
-      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, call, null, []);
+      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, null, null, call, DEFAULT_RULE, null, []);
       audit("proposal_stop", caller, #Map([("proposal", #Text(id))]), #Text(filed.id));
       #Ok(#Proposed(filed.id));
     };
@@ -972,7 +1022,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_period_close(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_budget_draft(_ : T.BudgetDraftArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_budget_propose(_ : T.BudgetProposeArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_budget_extend(_ : T.BudgetExtendArgs) : async Result<Nat> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_budget_extend(_ : Text) : async Result<Nat> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_budget_amend(_ : T.BudgetAmendArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_allocation_rule_draft(_ : T.AllocationRuleDraftArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_allocation_rule_propose(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
@@ -993,9 +1043,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_land_register(_ : T.LandRegisterArgs) : async Result<T.Governed> { nobody(caller, "nft.mint") };
   public shared ({ caller }) func ggg_land_transfer(_ : T.LandTransferArgs) : async Result<T.Governed> { nobody(caller, "nft.force_transfer") };
   public shared ({ caller }) func ggg_land_mint_nft(_ : T.LandMintArgs) : async Result<Nat> { nobody(caller, "nft.mint") };
-  public shared ({ caller }) func ggg_land_assess(_ : T.LandAssessArgs) : async Result<T.Governed> { nobody(caller, "land.assess") };
+  public shared ({ caller }) func ggg_land_assess(_ : T.LandAssessArgs) : async Result<T.Land> { nobody(caller, "land.assess") };
   public shared ({ caller }) func ggg_land_freeze(_ : T.LandFreezeArgs) : async Result<T.Land> { nobody(caller, "nft.freeze") };
   public shared ({ caller }) func ggg_land_unfreeze(_ : Text) : async Result<T.Land> { nobody(caller, "nft.freeze") };
+  public shared ({ caller }) func ggg_zone_define(_ : T.ZoneDefineArgs) : async Result<T.Governed> { nobody(caller, "realm.configure") };
   public shared ({ caller }) func ggg_zone_set(_ : T.ZoneSetArgs) : async Result<T.Zone> { nobody(caller, "self.data_manage") };
   public shared ({ caller }) func ggg_zone_clear(_ : T.ZoneClearArgs) : async Result<T.Zone> { nobody(caller, "self.data_manage") };
   public shared ({ caller }) func ggg_credential_issue(_ : T.CredentialIssueArgs) : async Result<T.CredentialIssued> { nobody(caller, "credential.sign") };

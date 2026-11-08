@@ -166,16 +166,16 @@ export const idlFactory = ({ IDL }) => {
     'planned' : Money,
     'budget' : IDL.Text,
   });
+  const BudgetKind = IDL.Variant({
+    'Revenue' : IDL.Null,
+    'Expense' : IDL.Null,
+  });
   const BudgetDraftArgs = IDL.Record({
     'period' : IDL.Text,
     'fund' : IDL.Text,
-    'kind' : IDL.Opt(IDL.Text),
+    'kind' : BudgetKind,
     'planned' : Money,
     'category' : IDL.Text,
-  });
-  const BudgetExtendArgs = IDL.Record({
-    'period' : IDL.Text,
-    'from_period' : IDL.Text,
   });
   const BudgetProposeArgs = IDL.Record({
     'period' : IDL.Text,
@@ -538,10 +538,16 @@ export const idlFactory = ({ IDL }) => {
     'department' : IDL.Text,
     'policy' : Policy,
   });
+  const DispatchOutcome = IDL.Variant({
+    'Failed' : IDL.Text,
+    'Confirmed' : IDL.Record({
+      'at' : IDL.Opt(Timestamp),
+      'receipt' : IDL.Opt(IDL.Text),
+    }),
+  });
   const DispatchConfirmArgs = IDL.Record({
-    'at' : IDL.Opt(Timestamp),
     'dispatch' : IDL.Text,
-    'receipt' : IDL.Opt(IDL.Text),
+    'outcome' : DispatchOutcome,
   });
   const DispatchStatus = IDL.Variant({
     'Queued' : IDL.Null,
@@ -630,6 +636,7 @@ export const idlFactory = ({ IDL }) => {
     'deleted' : IDL.Bool,
     'revoked' : IDL.Nat,
   });
+  const Published = IDL.Record({ 'ref' : IDL.Text, 'hash' : IDL.Text });
   const Publication = IDL.Record({
     'ref' : IDL.Opt(IDL.Text),
     'dispatch' : IDL.Text,
@@ -644,7 +651,7 @@ export const idlFactory = ({ IDL }) => {
     'hash' : IDL.Text,
     'kind' : IDL.Opt(IDL.Text),
     'languages' : IDL.Vec(IDL.Text),
-    'public' : IDL.Bool,
+    'public' : IDL.Opt(Published),
     'author' : IDL.Principal,
     'publications' : IDL.Vec(Publication),
     'department' : IDL.Text,
@@ -668,6 +675,8 @@ export const idlFactory = ({ IDL }) => {
   });
   const DocumentPublishArgs = IDL.Record({
     'to' : IDL.Opt(IDL.Text),
+    'ref' : IDL.Text,
+    'hash' : IDL.Text,
     'document' : IDL.Text,
   });
   const DocumentRevokeArgs = IDL.Record({
@@ -971,16 +980,13 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
     'specialization' : IDL.Opt(IDL.Text),
   });
+  const Area = IDL.Nat;
   const LandAssessArgs = IDL.Record({
     'value' : IDL.Opt(Money),
-    'area' : IDL.Opt(IDL.Nat),
+    'area' : IDL.Opt(Area),
     'land' : IDL.Text,
     'reference' : IDL.Opt(IDL.Text),
     'legislation' : IDL.Opt(IDL.Text),
-  });
-  const LandFreezeArgs = IDL.Record({
-    'land' : IDL.Text,
-    'reason' : IDL.Opt(IDL.Text),
   });
   const LandStatus = IDL.Variant({
     'Disputed' : IDL.Null,
@@ -996,13 +1002,17 @@ export const idlFactory = ({ IDL }) => {
     'token_id' : IDL.Opt(IDL.Nat),
     'owner' : Ref,
     'metadata' : Value,
-    'area' : IDL.Opt(IDL.Nat),
+    'area' : IDL.Opt(Area),
     'kind' : IDL.Text,
     'assessment_ref' : IDL.Opt(IDL.Text),
     'assessed_value' : IDL.Opt(Money),
     'assessed_at' : IDL.Opt(Timestamp),
     'width' : IDL.Nat,
     'registered_by' : IDL.Principal,
+  });
+  const LandFreezeArgs = IDL.Record({
+    'land' : IDL.Text,
+    'reason' : IDL.Opt(IDL.Text),
   });
   const LandListArgs = IDL.Record({
     'owner' : IDL.Opt(Ref),
@@ -1172,7 +1182,6 @@ export const idlFactory = ({ IDL }) => {
     'term' : Period,
     'lender' : IDL.Text,
     'amount' : Money,
-    'symbol' : IDL.Opt(IDL.Text),
     'facts' : IDL.Opt(Value),
   });
   const LoanStatus = IDL.Variant({ 'Repaid' : IDL.Null, 'Active' : IDL.Null });
@@ -1413,8 +1422,9 @@ export const idlFactory = ({ IDL }) => {
     'position' : IDL.Text,
     'profile' : IDL.Opt(IDL.Text),
   });
+  const Silence = IDL.Variant({ 'Negative' : IDL.Null, 'Positive' : IDL.Null });
   const ProcedureDefineArgs = IDL.Record({
-    'silence' : IDL.Opt(IDL.Text),
+    'silence' : IDL.Opt(Silence),
     'kind' : IDL.Text,
     'legislation' : IDL.Opt(IDL.Text),
     'decision_deadline' : IDL.Opt(Period),
@@ -1424,7 +1434,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Procedure = IDL.Record({
     'id' : IDL.Text,
-    'silence' : IDL.Opt(IDL.Text),
+    'silence' : IDL.Opt(Silence),
     'legislation' : IDL.Opt(IDL.Text),
     'decision_deadline' : IDL.Opt(Period),
     'matter' : IDL.Opt(IDL.Text),
@@ -1687,6 +1697,7 @@ export const idlFactory = ({ IDL }) => {
     'nickname' : IDL.Opt(IDL.Text),
     'code' : IDL.Opt(IDL.Text),
     'language' : IDL.Opt(IDL.Text),
+    'home_zone' : IDL.Opt(IDL.Text),
   });
   const UserEntry = IDL.Record({ 'member' : IDL.Opt(Member), 'user' : User });
   const Monitor = IDL.Record({
@@ -1988,6 +1999,7 @@ export const idlFactory = ({ IDL }) => {
     'items' : IDL.Vec(Tender),
   });
   const TenderNoticeArgs = IDL.Record({
+    'at' : IDL.Opt(Timestamp),
     'ref' : IDL.Opt(IDL.Text),
     'journal' : IDL.Text,
     'tender' : IDL.Text,
@@ -2130,6 +2142,11 @@ export const idlFactory = ({ IDL }) => {
     'zone' : IDL.Text,
     'on_behalf_of' : IDL.Opt(IDL.Principal),
   });
+  const ZoneDefineArgs = IDL.Record({
+    'kind' : IDL.Text,
+    'name' : IDL.Text,
+    'zone' : IDL.Text,
+  });
   const ZoneSetArgs = IDL.Record({
     'kind' : IDL.Opt(IDL.Text),
     'name' : IDL.Opt(IDL.Text),
@@ -2228,7 +2245,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'ggg_budget_extend' : IDL.Func(
-        [BudgetExtendArgs],
+        [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : GggError })],
         [],
       ),
@@ -2629,7 +2646,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'ggg_land_assess' : IDL.Func(
         [LandAssessArgs],
-        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [IDL.Variant({ 'Ok' : Land, 'Err' : GggError })],
         [],
       ),
     'ggg_land_freeze' : IDL.Func(
@@ -3256,6 +3273,11 @@ export const idlFactory = ({ IDL }) => {
     'ggg_zone_clear' : IDL.Func(
         [ZoneClearArgs],
         [IDL.Variant({ 'Ok' : Zone, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_zone_define' : IDL.Func(
+        [ZoneDefineArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
     'ggg_zone_set' : IDL.Func(

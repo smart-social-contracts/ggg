@@ -819,5 +819,56 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     });
   });
 
+  /** Files a Motion with `extra` on top of the defaults, runs `then` on the proposal, and withdraws it. */
+  const fileRule = async (title, extra, then) => {
+    const result = await mine.ggg_proposal_create(motion(`GGG conformance check ${new Date().toISOString()} (${title})`, extra));
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not propose');
+    const id = ok(result, `ggg_proposal_create(${title})`);
+    try {
+      return await then((await getProposal(mine, id)).proposal);
+    } finally {
+      await mine.ggg_proposal_withdraw({ proposal: id, on_behalf_of: [] });
+    }
+  };
+
+  await check('GGG', 'W18', "a proposal's rule defaults to the realm's over the votes cast, and its kind and matter are kept", async () => {
+    needMember();
+    const realm = await anon.ggg_realm_info();
+    await fileRule('default rule', { kind: ['motion'], matter: ['conformance'] }, (p) => {
+      assert(p.threshold === realm.voting_threshold, `threshold is ${p.threshold}, the realm's is ${realm.voting_threshold}`);
+      assert(p.quorum === realm.voting_quorum, `quorum is ${p.quorum}, the realm's is ${realm.voting_quorum}`);
+      assert(tag(p.threshold_of) === 'Cast', `threshold_of is ${tag(p.threshold_of)}`);
+      assert(opt(p.casting_vote) === null, `casting_vote is ${show(p.casting_vote)}`);
+      assert(opt(p.kind) === 'motion' && opt(p.matter) === 'conformance', `kind and matter are ${show(p.kind)}, ${show(p.matter)}`);
+    });
+  });
+
+  await check('GGG', 'W19', 'a rule weaker than the default is refused', async () => {
+    needMember();
+    const realm = await anon.ggg_realm_info();
+    const weaker = [];
+    if (realm.voting_threshold > 0n) weaker.push(['lower threshold', { threshold: [realm.voting_threshold - 1n] }]);
+    if (realm.voting_quorum > 0n) weaker.push(['lower quorum', { quorum: [realm.voting_quorum - 1n] }]);
+    weaker.push(['casting vote over the eligible', { threshold_of: [{ Eligible: null }], casting_vote: [member.getPrincipal()] }]);
+    weaker.push(['casting vote of a stranger', { casting_vote: [Ed25519KeyIdentity.generate().getPrincipal()] }]);
+    for (const [what, extra] of weaker) await proposeAs(motion(what, extra), `ggg_proposal_create(${what})`);
+    return weaker.map(([what]) => what).join(', ');
+  });
+
+  await check('GGG', 'W20', 'a stricter rule is stored as stated', async () => {
+    needMember();
+    const realm = await anon.ggg_realm_info();
+    const stricter = (ratio) => (ratio < WHOLE ? ratio + 1n : ratio);
+    const threshold = stricter(realm.voting_threshold);
+    const quorum = stricter(realm.voting_quorum);
+    await fileRule('stricter rule', { threshold: [threshold], quorum: [quorum], threshold_of: [{ Eligible: null }] }, (p) => {
+      assert(p.threshold === threshold && p.quorum === quorum, `the rule is ${p.threshold}, ${p.quorum}, not ${threshold}, ${quorum}`);
+      assert(tag(p.threshold_of) === 'Eligible', `threshold_of is ${tag(p.threshold_of)}`);
+    });
+    await fileRule('casting vote', { casting_vote: [member.getPrincipal()] }, (p) => {
+      assert(opt(p.casting_vote)?.toText() === member.getPrincipal().toText(), `casting_vote is ${show(p.casting_vote)}`);
+    });
+  });
+
   return results;
 }

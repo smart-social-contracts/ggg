@@ -24,6 +24,7 @@ export const KINDS = {
     unit: "the token's smallest unit (Token.decimals)",
     rule: 'Money computed from a ratio is rounded to the nearest cent, an exact half away from zero. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units. Money is never negative; SignedMoney may be, for a discount or bonus line.',
   },
+  area: { aliases: { Area: { min: 0 } }, unit: 'square metres' },
   timestamp: { aliases: { Timestamp: { min: 0 } }, unit: 'nanoseconds since 1970-01-01 UTC' },
   duration: { aliases: { Duration: { min: 0 } }, unit: 'nanoseconds' },
   period: {
@@ -43,8 +44,8 @@ const DERIVED = {
     published_in: { type: { vec: { name: 'text' } }, derived: "the journals of the tender's notices" },
   },
   budget_propose: {
-    revenue: { type: { name: 'Money' }, derived: "the sum of the period's revenue lines" },
-    expense: { type: { name: 'Money' }, derived: "the sum of the period's expense lines" },
+    revenue: { type: { name: 'Money' }, derived: "the sum of planned over the period's Revenue lines" },
+    expense: { type: { name: 'Money' }, derived: "the sum of planned over the period's Expense lines" },
   },
 };
 

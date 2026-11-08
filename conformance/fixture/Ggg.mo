@@ -74,6 +74,8 @@ module {
   };
   public type AppointmentKind = { #Acting; #Substantive };
   public type AppointmentStatus = { #Ended; #Active };
+  /// An area in square metres.
+  public type Area = Nat;
   /// A certified attribute of a person: a status another body certifies and the realm verifies, as it
   /// verifies identities, such as a disability, a family status or being a student. The kinds and their
   /// values are legislation's; GGG records the attestation.
@@ -164,7 +166,7 @@ module {
     actual : Money;
     period : Text;
     fund : Text;
-    kind : Text;
+    kind : BudgetKind;
     planned : Money;
     category : Text;
     proposal : ?Text;
@@ -173,15 +175,15 @@ module {
   public type BudgetDraftArgs = {
     period : Text;
     fund : Text;
-    kind : ?Text;
+    kind : BudgetKind;
     planned : Money;
     category : Text;
   };
-  /// Copies the adopted budget of `from_period` into `period` as Extended lines, without a vote; replies
-  /// how many lines it copied.
-  public type BudgetExtendArgs = { period : Text; from_period : Text };
-  /// Proposes every draft line of the period together. `years` is how many periods the plan covers, when
-  /// more than one. Legislation reads the period's totals, `revenue` and `expense`, as facts of the call.
+  /// Whether a line plans money coming in or going out; `category` is the realm's word for what.
+  public type BudgetKind = { #Revenue; #Expense };
+  /// Proposes every draft line of the period together, under the root department's policy. `years` is how
+  /// many periods the plan covers, when more than one. Legislation reads the period's totals, `revenue` and
+  /// `expense` (the sums of `planned` over its Revenue and Expense lines), as facts of the call.
   public type BudgetProposeArgs = { period : Text; years : ?Nat };
   /// Extended: copied from the previous period's adopted budget by budget_extend, in force until an adopted
   /// budget replaces it.
@@ -255,7 +257,8 @@ module {
     checksum : Text;
     manifest : Value;
   };
-  /// `at` defaults to now; a time ahead schedules the activation.
+  /// `codex` is the pending codex's checksum (at most one codex is pending at a time). `at` defaults to now;
+  /// a time ahead schedules the activation.
   public type CodexActivateArgs = { at : ?Timestamp; codex : Text };
   public type CodexSource = {
     #Package : { source : Text; manifest : Value };
@@ -484,17 +487,22 @@ module {
     document : ?Text;
     queued_at : Timestamp;
   };
-  /// `at` defaults to now.
+  /// A dispatch takes one outcome; a second is Conflict.
   public type DispatchConfirmArgs = {
-    at : ?Timestamp;
     dispatch : Text;
-    receipt : ?Text;
+    outcome : DispatchOutcome;
   };
   public type DispatchListArgs = {
     to : ?Text;
     status : ?{ #Queued; #Failed; #Confirmed };
     cursor : ?Text;
     limit : ?Nat32;
+  };
+  /// How the delivery went: Confirmed with when (`at` defaults to now, and lies between the dispatch's
+  /// `queued_at` and now) and the receipt that proves it, or Failed with the reason.
+  public type DispatchOutcome = {
+    #Failed : Text;
+    #Confirmed : { at : ?Timestamp; receipt : ?Text };
   };
   public type DispatchPage = { next : ?Text; items : [Dispatch] };
   public type DispatchStatus = {
@@ -542,8 +550,8 @@ module {
     /// What the document is (minutes, an ordinance, an award), and the BCP 47 tags of its languages.
     kind : ?Text;
     languages : [Text];
-    /// Published to everyone, so readable without signing in, with `ref` pointing to content in clear.
-    public_ : Bool;
+    /// Published to everyone: the content in clear, readable without signing in.
+    public_ : ?Published;
     author : Principal;
     publications : [Publication];
     department : Text;
@@ -568,8 +576,14 @@ module {
     department : Text;
   };
   public type DocumentPage = { next : ?Text; items : [Document] };
-  /// With no `to`, the document becomes public. With an External journal, a Dispatch to it is queued too.
-  public type DocumentPublishArgs = { to : ?Text; document : Text };
+  /// Publishes the content in clear at `ref`, with its `hash`: the document becomes public. With an External
+  /// journal in `to`, a Dispatch to it is queued too.
+  public type DocumentPublishArgs = {
+    to : ?Text;
+    ref : Text;
+    hash : Text;
+    document : Text;
+  };
   public type DocumentRevokeArgs = {
     document : Text;
     principals : [Principal];
@@ -649,6 +663,7 @@ module {
     name : Text;
     channel : Text;
   };
+  /// A second external_add of the same id redefines the body.
   public type ExternalAddArgs = {
     kind : Text;
     name : Text;
@@ -877,7 +892,7 @@ module {
     reason : ?Ref;
   };
   public type InvoiceCheckArgs = { invoice : Text; on_behalf_of : ?Principal };
-  /// The items, if any, must sum to `amount` (InvalidArgument otherwise).
+  /// At least one item, and the items sum to `amount` (InvalidArgument otherwise).
   public type InvoiceCreateArgs = {
     due_at : ?Timestamp;
     payer : Ref;
@@ -889,8 +904,8 @@ module {
   };
   /// The invoice, and the account to pay it into.
   public type InvoiceCreated = { invoice : Invoice; pay_to : Account };
-  /// One line of an invoice. A negative amount is a discount or bonus. `legislation` is the provision that
-  /// charges it.
+  /// One line of an invoice. A negative amount is a discount or bonus. `quantity` is in the line's `unit`
+  /// (`m3`, `h`, a count when absent). `legislation` is the provision that charges it.
   public type InvoiceItem = {
     concept : Text;
     unit : ?Text;
@@ -909,7 +924,12 @@ module {
     limit : ?Nat32;
   };
   public type InvoiceStatus = { #Paid; #Overdue; #Cancelled; #Pending };
-  public type JoinArgs = { nickname : ?Text; code : ?Text; language : ?Text };
+  public type JoinArgs = {
+    nickname : ?Text;
+    code : ?Text;
+    language : ?Text;
+    home_zone : ?Text;
+  };
   public type JoinFederationArgs = { name : ?Text; capital : Principal };
   /// The least-populated active quarter a new member joins, and every quarter that takes joins.
   public type JoinTargets = { mode : ?Text; targets : [Text]; default : ?Text };
@@ -947,7 +967,7 @@ module {
     token_id : ?Nat;
     owner : Ref;
     metadata : Value;
-    area : ?Nat;
+    area : ?Area;
     kind : Text;
     assessment_ref : ?Text;
     /// What an assessor set for taxes based on the parcel, its value in the accounting currency and its area
@@ -957,11 +977,11 @@ module {
     width : Nat;
     registered_by : Principal;
   };
-  /// What the assessor set; a field left absent keeps its value. `legislation` is the provision the
-  /// assessment follows.
+  /// What the assessor sets, signing for it; a field left absent keeps its value. `legislation` is the
+  /// provision the assessment follows.
   public type LandAssessArgs = {
     value : ?Money;
-    area : ?Nat;
+    area : ?Area;
     land : Text;
     reference : ?Text;
     legislation : ?Text;
@@ -1083,8 +1103,9 @@ module {
   /// A licence by id, or the one of `kind` that `holder` holds.
   public type LicenseVerifyArgs = { id : ?Text; kind : ?Text; holder : ?Ref };
   public type ListArgs = { cursor : ?Text; limit : ?Nat32 };
-  /// Money the realm owes an outside lender. The money itself moves outside the realm; GGG records the debt
-  /// and its repayments.
+  /// Money the realm owes an outside lender, in the accounting currency (`symbol`), so that the treasury's
+  /// `debt_outstanding` is one sum. The money itself moves outside the realm; GGG records the debt and its
+  /// repayments.
   public type Loan = {
     id : Text;
     status : LoanStatus;
@@ -1097,14 +1118,13 @@ module {
     symbol : Text;
     facts : Value;
   };
-  /// `lender` is an External. `symbol` defaults to the accounting currency.
+  /// `lender` is an External; the loan is in the accounting currency. Governed by the root department.
   public type LoanCreateArgs = {
     fund : Text;
     rate : Ratio;
     term : Period;
     lender : Text;
     amount : Money;
-    symbol : ?Text;
     facts : ?Value;
   };
   public type LoanListArgs = {
@@ -1388,10 +1408,10 @@ module {
   public type PositionStatus = { #Open; #Closed; #Frozen };
   public type PrincipalPage = { next : ?Text; items : [Principal] };
   /// How a kind of application is decided: who starts it, the deadline for a decision, and what the realm's
-  /// silence means (`positive` grants, `negative` refuses). Keyed by the licence kind it governs.
+  /// silence means. Keyed by the licence kind it governs.
   public type Procedure = {
     id : Text;
-    silence : ?Text;
+    silence : ?Silence;
     legislation : ?Text;
     decision_deadline : ?Period;
     matter : ?Text;
@@ -1400,7 +1420,7 @@ module {
   };
   /// Defines, or redefines, the procedure of licences of `kind`.
   public type ProcedureDefineArgs = {
-    silence : ?Text;
+    silence : ?Silence;
     kind : Text;
     legislation : ?Text;
     decision_deadline : ?Period;
@@ -1435,7 +1455,8 @@ module {
     tally : Tally;
     title : Text;
     action : ProposalAction;
-    /// The rule that decides it (I-GOV-3): yes votes reach `threshold` of the basis, with the quorum met.
+    /// The rule that decides it (I-GOV-3): the yes votes exceed (realm-wide) or reach (a department) the
+    /// threshold of the basis, with the quorum met.
     threshold : Ratio;
     /// When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
     effective_at : ?Timestamp;
@@ -1449,7 +1470,7 @@ module {
     on_behalf_of : ?Principal;
     proposer : Principal;
     matter : ?Text;
-    /// A member whose vote decides a tie under the Cast basis.
+    /// An eligible member whose yes decides a tie under the Cast basis.
     casting_vote : ?Principal;
     department : ?Text;
     quorum : Ratio;
@@ -1470,7 +1491,8 @@ module {
     title : Text;
     action : ProposalAction;
     /// Stricter than the realm's or the department's rule, never weaker (InvalidArgument): a higher threshold
-    /// or quorum, Eligible where the default is Cast, a casting vote where there is none.
+    /// or quorum, Eligible where the default is Cast, a casting vote where there is none. A casting vote
+    /// under Eligible, or one naming a member who is not eligible, is InvalidArgument.
     threshold : ?Ratio;
     /// Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
     effective_at : ?Timestamp;
@@ -1540,6 +1562,8 @@ module {
     journal : Text;
     published_at : ?Timestamp;
   };
+  /// Content in clear: where it lives and its hash.
+  public type Published = { ref : Text; hash : Text };
   public type Quarter = {
     id : Text;
     status : QuarterStatus;
@@ -1707,7 +1731,7 @@ module {
     limit : ?Nat32;
   };
   public type RequestPage = { next : ?Text; items : [Request] };
-  /// Sets or moves the deadline; `extension_limit` is the latest it may be moved to.
+  /// Sets or moves the deadline, never past `extension_limit`, which is set once (Conflict after that).
   public type RequestSetDueArgs = {
     request : Text;
     due_at : Timestamp;
@@ -1761,10 +1785,13 @@ module {
     agents : [Text];
     delegable : [Text];
   };
+  /// What the realm's silence past a deadline means: Positive grants, Negative refuses.
+  public type Silence = { #Negative; #Positive };
   public type Tally = { no : Nat; yes : Nat; abstain : Nat; eligible : ?Nat };
   /// One operation scheduled for a time. It runs with the authority of whoever scheduled it, never as the
   /// realm's controller, and every guard and rule runs again when it does, so a task scheduled under old
-  /// legislation obeys the legislation in force on its date. `event` is the Event of its run.
+  /// legislation obeys the legislation in force on its date. The run writes the operation's own Event, with
+  /// origin `task`; `event` names it. There is no task_run operation.
   public type Task = {
     at : Timestamp;
     id : Text;
@@ -1895,8 +1922,14 @@ module {
     cursor : ?Text;
     limit : ?Nat32;
   };
-  /// Records that a notice of the tender appeared in `journal`, now.
-  public type TenderNoticeArgs = { ref : ?Text; journal : Text; tender : Text };
+  /// Records that a notice of the tender appeared in `journal`: an External of kind `journal`, or `realm` for
+  /// the realm's own journal. `at` defaults to now and is never in the future.
+  public type TenderNoticeArgs = {
+    at : ?Timestamp;
+    ref : ?Text;
+    journal : Text;
+    tender : Text;
+  };
   public type TenderPage = { next : ?Text; items : [Tender] };
   public type TenderStatus = {
     #Open;
@@ -2002,7 +2035,8 @@ module {
     home_quarter : ?Text;
     /// A BCP 47 language tag, for notices to the user.
     language : ?Text;
-    /// The Zone the user lives in, a district without a canister of its own.
+    /// The Zone the user lives in: a district the realm defined (zone_define), stated when joining or set by
+    /// user_edit.
     home_zone : ?Text;
     profiles : [Text];
     avatar : ?Text;
@@ -2080,6 +2114,8 @@ module {
   };
   public type VoteChoice = { #No; #Yes; #Abstain };
   public type WrappedKey = { principal : Principal; wrapped_dek : Blob };
+  /// A member's own home cell (an h3 index, set with zone_set, tied to `user`), or a zone the realm defines
+  /// with zone_define, such as a district, named by its id.
   public type Zone = {
     id : Text;
     metadata : Value;
@@ -2091,6 +2127,9 @@ module {
     population : Nat;
   };
   public type ZoneClearArgs = { zone : Text; on_behalf_of : ?Principal };
+  /// Defines a zone of the realm, such as a district, which members name as their home_zone; the same id
+  /// again redefines it.
+  public type ZoneDefineArgs = { kind : Text; name : Text; zone : Text };
   /// An h3 cell as the caller's home; it replaces the previous one.
   public type ZoneSetArgs = {
     kind : ?Text;
@@ -2168,10 +2207,9 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
-    ggg_budget_extend : shared BudgetExtendArgs -> async {
-        #Ok : Nat;
-        #Err : GggError;
-      };
+    /// Copies the previous period's adopted budget into the period named as Extended lines, without a vote,
+    /// and replies how many lines it copied; Conflict once the period has a proposed or adopted line.
+    ggg_budget_extend : shared Text -> async { #Ok : Nat; #Err : GggError };
     ggg_budget_propose : shared BudgetProposeArgs -> async {
         #Ok : Governed;
         #Err : GggError;
@@ -2481,7 +2519,7 @@ module {
       };
     ggg_judge_revoke : shared Text -> async { #Ok : Governed; #Err : GggError };
     ggg_land_assess : shared LandAssessArgs -> async {
-        #Ok : Governed;
+        #Ok : Land;
         #Err : GggError;
       };
     ggg_land_freeze : shared LandFreezeArgs -> async {
@@ -2963,6 +3001,10 @@ module {
       };
     ggg_zone_clear : shared ZoneClearArgs -> async {
         #Ok : Zone;
+        #Err : GggError;
+      };
+    ggg_zone_define : shared ZoneDefineArgs -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     ggg_zone_set : shared ZoneSetArgs -> async { #Ok : Zone; #Err : GggError };

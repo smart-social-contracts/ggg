@@ -22,6 +22,15 @@
       "unit": "the token's smallest unit (Token.decimals)",
       "rule": "Money computed from a ratio is rounded to the nearest cent, an exact half away from zero. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units. Money is never negative; SignedMoney may be, for a discount or bonus line."
     },
+    "area": {
+      "aliases": [
+        "Area"
+      ],
+      "candid": [
+        "nat"
+      ],
+      "unit": "square metres"
+    },
     "timestamp": {
       "aliases": [
         "Timestamp"
@@ -167,6 +176,10 @@
           "optional": true
         },
         "language": {
+          "type": "text",
+          "optional": true
+        },
+        "home_zone": {
           "type": "text",
           "optional": true
         }
@@ -2006,8 +2019,11 @@
           "type": "text"
         },
         "kind": {
-          "type": "text",
-          "optional": true
+          "type": "BudgetKind",
+          "values": [
+            "Revenue",
+            "Expense"
+          ]
         },
         "planned": {
           "type": "nat",
@@ -2031,23 +2047,20 @@
           "type": "nat",
           "kind": "money",
           "min": 0,
-          "derived": "the sum of the period's revenue lines"
+          "derived": "the sum of planned over the period's Revenue lines"
         },
         "expense": {
           "type": "nat",
           "kind": "money",
           "min": 0,
-          "derived": "the sum of the period's expense lines"
+          "derived": "the sum of planned over the period's Expense lines"
         }
       }
     },
     "budget_extend": {
       "operation": "ggg_budget_extend",
       "facts": {
-        "period": {
-          "type": "text"
-        },
-        "from_period": {
+        "id": {
           "type": "text"
         }
       }
@@ -2145,10 +2158,6 @@
           "type": "nat",
           "kind": "money",
           "min": 0
-        },
-        "symbol": {
-          "type": "text",
-          "optional": true
         },
         "term": {
           "type": "Period",
@@ -2649,6 +2658,7 @@
         },
         "area": {
           "type": "nat",
+          "kind": "area",
           "min": 0,
           "optional": true
         },
@@ -2678,6 +2688,20 @@
       "operation": "ggg_land_unfreeze",
       "facts": {
         "id": {
+          "type": "text"
+        }
+      }
+    },
+    "zone_define": {
+      "operation": "ggg_zone_define",
+      "facts": {
+        "zone": {
+          "type": "text"
+        },
+        "name": {
+          "type": "text"
+        },
+        "kind": {
           "type": "text"
         }
       }
@@ -3039,7 +3063,11 @@
           "optional": true
         },
         "silence": {
-          "type": "text",
+          "type": "Silence",
+          "values": [
+            "Positive",
+            "Negative"
+          ],
           "optional": true
         },
         "legislation": {
@@ -4105,6 +4133,12 @@
         "ref": {
           "type": "text",
           "optional": true
+        },
+        "at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "optional": true
         }
       }
     },
@@ -4717,15 +4751,32 @@
         "dispatch": {
           "type": "text"
         },
-        "at": {
-          "type": "nat64",
-          "kind": "timestamp",
-          "min": 0,
-          "optional": true
-        },
-        "receipt": {
-          "type": "text",
-          "optional": true
+        "outcome": {
+          "type": "DispatchOutcome",
+          "values": [
+            "Confirmed",
+            "Failed"
+          ],
+          "cases": {
+            "Confirmed": {
+              "type": "record",
+              "fields": {
+                "at": {
+                  "type": "nat64",
+                  "kind": "timestamp",
+                  "min": 0,
+                  "optional": true
+                },
+                "receipt": {
+                  "type": "text",
+                  "optional": true
+                }
+              }
+            },
+            "Failed": {
+              "type": "text"
+            }
+          }
         }
       }
     },
@@ -5349,6 +5400,12 @@
         "to": {
           "type": "text",
           "optional": true
+        },
+        "ref": {
+          "type": "text"
+        },
+        "hash": {
+          "type": "text"
         }
       }
     },
