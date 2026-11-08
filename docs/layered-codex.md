@@ -260,7 +260,7 @@ starting value comes from elsewhere, and only from inside its own realm:
 - The realm may set it by a realm-wide vote: `quarter_configure` on the capital takes a `timezone`
   for the `quarter` it names, which the capital sends to the quarter (`quarter.sync`) and the quarter
   applies. A malformed name is refused with `InvalidArgument` before any vote. `quarter_configure`
-  takes a `welcome_message` the same way (model §10).
+  takes a `welcome_message` for the `quarter` it names, in the same way (model §10).
 - In a federation, the capital's zone is the realm's official time, and a quarter's zone is its
   local time. Realm-wide counts are made on the capital: a federal vote has one `deadline`, set there
   once as an instant, and every quarter's leg keeps it. Effective times (below) are exact UTC
