@@ -408,11 +408,11 @@ are the grantor's, for the method they carry. A call in its confirm form through
   attributes, moving to another quarter and federal votes are never done directly under a grant: they
   are `confirm` (outside setup, [§2](#power-of-attorney)), filed as
   [pending actions](#pending-actions).
-- I-ID-11: A pending action runs at most once, only on its grantor's own approval that sends its hash,
-  within 24 hours of filing, and only while the grant it was filed under is active and still covers
-  its group, at approval and, for a read, at collection; its call never changes after filing. Neither a delegate, nor another member, nor
-  `call_for`, a codex, a task, a replayed proposal or any caller an implementation adds can approve or
-  decline it.
+- I-ID-11: A pending action runs at most once, only on its grantor's own approval that sends its
+  hash, within 24 hours of filing, and only while the grant it was filed under is active and still
+  covers its group, at approval and, for a read, at collection; its call never changes after filing.
+  Neither a delegate, nor another member, nor `call_for`, a codex, a task, a replayed proposal or
+  any caller an implementation adds can approve or decline it.
 - I-ID-12: A setup grant ends at launch: `setup_launch` removes the `setup` group from every grant,
   and a grant left with no group ends. `setup_launch` itself is never done under a grant nor prepared.
 - I-ID-13: No delegate of a member votes on a proposal that any delegate of the same member filed
