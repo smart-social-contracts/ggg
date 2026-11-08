@@ -504,15 +504,16 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_delegation_request_decide(_ : T.DelegationDecideArgs) : async Result<?T.Delegation> {
     nobody(caller, "self.delegate");
   };
-  // Pending actions (model §2). Nobody delegates here, so none is ever filed.
+  // Pending actions (model §2). Nobody delegates here, so none is ever filed. Any signed-in principal reads
+  // its own: a delegate that is no member reads the outcome of what it prepared.
 
   public query ({ caller }) func ggg_action_get(_ : Text) : async Result<?T.PendingAction> {
-    switch (requireMember(caller, "self.data_view")) { case (?e) return #Err(e); case null {} };
+    if (Principal.isAnonymous(caller)) return #Err(#Unauthenticated);
     #Ok(null);
   };
 
   public query ({ caller }) func ggg_action_list(args : T.ActionListArgs) : async Result<T.PendingActionPage> {
-    switch (requireMember(caller, "self.data_view")) { case (?e) return #Err(e); case null {} };
+    if (Principal.isAnonymous(caller)) return #Err(#Unauthenticated);
     none(args.cursor, args.limit);
   };
 

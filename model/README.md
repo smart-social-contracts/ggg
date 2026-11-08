@@ -103,10 +103,11 @@ method per operation:
   the same call, `Call { method; arg }`, and replaying it applies the change. A `delegable` operation
   whose arguments carry `on_behalf_of : opt principal` is called on the grantor's behalf with it; the
   other delegable operations are reached on a grantor's behalf through `call_for` and `read_for`
-  ([Pending actions](#pending-actions)), which also file a `confirm` operation as a pending action. A
-  `confirm` operation called through its own method with `on_behalf_of` is `Forbidden`, and the message
-  says to file it through `call_for`: the method's own reply type has no place for a pending action. A
-  `member` operation that carries `on_behalf_of` refuses it: it is the member's own act.
+  ([Pending actions](#pending-actions)), which also file a call in its `confirm` form (a `confirm`
+  operation, or a `direct` one whose condition holds) as a pending action. Such a call through its own
+  method with `on_behalf_of` is `Forbidden`, and the message says to file it through `call_for`: the
+  method's own reply type has no place for a pending action. A `member` operation that carries
+  `on_behalf_of` refuses it: it is the member's own act.
 - **Kinds.** `Ratio`, `Rate`, `Money`, `SignedMoney`, `Area`, `Timestamp`, `Duration` and `Period` are
   named aliases, so a field's unit and range can be read off `ggg.did`. [`facts.json`](../facts.json)
   lists them for every operation's facts, with every fact's range
@@ -216,8 +217,8 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `delegation_list`, `delegable_operations` | `self.data_view` | read, delegable | Alice's grants; the operations a permission-named grant covers: `[proposal.vote, proposal.create, …]` |
 | `delegation_groups` (the groups the caller can grant, each with its operations and their tiers) | `self.data_view` | read, delegable | Alice's Authorize page: "Vote for me", "Propose for me", "See my affairs and the realm", … |
 | `delegation_activity` (the events recorded under one grant, to its grantor or its delegate) | `self.data_view` | read, delegable | What `claude-conn` did under Alice's grant: two votes and a motion |
-| `action_get` (one pending action, to its grantor or its delegate; anyone else gets `Ok(null)`) | `self.data_view` | read, delegable | Claude reads `AC-12`: `done`, with the new account's id |
-| `action_list` (the caller's pending actions, as grantor or as delegate, optionally by status) | `self.data_view` | read, delegable | Alice's "Waiting for you": `AC-12` and `AC-13` |
+| `action_get` (one pending action, to its grantor or its delegate; anyone else gets `Ok(null)`) | `self.join` | read, delegable | Claude reads `AC-12`: `done`, with the new account's id |
+| `action_list` (the caller's pending actions, as grantor or as delegate, optionally by status) | `self.join` | read, delegable | Alice's "Waiting for you": `AC-12` and `AC-13` |
 | `action_approve` (by its hash), `action_decline` | `self.confirm` | | Alice approves `AC-12`: the realm adds the payout account as her own act. Never under a grant |
 | `action_withdraw` (by the delegate, as itself) | `self.join` | | Claude withdraws `AC-13` to file it again with the right address |
 | `call_for` (one call on a grantor's behalf: a `confirm` operation files a pending action, a `direct` one runs) | `self.join` (and the carried method's, held by the grantor) | | Claude: `{method: "ggg_payment_account_add", arg: …, on_behalf_of: "alice"}` → `Pending AC-12` |
@@ -254,7 +255,7 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
 
 - **Everything** (`group:*`) covers every group, those the grantor gains later included, and every
   operation a later release adds. It lasts at most 90 days, each group's own longest duration still
-  applies under it, and it never covers a `member` or `founder` operation.
+  applies under it, and it never covers a `member`, `founder` or `none` operation.
 - **Longest durations.** A grant of a group lasts at most the group's `longest`: one year, except
   `money` and `admin` (90 days) and `setup` (30 days, and never past Launch, I-ID-12). A grant naming
   several groups lasts at most the shortest. Nothing lasts more than one year (I-ID-6).
@@ -297,32 +298,38 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
 
 #### Pending actions
 
-A `confirm` operation ([§1](#operations)) is never done directly under a grant. The delegate prepares
-it, and the grantor's own approval runs it:
+A call in its confirm form (a `confirm` operation, or a `direct` one whose condition holds,
+[§1](#operations)) is never done directly under a grant. The delegate prepares it, and the grantor's own
+approval runs it:
 
 1. **Filing.** The delegate calls `call_for` with the method, its Candid-encoded arguments,
    `on_behalf_of` the grantor and an optional `note`. When the grant is active and covers the
    operation's group, the grantor acting for themselves would be allowed the call now, and fewer than
    10 actions are open between the two, the GOS stores a `PendingAction`, replies `Pending` with it and
-   notifies the grantor. Otherwise the call is refused as any delegated call would be. A `direct`
-   operation through `call_for` runs at once: `Done` with the method's own reply, Candid-encoded, or
-   `Proposed` with the proposal a governed call filed.
-2. **The record.** `call` is the exact call. `summary`, label and value lines, and `risk`, the sentence
+   notifies the grantor. Otherwise the call is refused as any delegated call would be. A call in its
+   direct form through `call_for` first meets every check a delegated call meets (the grant's groups and
+   limits, the inbox rule, the motion rule, I-ID-10), then runs: `Done` with the method's own reply,
+   Candid-encoded, or `Proposed` with the proposal a governed call filed under the grant.
+2. **The record.** `call` is the exact call: the GOS decodes `arg` with the method's own argument type
+   at filing, and later runs exactly that. `summary`, label and value lines, and `risk`, the sentence
    of the operation's group, are the realm's own words about the call: the delegate words neither.
    `note` is the delegate's text, shown apart. `hash` seals the record: the GOS computes it over at
    least the realm, the id, the call, the grantor, the delegate, the grant and `expires_at`, in a
-   canonical form of its own, and a client sends it back unchanged. `expires_at` is 24 hours after
-   `filed_at`. Nothing in the record changes after filing: to change the call, the delegate withdraws
-   the action and files another.
+   canonical form of its own, with sha256 or a stronger hash, and a client sends it back unchanged.
+   `expires_at` is 24 hours after `filed_at`. Nothing in the record changes after filing: to change the
+   call, the delegate withdraws the action and files another.
 3. **Deciding.** The grantor approves with `action_approve { action; hash }`, which carries no
    arguments, or declines with `action_decline`; the delegate withdraws its own with `action_withdraw`.
    An approval succeeds only if the caller is the grantor, the hash equals the stored one, the status
    is `pending` and `expires_at` has not passed, and the grant is still active and still covers the
-   group. The GOS then sets `approving` before it calls any other canister, runs the stored call as the
-   grantor with every check the grantor's own call would meet now (permission, guardrails, parties,
-   banned status), and stores the reply as `result`: `done`, or `failed`. A governed call becomes the
-   grantor's own proposal, with `Proposal.prepared_by` the delegate. An action left `approving` after
-   a trap ends `failed` and is never retried.
+   group. The GOS then sets `approving` before it calls any other canister, runs exactly the call it
+   decoded at filing, as the grantor, with every check the grantor's own call would meet now
+   (permission, guardrails, parties, banned status), and stores the reply as `result`, without what the
+   event log strips (a secret the operation returns, such as an invite code, is in the approval's own
+   reply alone): `done`, or `failed`. A governed call goes as the grantor's own call would: at once
+   where the governing department decides directly, else as the grantor's own proposal, with
+   `Proposal.prepared_by` the delegate. An action left `approving` after a trap ends `failed` and is
+   never retried.
 4. **Ending otherwise.** `expired` once `expires_at` passes; `void` once its grant is revoked,
    replaced, expires or loses the group. Unlike a proposal filed under a grant (I-ID-10), a pending
    action does not outlive its grant.
@@ -333,10 +340,12 @@ it, and the grantor's own approval runs it:
 `action_get` returns an action to its grantor or its delegate, and `Ok(null)` to anyone else;
 `action_list` pages the caller's actions as grantor or as delegate, optionally by status. `read_for`
 is the query twin of `call_for`: one read on the grantor's behalf, replying the method's own reply,
-Candid-encoded. Both refuse a method that is not in `ggg.did`, an update through `read_for` or a
-query through `call_for`, themselves, a `member` or `founder` operation, and `on_behalf_of` equal to
-the caller. They are the delegate's own calls (tier `none`): the grant and the permission checked are
-the grantor's, for the method they carry. A `confirm` operation called through its own method with
+Candid-encoded. Both carry only a `direct` or `confirm` operation, and refuse a method that is not in
+`ggg.did`, an update through `read_for` or a query through `call_for`, themselves, a `member`,
+`founder` or `none` operation, `on_behalf_of` equal to the caller, and an `arg` whose own
+`on_behalf_of` is set and differs from the outer one (`InvalidArgument`: there is no chaining through
+another grant). They are the delegate's own calls (tier `none`): the grant and the permission checked
+are the grantor's, for the method they carry. A call in its confirm form through its own method with
 `on_behalf_of` is `Forbidden`, with a message that says to file it through `call_for` ([§1](#operations)).
 
 ### Invariants
@@ -351,8 +360,8 @@ the grantor's, for the method they carry. A `confirm` operation called through i
 - I-ID-6: A grant by groups covers an operation only if it names the operation's group (or `group:*`),
   the grantor holds the operation's permission at the time of use (for an office group, through a seat
   in the named department; for an organization group, as an admin of the named organization), and the
-  group's longest duration since the grant's start has not passed. `group:*` never covers a `member` or
-  `founder` operation and lasts at most 90 days. A grant by permissions covers only the operations
+  group's longest duration since the grant's start has not passed. `group:*` never covers a `member`,
+  `founder` or `none` operation and lasts at most 90 days. A grant by permissions covers only the operations
   listed under [Power of attorney](#power-of-attorney). No grant covers a `signing` permission the
   signing policy keeps personal or `all`, and none lasts more than one year.
 - I-ID-7: A delegate acts only within `starts_at`…`expires_at` and while the grant is `active`.
@@ -362,7 +371,7 @@ the grantor's, for the method they carry. A `confirm` operation called through i
 - I-ID-10: A delegate's proposal is a motion, with no action. A delegable governed call made under a
   delegation is filed as a proposal, and the GOS records the grant it was filed under. It replays
   unless that grant was revoked or replaced, even if the grant has expired since, and only if the
-  grant could still make that call. A delegate does not vote on a proposal it filed. Granting or
+  grant could still make that call. A delegate does not vote on a proposal it filed or prepared. Granting or
   accepting power of attorney, approving a request for it, payout accounts, identity proofs,
   attributes, moving to another quarter and federal votes are never done directly under a grant: they
   are `confirm` (outside setup, [§2](#power-of-attorney)), filed as
@@ -370,8 +379,8 @@ the grantor's, for the method they carry. A `confirm` operation called through i
 - I-ID-11: A pending action runs at most once, only on its grantor's own approval that sends its hash,
   within 24 hours of filing, and only while the grant it was filed under is active and still covers
   its group; its call never changes after filing. Neither a delegate, nor another member, nor
-  `call_for`, a codex, a replayed proposal or any caller an implementation adds can approve or decline
-  it.
+  `call_for`, a codex, a task, a replayed proposal or any caller an implementation adds can approve or
+  decline it.
 - I-ID-12: A setup grant ends at launch: `setup_launch` removes the `setup` group from every grant,
   and a grant left with no group ends. `setup_launch` itself is never done under a grant nor prepared.
 - I-ID-13: No delegate of a member votes on a proposal that any delegate of the same member filed
@@ -1185,7 +1194,8 @@ outside the model.
 
 - Identity: `self.join`, `self.update_public_profile`, `self.update_private_data`,
   `self.change_quarter`, `self.invoice_refresh`, `self.data_view`, `self.data_manage`,
-  `self.delegate`, `self.confirm` (every user: approving or declining a pending action), `user.add`, `user.edit`, `user.delete`, `user.update_status`, `user.view`,
+  `self.delegate`, `self.confirm` (every user: approving or declining a pending action), `user.add`,
+  `user.edit`, `user.delete`, `user.update_status`, `user.view`,
   `invite.manage`, `identity.submit`, `identity.review`, `attribute.submit`, `attribute.review`,
   `role.assign`, `role.revoke`, `permission.grant`.
 - Departments: `org.create`, `org.appoint`, `org.expel`, `org.set_policy`, `org.grant_authority`,
@@ -1264,6 +1274,6 @@ There is no permission for raw database writes: everything is an operation.
 | D18 | Which vote may carry a governed call on another department's record | Decided 8 Nov 2026: a realm-wide proposal carries any call; a department's only a governed call whose governing department is that department or one below it, checked at creation and again when the action executes (I-GOV-13) |
 | D19 | Power of attorney by groups | Decided 8 Nov 2026: a grant names plain-language groups of operations ([`delegation.json`](../delegation.json)), not permissions, so a member reads what they hand over and every GOS and client show the same words; every operation has a tier, and an operation asks each time only if acting without the member would decide where their money or identity points, hand lasting power or keys to someone with no vote to follow, be their personal consent or signature, or take effect at once and be hard to undo; a grant made before groups keeps covering exactly what it did; limits are checked at use ([§2](#power-of-attorney)) |
 | D20 | How a delegate proposes a codex install | Decided 8 Nov 2026: as a `proposal_create` whose action is the `codex_install` call, which carries an action and so asks each time: the member approves the exact release before the realm votes. A member who holds `codex.install` may also let a delegate call `codex_install` itself: under `setup` during setup, direct; under `admin` after launch, a governed call filed as a proposal tied to the grant (I-ID-10). No new rule: the tiers decide |
-| D26 | The pending action's hash | Decided 8 Nov 2026: opaque. The GOS computes it over at least the realm, the id, the call, the grantor, the delegate, the grant and the expiry, in a canonical form of its own; a client sends it back unchanged, so GGG fixes no encoding and each GOS keeps its own ([§2](#pending-actions)) |
+| D26 | The pending action's hash | Decided 8 Nov 2026: opaque. The GOS computes it over at least the realm, the id, the call, the grantor, the delegate, the grant and the expiry, in a canonical form of its own, with sha256 or a stronger hash; a client sends it back unchanged, so GGG fixes no encoding and each GOS keeps its own ([§2](#pending-actions)) |
 | D27 | One generic call for a delegate | Decided 8 Nov 2026: `call_for`, and its query twin `read_for`, take a method's name and Candid-encoded arguments with `on_behalf_of`, and reply the method's own reply, the proposal a governed call filed, or the pending action a `confirm` call became; a refusal is the outer `Err`, so callers have one error path. Few argument records carry `on_behalf_of`, and a field cannot be added to the others without breaking their signatures. D7 stands: every operation keeps its typed method, and the generic call is the delegate's path alone |
-| D28 | A `confirm` operation called through its own method | Decided 8 Nov 2026: refused with `Forbidden` and a message that says to file it through `call_for`. The method's own reply type has no place for a pending action, and adding one to every `confirm` method's reply would break their signatures |
+| D28 | A call in its confirm form through its own method | Decided 8 Nov 2026: a `confirm` operation, or a `direct` one whose condition holds, called through its own method with `on_behalf_of` is refused with `Forbidden` and a message that says to file it through `call_for`. The method's own reply type has no place for a pending action, and adding one to every such method's reply would break their signatures |

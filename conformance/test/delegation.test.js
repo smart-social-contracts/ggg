@@ -60,7 +60,7 @@ test('the groups are the design\'s, each with its texts, parameter and longest d
   }
   assert.equal(everything.scope, 'group:*');
   assert.equal(everything.longest, 90 * DAY);
-  assert.deepEqual(everything.never, ['member', 'founder']);
+  assert.deepEqual(everything.never, ['member', 'founder', 'none']);
   oneSentence(everything.summary, 'everything.summary');
   oneSentence(everything.warning, 'everything.warning');
 });

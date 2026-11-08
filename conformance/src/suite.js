@@ -343,7 +343,7 @@ export function updateTable() {
 }
 
 /** A method's arguments, Candid-encoded with its own types, as the generic call carries them. */
-export function encodeArgs(method, args) {
+function encodeArgs(method, args) {
   const [, fn] = idlFactory({ IDL })._fields.find(([name]) => name === method);
   return new Uint8Array(IDL.encode(fn.argTypes, args));
 }
@@ -881,7 +881,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     return weaker.map(([what]) => what).join(', ');
   });
 
-  await check('GGG', 'W21', 'the generic call refuses to carry a member-only operation', async () => {
+  await check('GGG', 'W21', 'the generic call refuses to carry a member-only operation on behalf of a stranger', async () => {
     needMember();
     const stranger = Ed25519KeyIdentity.generate().getPrincipal();
     const blanks = Object.fromEntries(updateTable());

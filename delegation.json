@@ -134,7 +134,7 @@
     "summary": "Every group, including groups you gain later and operations a later release adds; preparing every act that asks you each time.",
     "warning": "Everything you can do in this realm, now and later, for up to 90 days. A few acts still ask you each time.",
     "longest": 7776000,
-    "never": ["member", "founder"]
+    "never": ["member", "founder", "none"]
   },
   "conditions": {
     "with_action": "The proposal carries an action.",
