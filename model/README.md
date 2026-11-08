@@ -337,9 +337,9 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 - I-GOV-3: A proposal is accepted only if its quorum and threshold are met when its vote ends. Its rule,
   `threshold`, `quorum`, `threshold_of` and `casting_vote`, states the one that decides it, and that rule
   is applied; it is fixed when the vote opens, together with `tally.eligible` and `tally.seats`: at
-  creation for a proposal filed open, at `proposal_open` for a draft, which then takes the stricter of
-  the rule it stated and the scope's default of that moment, never a weaker one; after that it never
-  moves, like the action. One comparison per scope:
+  creation for a proposal filed open, at `proposal_open` for a draft, which then takes, for each of
+  threshold, quorum and basis, the stricter of the rule it stated and the scope's default of that
+  moment, never a weaker one; after that it never moves, like the action. One comparison per scope:
   - A **realm-wide** proposal takes the realm's `voting_threshold` and `voting_quorum`, over the votes
     `cast`: it is accepted when the votes cast reach the quorum of the eligible voters and the yes votes
     *exceed* `threshold` of the yes and no votes. Over the `eligible` voters, the yes votes must exceed
@@ -471,7 +471,8 @@ There is no balance entity: the ledgers are the source of truth.
 - `Trade.status`: `pending` → `completed` | `failed`.
 - `Transfer.status`: `sending` (ledger call in flight) → `completed` | `failed`; `sending` → `pending` (ledger refused) → `failed` (reverted).
 - `Budget.status`: `draft` → `proposed` → `adopted` → `amended`* → `closed`; `extended` (copied from the
-  previous period by `budget_extend`) → `closed`.
+  previous period by `budget_extend`) → `amended` (replaced by the fund's adopted budget) | `closed`
+  (with its period).
 - `FiscalPeriod.status`: `open` → `closed` → `archived`.
 - `AllocationRule.status`, `TaxPolicy.status`: `draft` → `proposed` → `adopted` → `superseded`.
 - `TaxDeclaration.status`: `filed` → `assessed` → `settled` | `disputed`.
@@ -534,12 +535,23 @@ the `draft` lines left (`Conflict` when there are none), and the execution adopt
 proposal's lines. A proposal that ends without adopting them (`rejected`, `expired`, `withdrawn`,
 stopped, or `failed`) returns them to `draft`, with no proposal, so the fund's budget can be proposed
 again. When a period opens, `budget_extend` copies,
-for each fund with no `extended`, `proposed` or `adopted` line in it yet, the previous period's adopted
-lines of that fund into it as `extended`, without a vote; they hold until an adopted budget of that
-fund replaces them, and adopting one fund's lines neither blocks nor replaces another fund's
-extensions; when no fund is left to extend it is refused with `Conflict`, while `draft` lines stand in
-no way. A `budget_propose` whose derived total, `revenue` or `expense`, is out of Money's range is
-refused with `InvalidArgument`, like any other fact.
+for each fund with no `extended`, `proposed` or `adopted` line in it yet, the lines of that fund that
+stood at the previous period's end, `adopted`, `extended` or `closed` with it, into the new period as
+`extended`, without a vote, so a budget extended twice carries over; they hold until an adopted budget
+of that fund replaces them, which makes them `amended`, so a category the adopted budget dropped does
+not come back at the next extension; adopting one fund's lines neither blocks nor replaces another
+fund's extensions; when no fund is left to extend it is refused with `Conflict`, while `draft` lines
+stand in no way. An adopted budget is exhaustive for its fund: once a fund has an adopted budget for a
+period, a `transfer_create` from it in that period names a category with an adopted `expense` line,
+and any other is refused with `Conflict`; a transfer with no category counts as the category
+`transfer`; a fund with only extended lines, or with none, spends as before. The ledger's fee for a
+payment is exempt: a mechanical cost of the payment, booked as its own line, not a spending decision;
+every other category, an uncategorised transfer and payroll included, needs a line once the fund's
+budget is adopted. Within a fund and period a category is either `revenue` or `expense`: a draft whose
+fund, period and category already have a line of the other kind is refused with `InvalidArgument`,
+and `budget_extend` leaves out a line whose category the new period already holds as the other kind.
+A `budget_propose` whose derived total, `revenue` or `expense`, is out of Money's
+range is refused with `InvalidArgument`, like any other fact.
 
 ### Invariants
 
@@ -980,7 +992,8 @@ A **revert** restores any earlier codex in the realm's history: `codex_revert` n
 none for the one the active codex replaced. A checksum not in the history is `NotFound`; a revert with
 nothing to restore is `Conflict`, and so is naming the active codex or a pending one, which are not
 earlier codices: a pending codex is activated only by `codex_activate`. A revert filed as a proposal
-names the codex it restores, resolved when it is filed, so what is voted on is what runs. The restored
+names the codex it restores, resolved when it is filed, so what is voted on is what runs; a
+`proposal_create` carrying a revert that names none is refused with `InvalidArgument`. The restored
 codex is `active` again and the one it displaces `reverted`, and a revert never runs
 `on_codex_activate`. A GOS reserves its revert operations, so no
 legislation can refuse or delay one ([layered codex §1](../docs/layered-codex.md#1-chapters-use-gggs-operations-directly)),
@@ -1244,4 +1257,5 @@ There is no permission for raw database writes: everything is an operation.
 | D19 | Which department governs a change of parent, `department_delete`, `fund_create` and `budget_propose` | Decided 8 Nov 2026: a change of `parent` is governed by the lowest department that is, or is above, both the old and the new parent (an unknown new parent is `NotFound`), and every other edit by the department itself; `department_delete` by the parent, the root for a top-level department, never the root (`InvalidArgument`) nor a department that owns a fund (`Conflict`); creating an owned record, `fund_create`, by the owner named; `budget_propose` by the owner of the `fund` it names, or by the root when it names none and proposes every fund's lines; its lines are fixed when it files (`proposed`, with the proposal), a later one takes only `draft` lines, its totals are the sums over the lines it proposes, and `budget_extend` and the replacement of extended lines are per fund (§1, §3, §5) |
 | D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3) |
 | D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the nearest cent (a multiple of 10^(decimals − 2) smallest units); never bracket by bracket (§5) |
+| D24 | What replaces a fund's extended lines, and what an adopted budget allows | Decided 9 Nov 2026: an adopted budget that replaces a fund's extended lines makes them `amended`, so a category it dropped does not come back at the next extension (`closed` keeps meaning closed with its period); `budget_extend` carries what stood at the previous period's end, adopted, extended or closed with it, leaving out a category the new period holds as the other kind; once a fund has an adopted budget for a period, a transfer from it in a category with no adopted expense line is refused (`Conflict`), a transfer with no category counting as `transfer`, while a fund with only extended lines, or none, spends as before, and the ledger's fee for a payment is exempt; within a fund and period a category is either revenue or expense, a draft of the other kind `InvalidArgument` (§5) |
 | D25 | What `codex_revert` restores | Decided 8 Nov 2026: any earlier codex in the history, named by its checksum, or the one the active codex replaced when none is named (`opt CodexRevertArgs`, so existing callers keep working); a revert filed as a proposal names the codex it restores; the active or a pending codex is not an earlier one (`Conflict`); never `on_codex_activate`; which rule decides the vote is the GOS's (§11) |

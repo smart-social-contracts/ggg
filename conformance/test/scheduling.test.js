@@ -593,3 +593,63 @@ test('budget lines return to draft when their proposal ends without adopting the
   assert.equal(tag((await finalizeAndRun(carried)).status), 'Executed');
   refusedWith(await as(bob).ggg_budget_propose(budget('FY2028', 'COUNCIL')), 'Conflict');
 });
+
+test('an adopted budget makes the extended lines it replaces amended, and is exhaustive for its fund', async () => {
+  const open = (period) => as(bob).ggg_period_open({ period, name: [], starts_at: 0n, ends_at: 0n });
+  const spend = (fund, category) => as(bob).ggg_transfer_create({
+    fund,
+    to: { kind: 'User', id: alice.getPrincipal().toText() },
+    amount: 10n,
+    symbol: [],
+    category: category ? [category] : [],
+    description: [],
+    contract: [],
+    on_behalf_of: [],
+  });
+  const expense = (fund, period, category) => ({ ...lineArgs(fund, period), category });
+  const revenue = (fund, period, category) => ({ ...expense(fund, period, category), kind: { Revenue: null } });
+  const draft = async (args) => ok(await as(bob).ggg_budget_draft(args));
+  const adopt = async (period, fund) => ok(await as(bob).ggg_budget_propose(budget(period, fund)));
+
+  // Two funds of the root, so everything applies at once. P1: LIBRARY plans books and events (expenses)
+  // and fees (revenue); ARCHIVE plans storage. A category is either revenue or expense.
+  for (const fund of ['LIBRARY', 'ARCHIVE']) assert.deepEqual(ok(await as(bob).ggg_fund_create(fundArgs(fund))), { Done: [fund] });
+  assert.deepEqual(ok(await open('P1')), { Done: ['P1'] });
+  refusedWith(await open('P1'), 'Conflict');
+  refusedWith(await as(bob).ggg_budget_extend('P1'), 'Conflict'); // no period before it
+  for (const category of ['books', 'events']) await draft(expense('LIBRARY', 'P1', category));
+  refusedWith(await as(bob).ggg_budget_draft(revenue('LIBRARY', 'P1', 'books')), 'InvalidArgument');
+  await draft(revenue('LIBRARY', 'P1', 'fees'));
+  await draft(expense('ARCHIVE', 'P1', 'storage'));
+  await adopt('P1', 'LIBRARY');
+  await adopt('P1', 'ARCHIVE');
+
+  // P2 opens. The extension carries what stood at P1's end, fund by fund, but not a category P2 already
+  // holds as the other kind: LIBRARY drafted events as revenue, so books and fees carry over, and storage.
+  ok(await open('P2'));
+  refusedWith(await as(bob).ggg_budget_extend('P9'), 'NotFound');
+  await draft(revenue('LIBRARY', 'P2', 'events'));
+  assert.equal(ok(await as(bob).ggg_budget_extend('P2')), 3n);
+  refusedWith(await as(bob).ggg_budget_extend('P2'), 'Conflict'); // every fund has its lines
+  // With only extended lines a fund spends as before, in any category.
+  assert.deepEqual(ok(await spend('LIBRARY', 'music')), { Done: [] });
+
+  // LIBRARY adopts its P2 budget: books and transfer as expenses, events as revenue. The extended lines
+  // are amended. Only an adopted expense line allows spending; no category is the category "transfer".
+  await draft(expense('LIBRARY', 'P2', 'books'));
+  await draft(expense('LIBRARY', 'P2', 'transfer'));
+  await adopt('P2', 'LIBRARY');
+  assert.deepEqual(ok(await spend('LIBRARY', 'books')), { Done: [] });
+  assert.deepEqual(ok(await spend('LIBRARY', null)), { Done: [] });
+  refusedWith(await spend('LIBRARY', 'events'), 'Conflict'); // a revenue line
+  refusedWith(await spend('LIBRARY', 'music'), 'Conflict'); // no line
+  // A fund with only extended lines, and one with no budget, spend as before.
+  assert.deepEqual(ok(await spend('ARCHIVE', 'anything')), { Done: [] });
+  assert.deepEqual(ok(await spend('GENERAL', 'anything')), { Done: [] });
+
+  // P3's extension carries LIBRARY's three adopted lines (the amended fees does not come back) and
+  // ARCHIVE's storage, extended a second time.
+  ok(await open('P3'));
+  assert.equal(ok(await as(bob).ggg_budget_extend('P3')), 4n);
+  refusedWith(await as(bob).ggg_budget_extend('P3'), 'Conflict');
+});
