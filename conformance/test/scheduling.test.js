@@ -594,7 +594,7 @@ test('budget lines return to draft when their proposal ends without adopting the
   refusedWith(await as(bob).ggg_budget_propose(budget('FY2028', 'COUNCIL')), 'Conflict');
 });
 
-test('an adopted budget makes the extended lines it replaces amended, and is exhaustive for its fund', async () => {
+test('an adopted budget amends the extended lines and an earlier line of the same category, and is exhaustive for its fund', async () => {
   const open = (period) => as(bob).ggg_period_open({ period, name: [], starts_at: 0n, ends_at: 0n });
   const spend = (fund, category) => as(bob).ggg_transfer_create({
     fund,
@@ -646,9 +646,19 @@ test('an adopted budget makes the extended lines it replaces amended, and is exh
   // A fund with only extended lines, and one with no budget, spend as before.
   assert.deepEqual(ok(await spend('ARCHIVE', 'anything')), { Done: [] });
   assert.deepEqual(ok(await spend('GENERAL', 'anything')), { Done: [] });
+  // Only the fee line the realm books itself is exempt: no transfer names its category, budget or not.
+  refusedWith(await spend('LIBRARY', 'ledger_fee'), 'InvalidArgument');
+  refusedWith(await spend('GENERAL', 'ledger_fee'), 'InvalidArgument');
 
-  // P3's extension carries LIBRARY's three adopted lines (the amended fees does not come back) and
-  // ARCHIVE's storage, extended a second time.
+  // A later adopted books line amends the earlier one: one line stands per fund, period and category,
+  // and books is still budgeted.
+  await draft(expense('LIBRARY', 'P2', 'books'));
+  await adopt('P2', 'LIBRARY');
+  assert.deepEqual(ok(await spend('LIBRARY', 'books')), { Done: [] });
+
+  // P3's extension carries the three LIBRARY lines that stood at P2's end (the newest books, transfer
+  // and events; neither the amended fees nor the first books line comes back) and ARCHIVE's storage,
+  // extended a second time.
   ok(await open('P3'));
   assert.equal(ok(await as(bob).ggg_budget_extend('P3')), 4n);
   refusedWith(await as(bob).ggg_budget_extend('P3'), 'Conflict');

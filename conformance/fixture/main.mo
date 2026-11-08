@@ -908,15 +908,17 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case null drafts(args);
     };
     if (lines.size() == 0) return #Err(#Conflict("no line of " # args.period # " to adopt"));
-    for ((n, b) in lines.vals()) Map.add(budgets, Nat.compare, n, { b with status = #Adopted });
-    // The fund's extended lines are replaced: amended, so a dropped category does not come back (D24).
-    for ((_, adopted) in lines.vals()) {
+    // The fund's extended lines, and an earlier adopted line of the same category, are replaced: amended,
+    // so a dropped category does not come back and one line stands per fund, period and category (D24,
+    // D30). The new lines are still proposed or draft here, so they are not caught.
+    for ((_, line) in lines.vals()) {
       for ((n, b) in Iter.toArray(Map.entries(budgets)).vals()) {
-        if (b.status == #Extended and b.fund == adopted.fund and b.period == adopted.period) {
-          Map.add(budgets, Nat.compare, n, { b with status = #Amended });
-        };
+        let replaced = b.fund == line.fund and b.period == line.period and
+          (b.status == #Extended or (b.status == #Adopted and b.category == line.category));
+        if (replaced) Map.add(budgets, Nat.compare, n, { b with status = #Amended });
       };
     };
+    for ((n, b) in lines.vals()) Map.add(budgets, Nat.compare, n, { b with status = #Adopted });
     audit("budget_propose", caller, #Map([("period", #Text(args.period)), ("lines", #Nat(lines.size()))]), #Text("ok"));
     #Ok(null);
   };
@@ -979,10 +981,15 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     #Ok(copied);
   };
 
+  /// The ledger's fee, the one line a GOS books itself and the only one exempt from an adopted budget: no
+  /// transfer names it (model §5, D30).
+  let FEE_CATEGORY = "ledger_fee";
+
   /// An adopted budget is exhaustive for its fund: in the current period, a transfer from a fund with an
   /// adopted budget names a category with an adopted expense line; one with no category is the
   /// category "transfer" (model §5, D24).
   func checkSpending(args : T.TransferCreateArgs) : ?T.GggError {
+    if (args.category == ?FEE_CATEGORY) return ?#InvalidArgument("category " # FEE_CATEGORY # " is the ledger's fee, booked by the realm itself");
     let ?period = currentPeriod() else return null;
     let adopted = linesOf(args.fund, period, [#Adopted]);
     if (adopted.size() == 0) return null;
