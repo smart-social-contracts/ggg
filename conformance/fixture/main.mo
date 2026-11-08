@@ -2,14 +2,14 @@
 /// Members are fixed at install time. They may propose, vote, manage proposals (open, finalize,
 /// execute and stop them), set the realm's governance rule (governance_update, which the root's direct
 /// policy applies at once), read the realm, manage their own profile, and submit and review attributes
-/// (every member holds attribute.review here, and the audit log keeps an attribute's id, never its kind
-/// or value); every other permission is held by nobody, so those operations are refused. There are
-/// four departments: the root, with a direct policy, so a governed call on a realm-wide proposal is
-/// applied at once; a council under
-/// it, deciding 2 of 3 with a 60 % quorum, so a governed call on one of its proposals files a
-/// proposal instead; and two committees under the council, each deciding alone, so that a proposal
-/// of the council can carry a call on a committee's records where a committee's cannot carry one on
-/// its sibling's (I-GOV-13).
+/// (every member holds attribute.review here, without a scope, so each reads and decides every pending
+/// attribute but their own, and the audit log keeps an attribute's id, never its kind or value); every
+/// other permission is held by nobody, so those operations are refused. There are four departments:
+/// the root, with a direct policy, so a governed call on a realm-wide proposal is applied at once; a
+/// council under it, deciding 2 of 3 with a 60 % quorum, so a governed call on one of its proposals
+/// files a proposal instead; and two committees under the council, each deciding alone, so that a
+/// proposal of the council can carry a call on a committee's records where a committee's cannot carry
+/// one on its sibling's (I-GOV-13).
 /// Members may also edit a department (department_edit, governed by that department, or by the lowest
 /// department above both the old and the new parent when it moves) and delete one that has none below
 /// it (department_delete, governed by its parent), so a committee can be moved or removed while a
@@ -164,8 +164,9 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   /// When the last eligible member voted. A vote ends then, if its deadline has not come first.
   let everyoneVotedAt = Map.empty<Nat, T.Timestamp>();
   let events = Map.empty<Nat, T.Event>();
-  // The members' attributes (model §2) by id; a member's `human` is their principal here.
-  let attributes = Map.empty<Text, T.Attribute>();
+  // The members' attributes (model §2) by the n of their id `A-<n>`; a member's `human` is their
+  // principal here.
+  let attributes = Map.empty<Nat, T.Attribute>();
   var nextAttribute = 1;
   var nextProposal = 1;
   // Funds and budget lines (model §5): enough to govern a budget by its fund's owner (D19).
@@ -535,10 +536,28 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   };
 
   /// The attributes awaiting review, kind and value in clear, for the holders of attribute.review
-  /// (model §2, I-PRV-1).
+  /// (model §2, I-PRV-1). The cursor is the id of the last attribute returned and the page continues
+  /// after it, so deciding a page skips none.
   public query ({ caller }) func ggg_attribute_pending_list(args : T.ListArgs) : async Result<T.AttributePage> {
     switch (requireMember(caller, "attribute.review")) { case (?e) return #Err(e); case null {} };
-    page(Iter.filter<T.Attribute>(Map.values(attributes), func(a) { a.status == #Pending }), args.cursor, args.limit);
+    let after = switch (args.cursor) {
+      case null 0;
+      case (?c) { let ?n = attributeNumber(c) else return #Err(#InvalidArgument("unknown cursor")); n };
+    };
+    let pending = Iter.filter<(Nat, T.Attribute)>(Map.entries(attributes), func((n, a)) { n > after and a.status == #Pending });
+    let size = pageSize(args.limit);
+    let items = Iter.toArray(Iter.map<(Nat, T.Attribute), T.Attribute>(Iter.take(pending, size + 1), func((_, a)) { a }));
+    if (items.size() > size) {
+      #Ok({ items = Array.sliceToArray(items, 0, size); next = ?items[size - 1].id });
+    } else {
+      #Ok({ items; next = null });
+    };
+  };
+
+  /// The n of an attribute id `A-<n>`.
+  func attributeNumber(id : Text) : ?Nat {
+    let ?rest = Text.stripStart(id, #text "A-") else return null;
+    Nat.fromText(rest);
   };
 
   public query func ggg_delegable_operations() : async Result<[T.DelegableOperation]> {
@@ -649,8 +668,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       verified_at = null;
       expires_at = args.expires_at;
     };
+    Map.add(attributes, Nat.compare, nextAttribute, attribute);
     nextAttribute += 1;
-    Map.add(attributes, Text.compare, attribute.id, attribute);
     audit("attribute_submit", caller, #Map([("attribute", #Text(attribute.id))]), #Text(attribute.id));
     #Ok(attribute);
   };
@@ -659,13 +678,17 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   /// value (I-PRV-1).
   public shared ({ caller }) func ggg_attribute_review(args : T.AttributeReviewArgs) : async Result<T.Attribute> {
     switch (requireMember(caller, "attribute.review")) { case (?e) return #Err(e); case null {} };
-    let ?a = Map.get(attributes, Text.compare, args.attribute) else return #Err(#NotFound);
+    let ?n = attributeNumber(args.attribute) else return #Err(#NotFound);
+    let ?a = Map.get(attributes, Nat.compare, n) else return #Err(#NotFound);
+    if (a.human == Principal.toText(caller)) {
+      return #Err(#Forbidden({ permission = ?"attribute.review"; message = "Nobody decides their own attribute (I-ALL-3)." }));
+    };
     if (a.status != #Pending) return #Err(#Conflict("attribute " # a.id # " is decided already"));
     let (reviewed, decision) = switch (args.status) {
       case (#Verified) ({ a with status = #Verified; verified_at = ?now() }, "verified");
       case (#Rejected) ({ a with status = #Rejected }, "rejected");
     };
-    Map.add(attributes, Text.compare, a.id, reviewed);
+    Map.add(attributes, Nat.compare, n, reviewed);
     audit("attribute_review", caller, #Map([("attribute", #Text(a.id))]), #Text(decision));
     #Ok(reviewed);
   };

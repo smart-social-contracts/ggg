@@ -52,6 +52,7 @@ test('a member submits an attribute, pending review', async () => {
   assert.equal(tag(submitted.status), 'Pending');
   assert.equal(submitted.kind, 'large_family');
   refusedWith(await as(alice).ggg_attribute_submit(submission('', 'x')), 'InvalidArgument');
+  refusedWith(await as(alice).ggg_attribute_submit(submission('x', '')), 'InvalidArgument');
   refusedWith(await as(stranger).ggg_attribute_submit(submission('a', 'b')), 'Forbidden');
 });
 
@@ -64,7 +65,8 @@ test('the holders of attribute.review read the pending attributes with kind and 
   assert.deepEqual(await own(alice, 'other'), []);
 });
 
-test('a review decides a pending attribute once', async () => {
+test('a review decides a pending attribute once, and never one\'s own', async () => {
+  refusedWith(await as(alice).ggg_attribute_review({ attribute: submitted.id, status: { Verified: null } }), 'Forbidden');
   const verified = ok(await as(bob).ggg_attribute_review({ attribute: submitted.id, status: { Verified: null } }));
   assert.equal(tag(verified.status), 'Verified');
   assert.equal(verified.verified_at.length, 1);
@@ -85,4 +87,17 @@ test('the audit log keeps an attribute\'s id, never its kind or value', async ()
   const text = JSON.stringify(about, (_, x) => (typeof x === 'bigint' ? `${x}n` : x));
   for (const secret of ['large_family', 'general', 'student', 'full_time']) assert.ok(!text.includes(secret), `${secret} is not in the audit log`);
   assert.ok(text.includes(submitted.id));
+});
+
+test('the pending list pages by id, so deciding a page skips none', async () => {
+  const ids = [];
+  for (const kind of ['disability', 'student', 'veteran']) ids.push(ok(await as(alice).ggg_attribute_submit(submission(kind, 'yes'))).id);
+  const first = ok(await as(bob).ggg_attribute_pending_list({ cursor: [], limit: [2] }));
+  assert.deepEqual(first.items.map((a) => a.id), ids.slice(0, 2));
+  assert.deepEqual(first.next, [ids[1]]);
+  for (const id of ids.slice(0, 2)) ok(await as(bob).ggg_attribute_review({ attribute: id, status: { Verified: null } }));
+  const second = ok(await as(bob).ggg_attribute_pending_list({ cursor: first.next, limit: [2] }));
+  assert.deepEqual(second.items.map((a) => a.id), [ids[2]]);
+  assert.deepEqual(second.next, []);
+  refusedWith(await as(bob).ggg_attribute_pending_list({ cursor: ['2'], limit: [] }), 'InvalidArgument');
 });

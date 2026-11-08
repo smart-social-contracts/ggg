@@ -2067,7 +2067,8 @@ service : {
   ggg_invite_list : (ListArgs) -> (variant { Ok : InvitePage; Err : GggError }) query;
   ggg_delegation_list : (DelegationListArgs) -> (variant { Ok : DelegationPage; Err : GggError }) query;
   ggg_attribute_list : (AttributeListArgs) -> (variant { Ok : AttributePage; Err : GggError }) query;
-  // The attributes awaiting review, for the holders of attribute.review (I-PRV-1).
+  // The attributes awaiting review, for the holders of attribute.review (I-PRV-1); the cursor continues
+  // after the last attribute returned, so deciding a page skips none.
   ggg_attribute_pending_list : (ListArgs) -> (variant { Ok : AttributePage; Err : GggError }) query;
   ggg_delegable_operations : () -> (variant { Ok : vec DelegableOperation; Err : GggError }) query;
   ggg_me : (MeArgs) -> (variant { Ok : Me; Err : GggError }) query;
