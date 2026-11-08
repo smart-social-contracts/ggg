@@ -29,8 +29,10 @@ operations, and GGG's arguments, events and entities are the whole interface:
 | forbid | a Cedar rule on `<operation>` | before the operation, by the Cedar engine | the operation's args as **facts** | forbid |
 
 - **Facts are arguments.** A forbid's facts are the operation's arguments, as the model defines them;
-  a Cedar action is named after the operation (`tax_policy_propose`). The model's fact schema types
-  each argument, so a GOS can validate the generated Cedar.
+  a Cedar action is named after the operation (`tax_policy_propose`). A forbid that ranges over a list
+  (§3.2) is named after the operation and the list (`tax_policy_propose.taxes`), and its facts are the
+  element's fields. The model's fact schema types each argument, so a GOS can validate the generated
+  Cedar.
 - **Effects are operations.** A hook changes nothing itself. It queues GGG operations, which the GOS
   runs as the realm, under the same permissions as any caller.
 - **Entity reads are read-only.** A chapter may read entities (`Member`, `Land`, `TaxPolicy`); it
@@ -140,7 +142,9 @@ No layer of legislation names a department of a lower layer.
   operation passes its inputs and uses what comes back.
 - **A forbid that ranges over a list.** `tax_policy_propose` carries only a policy id; the rule
   concerns each entry of the saved policy. The forbid is evaluated once per element, with the element's
-  fields as facts, and the Cedar engine sees one request per element.
+  fields as facts, and the Cedar engine sees one request per element, on the Cedar action
+  `<operation>.<list>` (`tax_policy_propose.taxes`), whose facts are the element's type. The same forbids
+  run when a draft is saved, on `tax_policy_draft.taxes`.
 - **`CodexStatus` `Pending` and `codex_activate`.** A codex can be installed, checked and ready
   before it is in force: `Pending`. `ggg_codex_activate { codex; at }` makes it active, and its hook
   `on_codex_activate` is the realm's own entry point (§1). With `effective_at` on proposals (§6) the
@@ -152,6 +156,8 @@ No layer of legislation names a department of a lower layer.
 
 - **A fact's unit is declared by its schema entry,** never by a suffix in its name: `rate`, not
   `rate_bp`.
+- **So are its range and its allowed values,** where it has them. A Cedar schema cannot state them, so
+  a GOS's analysis tools take them from here as assumptions about every request.
 - **Every ratio is an integer in hundred-millionths:** 100 % is 100 000 000, 1 % is 1 000 000 and
   0.123456 % is 123 456. One scale covers tax rates, quorum, thresholds, shares and weights alike.
   Integers inside, decimals for people: a GOS shows `0.123456 %`, and a chapter writes a rate as the
