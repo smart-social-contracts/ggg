@@ -47,16 +47,20 @@ test('every kind is declared by named aliases of ggg.did, with the ratio scale a
   }
   const quorum = actions.department_set_policy.facts.policy.fields.quorum;
   assert.deepEqual([quorum.kind, quorum.min, quorum.max], ['ratio', 0, WHOLE]);
+  const rate = actions['tax_policy_draft.taxes'].facts.rate;
+  assert.deepEqual([rate.kind, rate.min, rate.max, rate.optional], ['ratio', 0, 100 * WHOLE, true]);
   const amount = actions.invoice_create.facts.amount;
-  assert.deepEqual([amount.kind, amount.type, amount.min], ['money', 'nat', 0]);
+  assert.deepEqual([amount.kind, amount.type, amount.min, amount.max], ['money', 'nat', 0, 9_007_199_254_740_991]);
   const line = actions['invoice_create.items'].facts.amount;
-  assert.deepEqual([line.kind, line.type, line.min], ['money', 'int', undefined]);
+  assert.deepEqual([line.kind, line.type, line.min, line.max], ['money', 'int', -9_007_199_254_740_991, 9_007_199_254_740_991]);
   const deadline = actions.procedure_define.facts.decision_deadline;
-  assert.deepEqual([deadline.kind, deadline.optional, deadline.fields.count.min], ['period', true, 0]);
+  assert.deepEqual([deadline.kind, deadline.optional, deadline.fields.count.min, deadline.fields.count.max], ['period', true, 0, 1_000_000]);
   assert.deepEqual(deadline.fields.unit.values, ['Day', 'WorkingDay', 'Month', 'Year']);
+  assert.deepEqual(kinds.period.candid, ['record { count : nat; unit : PeriodUnit }']);
+  assert.deepEqual(types.get('PeriodUnit').variant.map((unit) => unit.name), ['Day', 'WorkingDay', 'Month', 'Year']);
 });
 
-test('a derived fact says what the GOS computes it from', () => {
+test('a derived fact says what the GOS computes it from, and never shadows an argument', () => {
   const { published_in } = committed.actions.tender_award.facts;
   assert.equal(published_in.type, 'vec');
   assert.match(published_in.derived, /notices/);
@@ -67,6 +71,22 @@ test('a derived fact says what the GOS computes it from', () => {
   }
   const derived = Object.values(committed.actions).flatMap((a) => Object.values(a.facts)).filter((f) => f.derived);
   assert.equal(derived.length, 3, 'derived facts are few and declared one by one');
+  const did = read('ggg.did').replace('type TenderAwardArgs = record { tender : text;', 'type TenderAwardArgs = record { tender : text; published_in : text;');
+  assert.throws(() => generate(did), /published_in collides with an argument/);
+});
+
+test('every fact has a finite range, where it is a number', () => {
+  const unbounded = [];
+  const visit = (fact, where) => {
+    if (['nat', 'nat8', 'nat32', 'nat64', 'int'].includes(fact.type) && (fact.min === undefined || fact.max === undefined)) unbounded.push(where);
+    for (const [name, field] of Object.entries(fact.fields ?? {})) visit(field, `${where}.${name}`);
+    if (fact.element) visit(fact.element, `${where}[]`);
+    for (const [name, payload] of Object.entries(fact.cases ?? {})) visit(payload, `${where}.${name}`);
+  };
+  for (const [id, action] of Object.entries(committed.actions)) {
+    for (const [name, fact] of Object.entries(action.facts)) visit(fact, `${id}.${name}`);
+  }
+  assert.deepEqual(unbounded, []);
 });
 
 test('a fact\'s unit is in its schema entry, never in its name', () => {
@@ -86,9 +106,11 @@ test('the kinds table in docs/layered-codex.md is the kinds of facts.json', () =
   const page = read('docs/layered-codex.md');
   const section = page.slice(page.indexOf('### 3.3'), page.indexOf('## 4.'));
   const code = (names) => names.map((n) => `\`${n}\``).join(', ');
-  const rows = [...section.matchAll(/^\| `(\w+)` \| (.+?) \| (.+?) \|/gm)].map(([, kind, aliases, candid]) => ({ kind, aliases, candid }));
+  const rows = [...section.matchAll(/^\| `(\w+)` \| (.+?) \| (.+?) \| (.+?) \| (.+?) \|$/gm)].map(
+    ([, kind, aliases, candid, unit, range]) => ({ kind, aliases, candid, unit, range }),
+  );
   assert.deepEqual(
     rows,
-    Object.entries(committed.kinds).map(([kind, k]) => ({ kind, aliases: code(k.aliases), candid: code(k.candid) })),
+    Object.entries(committed.kinds).map(([kind, k]) => ({ kind, aliases: code(k.aliases), candid: code(k.candid), unit: k.unit, range: k.range })),
   );
 });

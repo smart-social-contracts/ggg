@@ -40,9 +40,9 @@ These rules apply to the model's data as `ggg.did` exposes it.
 | References | Relations name both ends. A reference to "any entity" names the entity type and its id: `Organization:clinic-b` in text, `record { kind; id }` in Candid. |
 | Principals | Candid `principal`. A user's `id` is their principal. |
 | Time | `nat64` nanoseconds since 1970-01-01 UTC, as returned by `ic0.time`. Durations are `nat64` nanoseconds too. An unset time is absent (`opt`), never `0`. People see times in the realm's own `timezone`, and local times of a quarter in the quarter's own (§10); the stored value never changes. |
-| Money | `Money`, a `nat` amount in the token's smallest unit (`Token.decimals`), with the token's `symbol`. No floats. Money computed from a ratio is rounded to the nearest cent, an exact half away from zero (2.345 becomes 2.35 and −2.345 becomes −2.35); for a token with more than two decimals the result is a multiple of 10^(decimals − 2) smallest units. One rule, so every implementation rounds the same way. |
-| Periods | A span of calendar time is a `Period`: a `count` and a `unit`, one of `Day`, `WorkingDay`, `Month` and `Year`, never a `Duration`: three months is three months, whatever the days. A working day is a day that is neither a weekend day nor a holiday in the realm's calendar, taken in the realm's `timezone` (for a matter of one quarter alone, the quarter's, §10). GGG names the unit; the GOS counts it, and fails closed when its calendar has no entries for a year the count reaches. Periods compare only within one unit: comparing two units fails closed, with no conversion through the calendar. A realm whose legislation does not use working days never uses that unit. |
-| Ratios | One scale for every ratio (quorum, threshold, share, weight, tax rate): `Ratio`, a `nat` in hundred-millionths, so 100 % = 100 000 000, 1 % = 1 000 000 and 0.123456 % = 123 456. Values are stored and compared as integers, which have one form; people and chapters read and write decimals (`0.1 %`). |
+| Money | `Money`, a `nat` amount in the token's smallest unit (`Token.decimals`), with the token's `symbol`, at most 9 007 199 254 740 991 (2^53 − 1). No floats. Money computed from a ratio is rounded to the nearest cent, an exact half away from zero (2.345 becomes 2.35 and −2.345 becomes −2.35); for a token with more than two decimals the result is a multiple of 10^(decimals − 2) smallest units. One rule, so every implementation rounds the same way. |
+| Periods | A deadline or term in legislation is a `Period`: a `count` and a `unit`, one of `Day`, `WorkingDay`, `Month` and `Year`, never a `Duration`: three months is three months, whatever the days. The realm's own cycles (`Calendar`, the treasury's epoch) stay `Duration`s. A working day is a day that is neither a weekend day nor a holiday in the realm's calendar, taken in the realm's `timezone` (for a matter of one quarter alone, the quarter's, §10). GGG names the unit; the GOS counts it, and fails closed when its calendar has no entries for a year the count reaches. Periods compare only within one unit: comparing two units fails closed, with no conversion through the calendar. A realm whose legislation does not use working days never uses that unit. |
+| Ratios | One scale for every ratio (quorum, threshold, share, weight, tax rate): `nat` hundred-millionths, so 100 % = 100 000 000, 1 % = 1 000 000 and 0.123456 % = 123 456. A `Ratio` (quorum, threshold, share, weight) is at most 100 %; a `Rate` (a tax rate, a coefficient), which legislation takes above 100 %, is at most 100 times that, 10 000 000 000. Values are stored and compared as integers, which have one form; people and chapters read and write decimals (`0.1 %`). |
 | Status | One of the values listed in the entity's lifecycle. Terminal states are final. In Candid a status is a variant, and a value `in_progress` is the tag `InProgress`. |
 | Structured data | Typed records where the model fixes the shape. Where it doesn't, the ICRC-3 `Value` type, never JSON encoded into text. |
 | Audit | Every update operation writes one `Event`. |
@@ -92,9 +92,12 @@ method per operation:
   any record it created, or `Proposed` with the id of the proposal it filed. The proposal's action is
   the same call, `Call { method; arg }`, and replaying it applies the change. A `delegable` operation
   takes `on_behalf_of : opt principal`.
-- **Kinds.** `Ratio`, `Money`, `SignedMoney`, `Area`, `Timestamp`, `Duration` and `Period` are named aliases, so a field's unit
-  and range can be read off `ggg.did`. [`facts.json`](../facts.json) lists them for every operation's
-  facts ([layered codex §3.3](../docs/layered-codex.md#33-the-fact-schema-units-rates-money-and-periods)).
+- **Kinds.** `Ratio`, `Rate`, `Money`, `SignedMoney`, `Area`, `Timestamp`, `Duration` and `Period` are
+  named aliases, so a field's unit and range can be read off `ggg.did`. [`facts.json`](../facts.json)
+  lists them for every operation's facts, with every fact's range
+  ([layered codex §3.3](../docs/layered-codex.md#33-the-fact-schema-units-rates-money-and-periods)).
+  **Ranges are enforced:** a call with a value outside its fact's range is refused with
+  `InvalidArgument`, so what the schema says about a fact holds for every request a GOS accepts.
 - **Codex.** A method never returns a `Codex`. It returns that codex's checksum, `sha256:<64 hex digits>`.
   `ggg_codex_status` returns the active checksum (absent when none is installed), whether it is
   healthy, the signing policy, and a page of earlier checksums.
@@ -415,7 +418,7 @@ Two kinds of body:
 | `Trade` | `id`, `contract` → `Contract`, `leg_a` → `Transfer`, `leg_b` → `Transfer`, `status` | An exchange of two transfers. | `C-9` milestone: realm pays 10,000 REALM, BuildCo hands over the road deed NFT |
 | `PaymentAccount` | `id`, `owner` (`Entity:id`), `network`, `address`, `symbol`, `label`, `verified` | External accounts for payouts. | Bob's ckBTC payout address, verified |
 | `FinancialReport` | `id`, `kind`, `period` → `FiscalPeriod`, `as_of`, `statements` (Json), `source_hash`, `issued_by`, `supersedes` → `FinancialReport` | Frozen statements. | FY2025 closing statements issued by Finance, `sha256:77d0…` |
-| `TaxPolicy` | `id`, `status`, `document` (Json), `description`, `proposal` → `Proposal`, `adopted_at`, `taxes` (typed entries, each a `TaxEntry`: `code`, `kind` (`tax`, `fee`, `surcharge`), `subject` (the entity assessed: `Land`, `User`, `Organization`), `rate`, `amount`, `facts` (Json)) | Typed entries, which legislation checks one by one; the codex computes each taxpayer's amount. | `TAX-POLICY-3`: `property_tax` (tax on `Land`, rate 0.4 %) and `waste_fee` (fee on `User`, 120 REALM a year), `adopted` |
+| `TaxPolicy` | `id`, `status`, `document` (Json), `description`, `proposal` → `Proposal`, `adopted_at`, `taxes` (typed entries, each a `TaxEntry`: `code`, `kind` (the realm's word, e.g. `tax`, `fee`, `surcharge`), `subject` (the entity assessed, e.g. `Land`, `User`, `Organization`), `rate`, `amount`, `facts` (Json)) | Typed entries, which legislation checks one by one; the codex computes each taxpayer's amount. `document` holds the policy's text and whatever else the realm records about it, as Json; the entries are what the rules and the assessment read. | `TAX-POLICY-3`: `property_tax` (tax on `Land`, rate 0.4 %) and `waste_fee` (fee on `User`, 120 REALM a year), `adopted` |
 | `TaxDeclaration` | `id`, `declarant` (`Entity:id`), `period`, `base`, `amount`, `status`, `invoice` → `Invoice` | Self-declared bases (revenue, payroll). | Clinic B declares 182,000 revenue for 2026-Q3 → `INV-412` |
 | `Loan` | `id`, `lender` → `External`, `amount`, `symbol`, `term` (a Period), `rate`, `fund` → `Fund`, `outstanding`, `status`, `facts` (Json) | Money the realm owes an outside lender (§11), in the accounting currency, so the treasury's `debt_outstanding` is one sum. The money itself moves outside the realm; GGG records the debt and its repayments. | `LOAN-2`: 500,000 REALM from Bank A over 10 years at 3.2 %, into `ROADS`, 420,000 outstanding, `active` |
 
@@ -750,6 +753,16 @@ of I-ADM-4's shape is refused with `InvalidArgument` before any vote, and so is 
 the call fails and nothing changes. In a federation, the capital's zone is the realm's official time
 and a quarter's zone its local time. Realm-wide counts are made on the capital: a `FederalVote` has
 one `deadline`, set there once as an instant, and every quarter's leg keeps it.
+
+### Welcome message
+
+Each quarter has its own `Realm.welcome_message`. It starts from its capital's, copied once when the
+quarter joins the federation, and only a realm that has none yet (an empty message) takes it: a realm
+that already has one keeps it. After that the message is the quarter's own, and the quarter may change it
+with `realm_configure`. The realm may also set it by a realm-wide vote: `quarter_configure` takes a
+`welcome_message` for the `quarter` it names, which the capital sends to the quarter (`quarter.sync`) and
+the quarter applies. A `welcome_message` with no `quarter` is refused with `InvalidArgument`, before any
+vote. If the quarter cannot apply it, the call fails and nothing changes.
 
 ### Invariants
 

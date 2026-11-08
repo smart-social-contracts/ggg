@@ -1584,6 +1584,8 @@ module {
     rule : ?Value;
     federation_codex : ?Text;
     quarter_join_mode : ?Text;
+    /// For the `quarter` named; a `welcome_message` with no `quarter` is InvalidArgument.
+    welcome_message : ?Text;
   };
   public type QuarterDirectory = {
     next : ?Text;
@@ -1606,8 +1608,10 @@ module {
     #Suspended;
     #Merging;
   };
+  public type Rate = Nat;
   /// A ratio in hundred-millionths: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456.
-  /// One scale for quorum, threshold, share, weight and tax rate (model §1).
+  /// One scale for quorum, threshold, share, weight and tax rate (model §1). A Ratio is at most 100 %; a
+  /// Rate, for tax rates and coefficients, which legislation takes above 100 %, is at most 100 times that.
   public type Ratio = Nat;
   public type Realm = {
     id : Text;
@@ -1852,16 +1856,16 @@ module {
     invoice : ?Invoice;
     declaration : TaxDeclaration;
   };
-  /// One tax, fee or charge of a policy. `kind` is `tax`, `fee` or `surcharge`; `subject` names the entity
-  /// each assessment walks (Land, User, Organization); `rate` or `amount` is what the entry charges when
-  /// no codex computes it; `facts` is what legislation reads about the entry beyond these. A rule on
-  /// tax_policy_propose or tax_policy_draft ranges over the policy's entries, one request per entry
-  /// (layered-codex §3.2).
+  /// One tax, fee or charge of a policy. `kind` is the realm's word (e.g. `tax`, `fee`, `surcharge`);
+  /// `subject` names the entity each assessment walks (e.g. `Land`, `User`, `Organization`); `rate` or
+  /// `amount` is what the entry charges when no codex computes it; `facts` is what legislation reads about
+  /// the entry beyond these. A rule on tax_policy_propose or tax_policy_draft ranges over the policy's
+  /// entries, one request per entry (layered-codex §3.2).
   public type TaxEntry = {
     subject : Text;
     code : Text;
     kind : Text;
-    rate : ?Ratio;
+    rate : ?Rate;
     amount : ?Money;
     facts : Value;
   };

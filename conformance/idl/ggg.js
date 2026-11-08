@@ -1589,6 +1589,7 @@ export const idlFactory = ({ IDL }) => {
     'rule' : IDL.Opt(Value),
     'federation_codex' : IDL.Opt(IDL.Text),
     'quarter_join_mode' : IDL.Opt(IDL.Text),
+    'welcome_message' : IDL.Opt(IDL.Text),
   });
   const Quarter = IDL.Record({
     'id' : IDL.Text,
@@ -1924,11 +1925,12 @@ export const idlFactory = ({ IDL }) => {
     'invoice' : IDL.Opt(Invoice),
     'declaration' : TaxDeclaration,
   });
+  const Rate = IDL.Nat;
   const TaxEntry = IDL.Record({
     'subject' : IDL.Text,
     'code' : IDL.Text,
     'kind' : IDL.Text,
-    'rate' : IDL.Opt(Ratio),
+    'rate' : IDL.Opt(Rate),
     'amount' : IDL.Opt(Money),
     'facts' : Value,
   });
