@@ -73,6 +73,11 @@ async function file({ action = motion, days = null, everyone = false, department
     description: '',
     department: department ? [department] : [],
     action,
+    kind: [],
+    matter: [],
+    threshold: [],
+    quorum: [],
+    threshold_of: [],
     effective_at,
     links: [],
     on_behalf_of: [],
@@ -159,7 +164,19 @@ test('effective_at is stored with the proposal and never changes', async () => {
 });
 
 test('an effective_at that is not in the future is refused', async () => {
-  const args = { title: 'Late', description: '', department: [], action: motion, links: [], on_behalf_of: [] };
+  const args = {
+    title: 'Late',
+    description: '',
+    department: [],
+    action: motion,
+    kind: [],
+    matter: [],
+    threshold: [],
+    quorum: [],
+    threshold_of: [],
+    links: [],
+    on_behalf_of: [],
+  };
   refusedWith(await as(alice).ggg_proposal_create({ ...args, effective_at: [1n] }), 'InvalidArgument');
   refusedWith(await as(alice).ggg_proposal_create({ ...args, effective_at: [await nowNs()] }), 'InvalidArgument');
 });

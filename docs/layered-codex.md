@@ -32,7 +32,10 @@ operations, and GGG's arguments, events and entities are the whole interface:
   a Cedar action is named after the operation (`tax_policy_propose`). A forbid that ranges over a list
   (§3.2) names the Cedar action `<operation>.<list>` (`tax_policy_propose.taxes`), and its facts are the
   element's fields. The model's fact schema types each argument, so a GOS can validate the generated
-  Cedar.
+  Cedar. A few facts are not arguments: a GOS computes each from its own records when the operation is
+  called, deterministically, and the fact schema (§3.3) declares it as `derived`, with what it is:
+  `published_in` of `tender_award`, the journals of the tender's notices; `revenue` and `expense` of
+  `budget_propose`, the period's totals.
 - **Effects are operations.** A hook changes nothing itself. It queues GGG operations, which the GOS
   runs as the realm, under the same permissions as any caller.
 - **Entity reads are read-only.** A chapter may read entities (`Member`, `Land`, `TaxPolicy`); it
@@ -85,44 +88,68 @@ Later: `immigration`, `education`, `social_security`, `defense`, and so on.
 ## 3. What real legislation needs ([ggg#2](https://github.com/smart-social-contracts/ggg/issues/2))
 
 Writing real municipal and regional legislation as chapters found entities, fields and operations the
-model lacks. Each is added at the scope below; some are narrowed, and some stay in the codex.
+model lacks. Each is added at the scope below; some are narrowed, and some stay in the codex. Every
+addition is in the [model](../model/README.md) and `ggg.did`; the model's sections say how it behaves.
 
 ### 3.1 Entities, fields and operations
 
 **Added as proposed:**
 
-- a proposal's **kind, matter and majority basis**. A majority is a property of the proposal, not a
-  forbid on `proposal_finalize`;
-- **outside bodies**: `External` parties with a `Dispatch` outbox. An outside body is not a realm; a
-  dispatch to it is a plain notice that gates nothing;
-- **scheduled operations**;
+- a proposal's **kind, matter and majority basis**: `Proposal.kind`, `matter`, `threshold_of` (over the
+  votes cast, or over every eligible voter) and `casting_vote`. A majority is a property of the
+  proposal, not a forbid on `proposal_finalize`: the proposer may state a stricter rule than the realm's
+  or the department's, never a weaker one, and a guard on `proposal_create` requires the majority the
+  matter needs. A realm-wide proposal's yes votes exceed the threshold of the basis, a department's reach
+  it over the eligible seats; the casting vote is the scope's, set by governed configuration, never the
+  proposer's. A proposal a governed call files takes the scope's default rule, so legislation that needs
+  more requires a proposal of its own and may refuse the direct path with a guard (model I-GOV-3);
+- **outside bodies**: `External` parties with a `Dispatch` outbox (`external_add`, `dispatch_confirm`,
+  `dispatch_list`). An outside body is not a realm; a dispatch to it is a plain notice that gates
+  nothing, confirmed by the operator or bridge that delivered it;
+- **scheduled operations**: `Task`, with `task_schedule`, `task_reschedule` and `task_cancel`. A task
+  runs with its scheduler's authority, and every guard and rule runs again when it does;
 - a forbid that **ranges over a list** (§3.2);
 - the codex **computes each amount** (§3.2);
-- a codex **installed before it is in force** (§3.2);
-- **certified attributes** on a person;
+- a codex **installed before it is in force** (§3.2): `CodexStatus` `Pending` and `codex_activate`;
+- **certified attributes** on a person: `Attribute`, with `attribute_submit` and `attribute_review`,
+  verified as identities are;
 - **typed tax entries**: a saved `TaxPolicy` holds a `taxes` list, so a forbid on `tax_policy_propose`
   can range over the policy's entries. The same forbids run when a draft is saved with
   `tax_policy_draft`, whose `taxes` is required (a breaking change of 0.2.0: a draft states its entries;
   the brackets of a progressive tax go in an entry's `facts` and the codex computes each amount);
-- **invoice items**;
-- a contract's and a tender's **kind**;
-- **requests**, and the **access-to-information request**;
-- **publication in an outside journal**: a dispatch, which gates nothing;
-- **reports from outside**;
-- an identity's **kind, category and expiry**;
-- a document's **kind and languages**; the **languages of a realm and of a user**;
-- a **district without a canister**: `Zone`, and `User.home_zone`;
-- a procedure's **deadline and silence**. A deadline is a `Period` (§3.3), not a `Duration`.
+- **invoice items**: `InvoiceItem`, `Invoice.items` and `facts`, and `invoice_item_add` on a pending
+  invoice, so a charge legislation adds joins the same invoice;
+- a contract's and a tender's **kind** and **procedure**, a tender's `estimated_value` and `notices`
+  (`tender_notice`), and `Contract.tender`; `published_in`, the journals of a tender's notices, is a
+  derived fact of `tender_award` (§1);
+- **requests**, and the **access-to-information request**: one `Request` entity, with `request_file`,
+  `request_set_due` and `request_decide`; the kinds are the realm's;
+- **publication in an outside journal**: `document_publish`, a dispatch, which gates nothing; the
+  journal's date and reference fill `Document.publications` when the dispatch is confirmed;
+- **reports from outside**: `external_report`, entered by whoever received the report, with the
+  evidence;
+- an identity's **kind, category and expiry**: `Identity.category` and `expires_at`; the standard kinds
+  are documented text, and `kind` stays text;
+- a document's **kind and languages**; the **languages of a realm and of a user**: `Document.kind` and
+  `languages`, `Realm.languages`, `User.language`, and `translations` on `notification_send`;
+- a **district without a canister**: a `Zone` the realm defines with `zone_define`, `User.home_zone`
+  (stated at join, changed with `user_edit`) and `Zone.population`;
+- a procedure's **deadline and silence**: `Procedure`, `procedure_define` and `License.decision_due`. A
+  deadline is a `Period` (§3.3), not a `Duration`.
 
 **Narrowed:**
 
-- an **assessed value**, with an area beside it;
-- **borrowing** (lower priority);
+- an **assessed value**, with an area beside it: `Land.assessed_value`, `area`, `assessed_at` and
+  `assessment_ref`, set by `land_assess`;
+- **borrowing** (lower priority): `Loan`, `loan_create`, `loan_repay` and `Treasury.debt_outstanding`;
+  the money moves outside the realm, GGG records the debt;
 - the **basis and facts of a share** of personal data: `basis {legal_basis, purpose, legislation,
-  special_category}`, `recipient` (a reference to any entity) and `facts`. Legal bases are documented
-  text, not an enumeration of the model;
-- **budget totals and years**: totals, `years`, `budget_extend` and `ReportIssueArgs.adjustments` are
-  added; the stability report and `net_lending` stay codex conventions.
+  special_category}`, `recipient` (a reference to any entity) and `facts` on `document_share`, and
+  `Document.facts`. Legal bases are documented text, not an enumeration of the model;
+- **budget totals and years**: `budget_propose` proposes a period's lines together, with `years`; the
+  totals `revenue` and `expense` are derived facts of the call (§1); `budget_extend` and
+  `ReportIssueArgs.adjustments` are added; the stability report and `net_lending` stay codex
+  conventions.
 
 **Not added:**
 
@@ -163,14 +190,15 @@ action: every operation, named as the operation, with its facts, which are the o
 `<operation>.<list>`, whose facts are the element's fields (§3.2). `tax_policy_propose.taxes` ranges
 over the saved policy's entries, since that operation's own argument is only the policy's id. An
 operation whose argument is a single value has one fact, `id`, the record it acts on (`user`, `scope`,
-`data` or `transport_key` where the value is not an id). Each fact gives its Candid type, whether it is
+`data`, `transport_key`, `source` or `step` where the value is not an id). Each fact gives its Candid type, whether it is
 optional, and what the schema adds: its `kind`, `min`, `max` and allowed `values` (a variant's tags).
 The kinds are the named aliases of `ggg.did`:
 
 | Kind | Aliases | Candid | Unit | Range |
 |---|---|---|---|---|
 | `ratio` | `Ratio`, `Rate` | `nat`, `nat` | hundred-millionths | `Ratio` 0 to 100 000 000 (100 %); `Rate` 0 to 10 000 000 000 (100 times that) |
-| `money` | `Money` | `nat` | the token's smallest unit (Token.decimals) | 0 to 9 007 199 254 740 991 (2^53 − 1) |
+| `money` | `Money`, `SignedMoney` | `nat`, `int` | the token's smallest unit (Token.decimals) | `Money` 0 to 9 007 199 254 740 991 (2^53 − 1); `SignedMoney` −9 007 199 254 740 991 to 9 007 199 254 740 991, for a discount line |
+| `area` | `Area` | `nat` | square metres | 0 to 9 223 372 036 854 775 807 |
 | `timestamp` | `Timestamp` | `nat64` | nanoseconds since 1970-01-01 UTC | 0 to 9 223 372 036 854 775 807 |
 | `duration` | `Duration` | `nat64` | nanoseconds | 0 to 9 223 372 036 854 775 807 |
 | `period` | `Period` | `record { count : nat; unit : PeriodUnit }` | a count of one calendar unit | `count` 0 to 1 000 000; `unit` one of `Day`, `WorkingDay`, `Month`, `Year` |
@@ -182,6 +210,7 @@ facts (rule 9 of the `F` language). **Ranges are enforced:** a call with a value
 range is refused with `InvalidArgument`, and the analysis assumptions rest on that. `TaxEntry.kind` and
 `subject` are text, with documented examples and no allowed values in the schema, so a realm names its
 own; `TaxEntry.facts` is a `Value`, which a forbid cannot read, so a rule on a fact inside it is a guard.
+A fact that is not an argument is marked `derived`, with what the GOS computes it from (§1).
 
 - **A fact's unit is declared by its schema entry,** never by a suffix in its name: `rate`, not
   `rate_bp`.
@@ -324,10 +353,11 @@ or the call is refused with `InvalidArgument`. The rules:
 - A vote that ends after `effective_at` does not execute: the proposal ends `Expired`, whatever was
   decided, and the proposer submits a new one. A vote ends at its deadline, or earlier at the moment
   every eligible member has voted. The vote of a department under an m-of-n policy may also end as
-  soon as it can only be accepted: it has `m` approvals, every veto holder has voted and none of them
-  against, and its quorum is met. Only an acceptance ends a department vote this early: until its
-  deadline, or until every eligible member has voted, a `no` can still be replaced, even when `m`
-  approvals are out of reach, and a veto holder yet to vote keeps it open. The end at which every
+  soon as it can only be accepted: its yes votes reach its threshold of the eligible seats (`m` under
+  the policy's own rule, more under a stricter one the proposer stated), every veto holder has voted
+  and none of them against, and its quorum is met. Only an acceptance ends a department vote this
+  early: until its deadline, or until every eligible member has voted, a `no` can still be replaced,
+  even when the threshold is out of reach, and a veto holder yet to vote keeps it open. The end at which every
   eligible member has voted can still reject, and a realm-wide vote has no such early end. When it is
   finalized doesn't matter: a vote that ended before `effective_at` does
   not expire. Finalized before `effective_at` the proposal is scheduled, even if its `deadline` is

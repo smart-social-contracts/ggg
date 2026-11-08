@@ -1,6 +1,7 @@
 /// A minimal GGG GOS, used to test the conformance suite. It implements every method of ggg.did.
 /// Members are fixed at install time. They may propose, vote, manage proposals (open, finalize,
-/// execute and stop them), read the realm and manage their own profile; every other permission is
+/// execute and stop them), set the realm's governance rule (governance_update, which the root's direct
+/// policy applies at once), read the realm and manage their own profile; every other permission is
 /// held by nobody, so those operations are refused. There are two departments: the root, with a
 /// direct policy, so a governed call on a realm-wide proposal is applied at once; and a council
 /// under it, deciding 2 of 3, so a governed call on one of its proposals files a proposal instead.
@@ -10,7 +11,10 @@
 /// veto holders, who must hold a seat (I-ORG-5). Nor does it settle a proposal as its vote ends or run
 /// an accepted action as it finalizes (I-GOV-12): proposal_finalize records the outcome of a vote that
 /// has ended, and proposal_execute runs the action. Nobody has granted a delegation, so nobody acts on
-/// another's behalf. Every other domain is empty, which the model allows.
+/// another's behalf. Every other domain is empty, which the model allows. A proposal's rule is the
+/// realm's over the votes cast unless the proposer states a stricter one, which the fixture stores and
+/// applies (I-GOV-3); its department has no seats, so its proposals keep that rule too, while a GOS with
+/// seats sets a department proposal's threshold to the policy's m/n over the eligible seats.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
@@ -31,11 +35,18 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let DEFAULT_LIMIT = 20;
   let MAX_LIMIT = 100;
   let MAP_VIEW = 32;
-  let VOTING_WINDOW_NS : Nat64 = 7 * 24 * 3600 * 1_000_000_000;
   let WHOLE = 100_000_000; // 100 %, in hundred-millionths
-  let VOTING_THRESHOLD = 50_000_000; // 50 %
-  let VOTING_QUORUM = 0;
   let MAX_LINKS = 16; // a proposal's own links
+  /// The realm's governance rule, set with governance_update: the voting window, and the threshold,
+  /// quorum and casting vote of a realm-wide proposal.
+  var votingWindow : T.Duration = 7 * 24 * 3600 * 1_000_000_000;
+  var votingThreshold : T.Ratio = 50_000_000; // 50 %
+  var votingQuorum : T.Ratio = 0;
+  var castingVote : ?Principal = null;
+  /// The rule that decides a proposal (I-GOV-3). The scope's, over the votes cast, unless the proposer
+  /// states a stricter threshold, quorum or basis; the casting vote is the scope's.
+  type Rule = { threshold : T.Ratio; quorum : T.Ratio; threshold_of : T.ThresholdBasis; casting_vote : ?Principal };
+  func defaultRule() : Rule = { threshold = votingThreshold; quorum = votingQuorum; threshold_of = #Cast; casting_vote = castingVote };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
@@ -43,10 +54,11 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let ROOT : T.Department = {
     id = "root";
     description = "The realm itself.";
+    kind = null;
     parent = null;
     is_root = true;
     head = null;
-    policy = { m = 1; n = 1; quorum = 0; veto = [] };
+    policy = { m = 1; n = 1; quorum = 0; veto = []; casting_vote = null };
     target_policy = null;
     fund = null;
   };
@@ -56,10 +68,11 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let COUNCIL : T.Department = {
     id = "council";
     description = "A council under the realm, deciding 2 of 3.";
+    kind = null;
     parent = ?ROOT.id;
     is_root = false;
     head = null;
-    policy = { m = 2; n = 3; quorum = 0; veto = [] };
+    policy = { m = 2; n = 3; quorum = 0; veto = []; casting_vote = null };
     target_policy = null;
     fund = null;
   };
@@ -71,7 +84,16 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let createdAt = now();
   let members = Map.empty<Principal, T.UserEntry>();
   for (p in initMembers.vals()) {
-    let user = { id = p; nickname = null; avatar = null; home_quarter = null; profiles = ["member"]; private_data = null };
+    let user = {
+      id = p;
+      nickname = null;
+      avatar = null;
+      home_quarter = null;
+      language = null;
+      home_zone = null;
+      profiles = ["member"];
+      private_data = null;
+    };
     let member = { id = Principal.toText(p); user = p; status = #Active; joined_at = ?createdAt };
     Map.add(members, Principal.compare, p, { user; member = ?member });
   };
@@ -198,6 +220,25 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     null;
   };
 
+  /// The rule a proposer states, checked against the scope's default: stricter is allowed, weaker is
+  /// refused (I-GOV-3). The casting vote is the scope's: the realm's for a realm-wide proposal, the
+  /// department's policy's for one of its proposals.
+  func statedRule(args : T.ProposalCreateArgs) : Result<Rule> {
+    let scope = defaultRule();
+    let threshold = switch (args.threshold) { case (?t) t; case null scope.threshold };
+    let quorum = switch (args.quorum) { case (?q) q; case null scope.quorum };
+    let threshold_of = switch (args.threshold_of) { case (?b) b; case null scope.threshold_of };
+    if (threshold < scope.threshold or quorum < scope.quorum) {
+      return #Err(#InvalidArgument("the rule is weaker than the realm's: a proposer may only tighten it"));
+    };
+    if (threshold > WHOLE or quorum > WHOLE) return #Err(#InvalidArgument("a ratio is at most 100 000 000 (100 %)"));
+    let casting_vote = switch (args.department) {
+      case (?d) { switch (findDepartment(d)) { case (?found) { if (found.is_root) scope.casting_vote else found.policy.casting_vote }; case null null } };
+      case null scope.casting_vote;
+    };
+    #Ok({ threshold; quorum; threshold_of; casting_vote });
+  };
+
   /// The member a proposal was filed for: the grantor when it was filed on their behalf.
   func filedFor(p : T.Proposal) : Principal {
     switch (p.on_behalf_of) { case (?grantor) grantor; case null p.proposer };
@@ -272,6 +313,12 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
   };
 
+  public query ({ caller }) func ggg_attribute_list(args : T.AttributeListArgs) : async Result<T.AttributePage> {
+    switch (requireMember(caller, "self.data_view")) { case (?e) return #Err(e); case null {} };
+    if (args.on_behalf_of != null) return #Err(noDelegation("self.data_view"));
+    none(args.cursor, args.limit);
+  };
+
   public query func ggg_delegable_operations() : async Result<[T.DelegableOperation]> {
     #Ok([]);
   };
@@ -290,6 +337,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         "self.update_private_data",
         "proposal.create",
         "proposal.vote",
+        "governance.update",
         "realm.data_view",
         "realm.monitor",
       ];
@@ -324,6 +372,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       entry.user with
       nickname = if (args.nickname != null) args.nickname else entry.user.nickname;
       avatar = if (args.avatar != null) args.avatar else entry.user.avatar;
+      language = if (args.language != null) args.language else entry.user.language;
     };
     Map.add(members, Principal.compare, caller, { entry with user });
     audit("profile_update", caller, #Map(Array.flatten([given("nickname", args.nickname), given("avatar", args.avatar)])), #Text(Principal.toText(caller)));
@@ -354,6 +403,12 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   };
   public shared ({ caller }) func ggg_identity_review(_ : T.IdentityReviewArgs) : async Result<T.Identity> {
     nobody(caller, "identity.review");
+  };
+  public shared ({ caller }) func ggg_attribute_submit(_ : T.AttributeSubmitArgs) : async Result<T.Attribute> {
+    nobody(caller, "attribute.submit");
+  };
+  public shared ({ caller }) func ggg_attribute_review(_ : T.AttributeReviewArgs) : async Result<T.Attribute> {
+    nobody(caller, "attribute.review");
   };
 
   public shared ({ caller }) func ggg_invite_create(_ : T.InviteCreateArgs) : async Result<T.InviteCreated> {
@@ -468,7 +523,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       case (?e) { if (e <= now()) return #Err(#InvalidArgument("effective_at must lie in the future")) };
       case null {};
     };
-    let p = fileProposal(caller, args.title, args.description, args.department, args.action, args.effective_at, links);
+    let rule = switch (statedRule(args)) { case (#Err(e)) return #Err(e); case (#Ok(r)) r };
+    let p = fileProposal(caller, args.title, args.description, args.department, args.kind, args.matter, args.action, rule, args.effective_at, links);
     audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
     #Ok(p.id);
   };
@@ -479,7 +535,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     title : Text,
     description : Text,
     department : ?Text,
+    kind : ?Text,
+    matter : ?Text,
     action : T.ProposalAction,
+    rule : Rule,
     effective_at : ?T.Timestamp,
     links : [T.ProposalLink],
   ) : T.Proposal {
@@ -493,13 +552,17 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       proposer;
       on_behalf_of = null;
       department = switch (department) { case (?d) { if (d == ROOT.id) null else ?d }; case null null };
+      kind;
+      matter;
       action;
       status = #Voting;
       opens_at = ?t;
-      deadline = ?(t + VOTING_WINDOW_NS);
+      deadline = ?(t + votingWindow);
       effective_at;
-      threshold = VOTING_THRESHOLD;
-      quorum = VOTING_QUORUM;
+      threshold = rule.threshold;
+      quorum = rule.quorum;
+      threshold_of = rule.threshold_of;
+      casting_vote = rule.casting_vote;
       tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members) };
       result = null;
       links;
@@ -564,20 +627,41 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
   };
 
+  /// Whether the yes votes exceed the proposal's threshold of its basis (I-GOV-3, a realm-wide rule: this
+  /// fixture's department has no seats, so its proposals keep the realm's rule). A tie over the votes
+  /// cast is decided by the casting vote's yes.
+  func thresholdMet(n : Nat, p : T.Proposal) : Bool {
+    let { yes; no; eligible } = p.tally;
+    let basis = switch (p.threshold_of) {
+      case (#Cast) yes + no;
+      case (#Eligible) { switch (eligible) { case (?e) e; case null yes + no } };
+    };
+    if (yes * WHOLE > p.threshold * basis) return true;
+    switch (p.threshold_of, p.casting_vote) {
+      case (#Cast, ?caster) {
+        if (yes * WHOLE != p.threshold * basis) return false;
+        switch (Map.get(ballots(n), Principal.compare, caster)) {
+          case (?v) v.choice == #Yes;
+          case null false;
+        };
+      };
+      case _ false;
+    };
+  };
+
   /// How a vote that ended at `ended` and is finalized at `t` turns out. A vote that ended after
   /// `effective_at` expires the proposal, whatever was decided. Otherwise quorum and threshold decide,
   /// and an accepted proposal with an action whose `effective_at` is still ahead is scheduled. A
   /// motion has nothing to execute, so it stays accepted; so does an action whose `effective_at` has
   /// passed by the time the vote is finalized, which then executes at once.
-  func outcome(p : T.Proposal, ended : T.Timestamp, t : T.Timestamp) : T.ProposalStatus {
+  func outcome(n : Nat, p : T.Proposal, ended : T.Timestamp, t : T.Timestamp) : T.ProposalStatus {
     switch (p.effective_at) {
       case (?e) { if (ended > e) return #Expired };
       case null {};
     };
     let { yes; no; abstain; eligible } = p.tally;
-    let quorumMet = switch (eligible) { case (?n) (yes + no + abstain) * WHOLE >= p.quorum * n; case null true };
-    let thresholdMet = yes * WHOLE > p.threshold * (yes + no);
-    if (not (quorumMet and thresholdMet)) return #Rejected;
+    let quorumMet = switch (eligible) { case (?m) (yes + no + abstain) * WHOLE >= p.quorum * m; case null true };
+    if (not (quorumMet and thresholdMet(n, p))) return #Rejected;
     switch (p.action, p.effective_at) {
       case (#Motion, _) #Accepted;
       case (_, ?e) { if (e > t) #ExecutionScheduled else #Accepted };
@@ -598,7 +682,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       case (null, ?d) { if (t <= d) return #Err(#Conflict("voting is still open")); d };
       case (null, null) t; // no deadline: it may be finalized at any time, and ends then
     };
-    let finalized = { p with status = outcome(p, ended, t) };
+    let finalized = { p with status = outcome(n, p, ended, t) };
     Map.add(proposals, Nat.compare, n, finalized);
     audit("proposal_finalize", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (finalized.status)));
     #Ok(finalized);
@@ -668,7 +752,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       };
     } else {
       let call = #Call({ method = "ggg_proposal_stop"; arg = to_candid (id) });
-      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, call, null, []);
+      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, null, null, call, { defaultRule() with casting_vote = owner.policy.casting_vote }, null, []);
       audit("proposal_stop", caller, #Map([("proposal", #Text(id))]), #Text(filed.id));
       #Ok(#Proposed(filed.id));
     };
@@ -689,8 +773,22 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_contract_terminate(_ : Text) : async Result<T.Contract> {
     nobody(caller, "contract.terminate");
   };
-  public shared ({ caller }) func ggg_governance_update(_ : T.GovernanceUpdateArgs) : async Result<T.Governed> {
-    nobody(caller, "governance.update");
+  /// Governed by the root, whose direct policy applies it at once. The casting vote is an active member.
+  public shared ({ caller }) func ggg_governance_update(args : T.GovernanceUpdateArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "governance.update")) { case (?e) return #Err(e); case null {} };
+    for (ratio in [args.voting_threshold, args.voting_quorum].vals()) {
+      switch (ratio) { case (?r) { if (r > WHOLE) return #Err(#InvalidArgument("a ratio is at most 100 000 000 (100 %)")) }; case null {} };
+    };
+    switch (args.casting_vote) {
+      case (?#Set(member)) { if (requireMember(member, "proposal.vote") != null) return #Err(#InvalidArgument("the casting vote names a principal who is not an active member")) };
+      case _ {};
+    };
+    switch (args.voting_window) { case (?w) votingWindow := w; case null {} };
+    switch (args.voting_threshold) { case (?t) votingThreshold := t; case null {} };
+    switch (args.voting_quorum) { case (?q) votingQuorum := q; case null {} };
+    switch (args.casting_vote) { case (?#Set(member)) castingVote := ?member; case (?#Clear) castingVote := null; case null {} };
+    audit("governance_update", caller, #Map([]), #Text("ok"));
+    #Ok(#Done(null));
   };
 
   // §5
@@ -713,6 +811,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   };
 
   public query func ggg_report_view(args : T.ReportArgs) : async Result<T.ReportPage> {
+    none(args.cursor, args.limit);
+  };
+
+  public query func ggg_loan_list(args : T.LoanListArgs) : async Result<T.LoanPage> {
     none(args.cursor, args.limit);
   };
 
@@ -744,6 +846,19 @@ persistent actor class GggFixture(initMembers : [Principal]) {
 
   public query func ggg_license_verify(_ : T.LicenseVerifyArgs) : async Result<T.LicenseCheck> {
     #Ok({ valid = false; license = null });
+  };
+
+  public query func ggg_procedure_list(args : T.ListArgs) : async Result<T.ProcedurePage> {
+    none(args.cursor, args.limit);
+  };
+
+  public query func ggg_request_get(args : T.RequestGetArgs) : async Result<?T.Request> {
+    if (args.on_behalf_of != null) return #Err(noDelegation("self.data_view"));
+    #Ok(null);
+  };
+
+  public query func ggg_request_list(args : T.RequestListArgs) : async Result<T.RequestPage> {
+    none(args.cursor, args.limit);
   };
 
   // §8
@@ -790,12 +905,24 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     let signing = { agents = []; delegable = []; supervision = #Required };
     switch (none<Text>(args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok({ checksum = null; healthy = false; signing; history = items; next });
+      case (#Ok({ items; next })) #Ok({ checksum = null; pending = null; healthy = false; signing; history = items; next });
     };
   };
 
   public query func ggg_notification_list(args : T.NotificationListArgs) : async Result<T.NotificationPage> {
     if (args.on_behalf_of != null) return #Err(noDelegation("self.data_view"));
+    none(args.cursor, args.limit);
+  };
+
+  public query func ggg_external_list(args : T.ListArgs) : async Result<T.ExternalPage> {
+    none(args.cursor, args.limit);
+  };
+
+  public query func ggg_dispatch_list(args : T.DispatchListArgs) : async Result<T.DispatchPage> {
+    none(args.cursor, args.limit);
+  };
+
+  public query func ggg_task_list(args : T.TaskListArgs) : async Result<T.TaskPage> {
     none(args.cursor, args.limit);
   };
 
@@ -841,14 +968,16 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       trusted_principals = [];
       require_marketplace_approval = false;
       trusted_approvers = [];
-      voting_threshold = VOTING_THRESHOLD;
-      voting_quorum = VOTING_QUORUM;
+      voting_threshold = votingThreshold;
+      voting_quorum = votingQuorum;
+      casting_vote = castingVote;
       open_registration = false;
       logo_url = null;
       background_image_url = null;
       installed_version = "ggg-fixture 0.5.0";
       network = "local";
       timezone = "Europe/Madrid";
+      languages = [];
       member_count = Map.size(members);
     };
   };
@@ -906,15 +1035,19 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_invoice_create(_ : T.InvoiceCreateArgs) : async Result<T.InvoiceCreated> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_invoice_check(_ : T.InvoiceCheckArgs) : async Result<T.Invoice> { nobody(caller, "self.invoice_refresh") };
   public shared ({ caller }) func ggg_invoice_refresh(_ : T.InvoiceRefreshArgs) : async Result<T.InvoicePage> { nobody(caller, "invoice.refresh") };
+  public shared ({ caller }) func ggg_invoice_item_add(_ : T.InvoiceItemAddArgs) : async Result<T.Invoice> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_fund_create(_ : T.FundCreateArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_period_open(_ : T.PeriodOpenArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_period_close(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_budget_draft(_ : T.BudgetDraftArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_budget_propose(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_budget_propose(_ : T.BudgetProposeArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_budget_extend(_ : Text) : async Result<Nat> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_budget_amend(_ : T.BudgetAmendArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_allocation_rule_draft(_ : T.AllocationRuleDraftArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_allocation_rule_propose(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_payroll_run(_ : T.PayrollRunArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_loan_create(_ : T.LoanCreateArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_loan_repay(_ : T.LoanRepayArgs) : async Result<T.Loan> { nobody(caller, "org.manage_budget") };
   public shared ({ caller }) func ggg_report_issue(_ : T.ReportIssueArgs) : async Result<T.FinancialReport> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_tax_policy_draft(_ : T.TaxPolicyDraftArgs) : async Result<T.Governed> { nobody(caller, "tax.manage") };
   public shared ({ caller }) func ggg_tax_policy_propose(_ : Text) : async Result<T.Governed> { nobody(caller, "tax.manage") };
@@ -929,8 +1062,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_land_register(_ : T.LandRegisterArgs) : async Result<T.Governed> { nobody(caller, "nft.mint") };
   public shared ({ caller }) func ggg_land_transfer(_ : T.LandTransferArgs) : async Result<T.Governed> { nobody(caller, "nft.force_transfer") };
   public shared ({ caller }) func ggg_land_mint_nft(_ : T.LandMintArgs) : async Result<Nat> { nobody(caller, "nft.mint") };
+  public shared ({ caller }) func ggg_land_assess(_ : T.LandAssessArgs) : async Result<T.Land> { nobody(caller, "land.assess") };
   public shared ({ caller }) func ggg_land_freeze(_ : T.LandFreezeArgs) : async Result<T.Land> { nobody(caller, "nft.freeze") };
   public shared ({ caller }) func ggg_land_unfreeze(_ : Text) : async Result<T.Land> { nobody(caller, "nft.freeze") };
+  public shared ({ caller }) func ggg_zone_define(_ : T.ZoneDefineArgs) : async Result<T.Governed> { nobody(caller, "realm.configure") };
   public shared ({ caller }) func ggg_zone_set(_ : T.ZoneSetArgs) : async Result<T.Zone> { nobody(caller, "self.data_manage") };
   public shared ({ caller }) func ggg_zone_clear(_ : T.ZoneClearArgs) : async Result<T.Zone> { nobody(caller, "self.data_manage") };
   public shared ({ caller }) func ggg_credential_issue(_ : T.CredentialIssueArgs) : async Result<T.CredentialIssued> { nobody(caller, "credential.sign") };
@@ -942,6 +1077,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_license_decide(_ : T.LicenseDecideArgs) : async Result<T.License> { nobody(caller, "license.issue") };
   public shared ({ caller }) func ggg_license_suspend(_ : T.LicenseSuspendArgs) : async Result<T.License> { nobody(caller, "license.revoke") };
   public shared ({ caller }) func ggg_license_revoke(_ : Text) : async Result<T.License> { nobody(caller, "license.revoke") };
+  public shared ({ caller }) func ggg_procedure_define(_ : T.ProcedureDefineArgs) : async Result<T.Governed> { nobody(caller, "procedure.define") };
+  public shared ({ caller }) func ggg_request_file(_ : T.RequestFileArgs) : async Result<T.Request> { nobody(caller, "request.file") };
+  public shared ({ caller }) func ggg_request_set_due(_ : T.RequestSetDueArgs) : async Result<T.Request> { nobody(caller, "request.decide") };
+  public shared ({ caller }) func ggg_request_decide(_ : T.RequestDecideArgs) : async Result<T.Request> { nobody(caller, "request.decide") };
 
   // §8
   public shared ({ caller }) func ggg_dispute_file(_ : T.DisputeFileArgs) : async Result<T.Dispute> { nobody(caller, "dispute.create") };
@@ -976,6 +1115,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_bids_reveal(_ : T.BidsRevealArgs) : async Result<T.Governed> { nobody(caller, "tender.manage") };
   public shared ({ caller }) func ggg_bid_score(_ : T.BidScoreArgs) : async Result<T.Bid> { nobody(caller, "bid.evaluate") };
   public shared ({ caller }) func ggg_tender_award(_ : T.TenderAwardArgs) : async Result<T.Governed> { nobody(caller, "tender.manage") };
+  public shared ({ caller }) func ggg_tender_notice(_ : T.TenderNoticeArgs) : async Result<T.Tender> { nobody(caller, "tender.manage") };
 
   // §10
   public shared ({ caller }) func ggg_quarter_register(_ : T.QuarterRegisterArgs) : async Result<T.Governed> { nobody(caller, "quarter.register") };
@@ -995,8 +1135,15 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_codex_install(_ : T.CodexSource) : async Result<T.Governed> { nobody(caller, "codex.install") };
   public shared ({ caller }) func ggg_codex_uninstall() : async Result<T.Governed> { nobody(caller, "codex.install") };
   public shared ({ caller }) func ggg_codex_revert() : async Result<T.Governed> { nobody(caller, "codex.install") };
+  public shared ({ caller }) func ggg_codex_activate(_ : T.CodexActivateArgs) : async Result<T.Governed> { nobody(caller, "codex.install") };
   public shared ({ caller }) func ggg_notification_read(_ : T.NotificationReadArgs) : async Result<T.NotificationsRead> { nobody(caller, "self.data_manage") };
-  public shared ({ caller }) func ggg_notification_send(_ : T.NotificationSendArgs) : async Result<T.Notification> { nobody(caller, "notification.send") };
+  public shared ({ caller }) func ggg_notification_send(_ : T.NotificationSendArgs) : async Result<T.Delivery> { nobody(caller, "notification.send") };
+  public shared ({ caller }) func ggg_external_add(_ : T.ExternalAddArgs) : async Result<T.Governed> { nobody(caller, "external.manage") };
+  public shared ({ caller }) func ggg_external_report(_ : T.ExternalReportArgs) : async Result<T.Event> { nobody(caller, "external.report") };
+  public shared ({ caller }) func ggg_dispatch_confirm(_ : T.DispatchConfirmArgs) : async Result<T.Dispatch> { nobody(caller, "dispatch.confirm") };
+  public shared ({ caller }) func ggg_task_schedule(_ : T.TaskScheduleArgs) : async Result<T.Task> { nobody(caller, "task.schedule") };
+  public shared ({ caller }) func ggg_task_reschedule(_ : T.TaskRescheduleArgs) : async Result<T.Task> { nobody(caller, "task.schedule") };
+  public shared ({ caller }) func ggg_task_cancel(_ : Text) : async Result<T.Task> { nobody(caller, "task.schedule") };
 
   // §12
   public shared ({ caller }) func ggg_setup_state() : async Result<T.SetupState> { nobody(caller, "realm.configure") };
@@ -1025,6 +1172,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_crypto_revoke(_ : T.KeyRevokeArgs) : async Result<Nat> { nobody(caller, "self.data_manage") };
   public shared ({ caller }) func ggg_document_store(_ : T.DocumentStoreArgs) : async Result<T.DocumentStored> { nobody(caller, "document.manage") };
   public shared ({ caller }) func ggg_document_share(_ : T.DocumentShareArgs) : async Result<Nat> { nobody(caller, "document.manage") };
+  public shared ({ caller }) func ggg_document_publish(_ : T.DocumentPublishArgs) : async Result<T.Document> { nobody(caller, "document.manage") };
   public shared ({ caller }) func ggg_document_revoke(_ : T.DocumentRevokeArgs) : async Result<Nat> { nobody(caller, "document.manage") };
   public shared ({ caller }) func ggg_document_delete(_ : T.DocumentDeleteArgs) : async Result<T.DocumentDeleted> { nobody(caller, "document.manage") };
 

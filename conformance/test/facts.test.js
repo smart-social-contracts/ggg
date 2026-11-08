@@ -51,8 +51,28 @@ test('every kind is declared by named aliases of ggg.did, with the ratio scale a
   assert.deepEqual([rate.kind, rate.min, rate.max, rate.optional], ['ratio', 0, 100 * WHOLE, true]);
   const amount = actions.invoice_create.facts.amount;
   assert.deepEqual([amount.kind, amount.type, amount.min, amount.max], ['money', 'nat', 0, 9_007_199_254_740_991]);
+  const line = actions['invoice_create.items'].facts.amount;
+  assert.deepEqual([line.kind, line.type, line.min, line.max], ['money', 'int', -9_007_199_254_740_991, 9_007_199_254_740_991]);
+  const deadline = actions.procedure_define.facts.decision_deadline;
+  assert.deepEqual([deadline.kind, deadline.optional, deadline.fields.count.min, deadline.fields.count.max], ['period', true, 0, 1_000_000]);
+  assert.deepEqual(deadline.fields.unit.values, ['Day', 'WorkingDay', 'Month', 'Year']);
   assert.deepEqual(kinds.period.candid, ['record { count : nat; unit : PeriodUnit }']);
   assert.deepEqual(types.get('PeriodUnit').variant.map((unit) => unit.name), ['Day', 'WorkingDay', 'Month', 'Year']);
+});
+
+test('a derived fact says what the GOS computes it from, and never shadows an argument', () => {
+  const { published_in } = committed.actions.tender_award.facts;
+  assert.equal(published_in.type, 'vec');
+  assert.match(published_in.derived, /notices/);
+  for (const total of ['revenue', 'expense']) {
+    const fact = committed.actions.budget_propose.facts[total];
+    assert.equal(fact.kind, 'money');
+    assert.match(fact.derived, /sum/);
+  }
+  const derived = Object.values(committed.actions).flatMap((a) => Object.values(a.facts)).filter((f) => f.derived);
+  assert.equal(derived.length, 3, 'derived facts are few and declared one by one');
+  const did = read('ggg.did').replace('type TenderAwardArgs = record { tender : text;', 'type TenderAwardArgs = record { tender : text; published_in : text;');
+  assert.throws(() => generate(did), /published_in collides with an argument/);
 });
 
 test('every fact has a finite range, where it is a number', () => {

@@ -41,7 +41,8 @@ const entities = new Map(
 const records = new Map(
   [...did.matchAll(/^type (\w+) = record \{([^]*?)\};/gm)].map(([, name, body]) => [
     name,
-    [...body.matchAll(/"?(\w+)"?\s*:/g)].map((m) => m[1]).sort(),
+    // Comments inside the record may hold a colon, so they go first.
+    [...body.replace(/\/\/[^\n]*/g, '').matchAll(/"?(\w+)"?\s*:/g)].map((m) => m[1]).sort(),
   ]),
 );
 

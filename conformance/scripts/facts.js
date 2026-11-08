@@ -26,10 +26,15 @@ export const KINDS = {
     rule: 'One scale for every ratio: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456. People read and write decimals; the value is the integer. A Ratio (quorum, threshold, share, weight) is at most 100 %; a Rate (a tax rate, a coefficient) is at most 100 times that.',
   },
   money: {
-    aliases: { Money: { min: 0, max: SAFE_MAX } },
+    aliases: { Money: { min: 0, max: SAFE_MAX }, SignedMoney: { min: -SAFE_MAX, max: SAFE_MAX } },
     unit: "the token's smallest unit (Token.decimals)",
-    range: '0 to 9 007 199 254 740 991 (2^53 − 1)',
-    rule: 'Money computed from a ratio is rounded to the nearest cent, an exact half away from zero. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units.',
+    range: '`Money` 0 to 9 007 199 254 740 991 (2^53 − 1); `SignedMoney` −9 007 199 254 740 991 to 9 007 199 254 740 991, for a discount line',
+    rule: 'Money computed from a ratio is rounded to the nearest cent, an exact half away from zero. For a token with more than two decimals the result is a multiple of 10^(decimals - 2) smallest units. Money is never negative; SignedMoney may be, for a discount or bonus line.',
+  },
+  area: {
+    aliases: { Area: { min: 0, max: LONG_MAX } },
+    unit: 'square metres',
+    range: '0 to 9 223 372 036 854 775 807',
   },
   timestamp: {
     aliases: { Timestamp: { min: 0, max: LONG_MAX } },
@@ -51,6 +56,18 @@ export const KINDS = {
 const ALIAS_KIND = Object.fromEntries(
   Object.entries(KINDS).flatMap(([kind, { aliases }]) => Object.keys(aliases).map((alias) => [alias, kind])),
 );
+
+// Facts that are not arguments. A GOS computes each from its own records when the operation is called,
+// deterministically, and legislation reads it like an argument (docs/layered-codex.md §1).
+const DERIVED = {
+  tender_award: {
+    published_in: { type: { vec: { name: 'text' } }, derived: "the journals of the tender's notices" },
+  },
+  budget_propose: {
+    revenue: { type: { name: 'Money' }, derived: "the sum of planned over the period's Revenue lines" },
+    expense: { type: { name: 'Money' }, derived: "the sum of planned over the period's Expense lines" },
+  },
+};
 
 // Lists an operation's rules may range over although the operation's argument is only an id: the list
 // of the saved record that the id names. Every list of records among the arguments gets a per-list
@@ -263,6 +280,10 @@ export function generate(source = readFileSync(DID, 'utf8')) {
       }
     } else if (args.length > 1) {
       throw new Error(`${name} takes ${args.length} arguments; the schema expects one record`);
+    }
+    for (const [fact, { type, derived }] of Object.entries(DERIVED[operation] ?? {})) {
+      if (action.facts[fact]) throw new Error(`${operation}: the derived fact ${fact} collides with an argument`);
+      action.facts[fact] = { ...describe(type), derived };
     }
     const lists = { ...recordLists(types, argFields), ...(SAVED_LISTS[operation] ?? {}) };
     if (Object.keys(lists).length) action.lists = Object.fromEntries(Object.keys(lists).map((list) => [list, `${operation}.${list}`]));

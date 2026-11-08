@@ -28,6 +28,10 @@ type Rate = nat;
 // Money in the token's smallest unit (Token.decimals). Money computed from a Ratio is rounded to the
 // nearest cent, an exact half away from zero (model §1).
 type Money = nat;
+// Money that may be negative, such as a discount line of an invoice. Rounded as Money is.
+type SignedMoney = int;
+// An area in square metres.
+type Area = nat;
 
 // The ICRC-3 generic value, for structured data whose shape the model leaves open.
 type Value = variant {
@@ -59,6 +63,11 @@ type User = record {
   nickname : opt text;
   avatar : opt text;
   home_quarter : opt text;
+  // A BCP 47 language tag, for notices to the user.
+  language : opt text;
+  // The Zone the user lives in: a district the realm defined (zone_define), stated when joining or set by
+  // user_edit.
+  home_zone : opt text;
   profiles : vec text;
   private_data : opt blob;
 };
@@ -87,14 +96,37 @@ type Human = record {
 
 type IdentityStatus = variant { Pending; Verified; Rejected };
 
+// Standard kinds: `national_id`, `passport`, `residence_permit`, `driver_license`; a realm may add its own.
+// The issuer of a national id or passport is the country, so it says the nationality.
 type Identity = record {
   id : text;
   human : text;
   kind : text;
+  // A subdivision of the kind, such as a long-term residence permit.
+  category : opt text;
   issuer : text;
   ref : text;
   status : IdentityStatus;
   verified_at : opt Timestamp;
+  expires_at : opt Timestamp;
+};
+
+type AttributeStatus = variant { Pending; Verified; Rejected };
+
+// A certified attribute of a person: a status another body certifies and the realm verifies, as it
+// verifies identities, such as a disability, a family status or being a student. The kinds and their
+// values are legislation's; GGG records the attestation. `kind` and `value` are in clear, and readable
+// only by the person, by the holders of attribute.review and by the codex (I-PRV-1).
+type Attribute = record {
+  id : text;
+  human : text;
+  kind : text;
+  value : text;
+  issuer : text;
+  ref : text;
+  status : AttributeStatus;
+  verified_at : opt Timestamp;
+  expires_at : opt Timestamp;
 };
 
 type UserProfile = record {
@@ -160,12 +192,16 @@ type DelegationRequest = record {
 
 // ---- §3 Departments and organizations
 
-// m of n approvals.
-type Policy = record { m : nat; n : nat; quorum : Ratio; veto : vec principal };
+// m of n approvals. `casting_vote` is a seat holder whose yes decides a tie in a proposal of the department
+// counted over the votes cast (I-GOV-3).
+type Policy = record { m : nat; n : nat; quorum : Ratio; veto : vec principal; casting_vote : opt principal };
 
 type Department = record {
   id : text;
   description : text;
+  // What kind of body it is, such as the realm's plenary, so legislation from a source above can name the
+  // kind without naming the department.
+  kind : opt text;
   parent : opt text;
   is_root : bool;
   head : opt principal;
@@ -248,6 +284,9 @@ type ProposalResult = variant {
 type ProposalLinkKind = variant { Replaces; RelatesTo };
 type ProposalLink = record { kind : ProposalLinkKind; proposal : text };
 
+// What a threshold is measured against: the yes and no votes cast, or every eligible voter.
+type ThresholdBasis = variant { Cast; Eligible };
+
 type Tally = record { yes : nat; no : nat; abstain : nat; eligible : opt nat };
 
 type Proposal = record {
@@ -257,14 +296,24 @@ type Proposal = record {
   proposer : principal;
   on_behalf_of : opt principal;
   department : opt text;
+  // What the proposal is (a change of legislation, a budget, a motion) and the matter it decides, in the
+  // realm's own words, for legislation to read.
+  kind : opt text;
+  matter : opt text;
   action : ProposalAction;
   status : ProposalStatus;
   opens_at : opt Timestamp;
   deadline : opt Timestamp;
   // When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
   effective_at : opt Timestamp;
+  // The rule that decides it (I-GOV-3): the yes votes exceed (realm-wide) or reach (a department) the
+  // threshold of the basis, with the quorum met.
   threshold : Ratio;
   quorum : Ratio;
+  threshold_of : ThresholdBasis;
+  // The scope's casting vote when the proposal was created (the realm's setting, or the department's
+  // policy's): a member whose yes decides a tie under the Cast basis. Never the proposer's choice.
+  casting_vote : opt principal;
   tally : Tally;
   result : opt ProposalResult;
   links : vec ProposalLink;
@@ -302,6 +351,11 @@ type Contract = record {
   title : text;
   parties : vec Ref;
   mandate : opt text;
+  // What is contracted (works, supplies, services), by which procedure, and the tender it came from, which
+  // gave it its kind and procedure.
+  kind : opt text;
+  procedure : opt text;
+  tender : opt text;
   value : Money;
   symbol : text;
   terms_ref : text;
@@ -320,7 +374,12 @@ type TreasuryConfig = record {
   auto_allocate : bool;
 };
 
-type Treasury = record { id : text; config : TreasuryConfig };
+type Treasury = record {
+  id : text;
+  config : TreasuryConfig;
+  // The sum of the active loans' `outstanding`.
+  debt_outstanding : Money;
+};
 
 type Token = record {
   id : text;
@@ -364,14 +423,18 @@ type FiscalPeriod = record {
   source_hash : text;
 };
 
-type BudgetStatus = variant { Draft; Proposed; Adopted; Amended; Closed };
+// Extended: copied from the previous period's adopted budget by budget_extend, in force until an adopted
+// budget replaces it.
+type BudgetStatus = variant { Draft; Proposed; Adopted; Amended; Extended; Closed };
+// Whether a line plans money coming in or going out; `category` is the realm's word for what.
+type BudgetKind = variant { Revenue; Expense };
 
 type Budget = record {
   id : text;
   fund : text;
   period : text;
   category : text;
-  kind : text;
+  kind : BudgetKind;
   planned : Money;
   actual : Money;
   status : BudgetStatus;
@@ -418,10 +481,23 @@ type LedgerEntry = record {
 
 type InvoiceStatus = variant { Pending; Paid; Overdue; Cancelled };
 
+// One line of an invoice. A negative amount is a discount or bonus. `quantity` is in the line's `unit`
+// (`m3`, `h`, a count when absent). `legislation` is the provision that charges it.
+type InvoiceItem = record {
+  concept : text;
+  amount : SignedMoney;
+  quantity : opt nat;
+  unit : opt text;
+  legislation : opt text;
+};
+
 type Invoice = record {
   id : text;
   payer : Ref;
   amount : Money;
+  // The items sum to `amount`. `facts` is what legislation reads about the invoice beyond its items.
+  items : vec InvoiceItem;
+  facts : Value;
   symbol : text;
   due_at : opt Timestamp;
   status : InvoiceStatus;
@@ -502,6 +578,24 @@ type TaxPolicy = record {
 
 type TaxDeclarationStatus = variant { Filed; Assessed; Settled; Disputed };
 
+type LoanStatus = variant { Active; Repaid };
+
+// Money the realm owes an outside lender, in the accounting currency (`symbol`), so that the treasury's
+// `debt_outstanding` is one sum. The money itself moves outside the realm; GGG records the debt and its
+// repayments.
+type Loan = record {
+  id : text;
+  lender : text;
+  amount : Money;
+  symbol : text;
+  term : Period;
+  rate : Rate;
+  fund : text;
+  outstanding : Money;
+  status : LoanStatus;
+  facts : Value;
+};
+
 type TaxDeclaration = record {
   id : text;
   declarant : Ref;
@@ -523,6 +617,12 @@ type Land = record {
   width : nat;
   height : nat;
   kind : text;
+  // What an assessor set for taxes based on the parcel, its value in the accounting currency and its area
+  // in square metres, when, and under which reference in the assessor's register.
+  assessed_value : opt Money;
+  area : opt Area;
+  assessed_at : opt Timestamp;
+  assessment_ref : opt text;
   owner : Ref;
   status : LandStatus;
   token_id : opt nat;
@@ -530,6 +630,8 @@ type Land = record {
   metadata : Value;
 };
 
+// A member's own home cell (an h3 index, set with zone_set, tied to `user`), or a zone the realm defines
+// with zone_define, such as a district, named by its id.
 type Zone = record {
   id : text;
   name : text;
@@ -537,6 +639,8 @@ type Zone = record {
   land : opt text;
   user : opt principal;
   metadata : Value;
+  // Members whose home_zone this is.
+  population : nat;
 };
 
 // ---- §7 Licensing
@@ -550,10 +654,46 @@ type License = record {
   issued_by : text;
   status : LicenseStatus;
   applied_at : Timestamp;
+  // When a decision is due, from the Procedure of the licence's kind.
+  decision_due : opt Timestamp;
   issued_at : opt Timestamp;
   expires_at : opt Timestamp;
   evidence_ref : opt text;
   conditions : Value;
+};
+
+// What the realm's silence past a deadline means: Positive grants, Negative refuses.
+type Silence = variant { Positive; Negative };
+
+// How a kind of application is decided: who starts it, the deadline for a decision, and what the realm's
+// silence means. Keyed by the licence kind it governs.
+type Procedure = record {
+  id : text;
+  initiated_by : text;
+  matter : opt text;
+  decision_deadline : opt Period;
+  silence : opt Silence;
+  legislation : opt text;
+  facts : Value;
+};
+
+type RequestStatus = variant { Filed; Decided };
+
+// A request to the realm by a person or a body: a petition, a complaint, a request for information or
+// for personal data. The kinds are the realm's; legislation sets the deadline and decides silence. A
+// `body` or `reply` that holds personal data carries a Document reference, encrypted, not text in clear.
+type Request = record {
+  id : text;
+  kind : text;
+  by : Ref;
+  body : Value;
+  filed_at : Timestamp;
+  due_at : opt Timestamp;
+  extension_limit : opt Timestamp;
+  status : RequestStatus;
+  decision : opt text;
+  reply : opt text;
+  decided_at : opt Timestamp;
 };
 
 // ---- §8 Justice
@@ -674,17 +814,25 @@ type TenderStatus = variant { Draft; Open; Closed; Evaluation; Awarded; Contract
 
 type Criterion = record { criterion : text; weight : Ratio };
 
+// A notice of the tender published in a journal, recorded with tender_notice.
+type Notice = record { journal : text; published_at : Timestamp; ref : opt text };
+
 type Tender = record {
   id : text;
   title : text;
   description : text;
   requester : text;
+  // What is tendered (works, supplies, services), by which procedure, and for how much.
+  kind : opt text;
+  procedure : opt text;
+  estimated_value : opt Money;
   status : TenderStatus;
   opens_at : opt Timestamp;
   closes_at : opt Timestamp;
   rubric : vec Criterion;
   winner : opt text;
   contract : opt text;
+  notices : vec Notice;
 };
 
 type Bid = record {
@@ -730,9 +878,11 @@ type Realm = record {
   trusted_principals : vec principal;
   require_marketplace_approval : bool;
   trusted_approvers : vec text;
-  // For realm-wide proposals.
+  // For realm-wide proposals. `casting_vote` is an active member whose yes decides a tie over the votes
+  // cast (I-GOV-3); set with governance_update.
   voting_threshold : Ratio;
   voting_quorum : Ratio;
+  casting_vote : opt principal;
   open_registration : bool;
   logo_url : opt text;
   background_image_url : opt text;
@@ -740,6 +890,8 @@ type Realm = record {
   network : text;
   // An IANA time zone name such as "Europe/Madrid"; "UTC" until the realm sets one.
   timezone : text;
+  // BCP 47 tags of the realm's languages, the first the default.
+  languages : vec text;
   // Its members; on a capital, with its quarters' as they last reported.
   member_count : nat;
 };
@@ -825,7 +977,8 @@ type FederationMessage = record {
 
 // ---- §11 Codex, notifications and audit
 
-type CodexStatus = variant { Active; Inactive; Reverted };
+// Pending: installed and checked, waiting for codex_activate or its proposal's effective_at.
+type CodexStatus = variant { Pending; Active; Inactive; Reverted };
 
 type Codex = record {
   id : text;
@@ -852,6 +1005,55 @@ type Notification = record {
   at : Timestamp;
 };
 
+// A body outside the realm and outside the Internet Computer: an authority, a journal, a lender, a
+// bank. `channel` is how a dispatch reaches it: `manual` (an operator delivers it) or an https URL (a
+// bridge does).
+type External = record {
+  id : text;
+  name : text;
+  kind : text;
+  channel : text;
+};
+
+type DispatchStatus = variant {
+  Queued;
+  // When it was delivered, and the receipt that proves it (a bulletin number, a filing reference).
+  Confirmed : record { at : Timestamp; receipt : opt text };
+  Failed : text;
+};
+
+// One notice to an External, queued by the realm and confirmed by whoever delivered it. `document` is
+// the document it carries, `codex` the codex it concerns, when either applies. A `body` that holds
+// personal data carries a Document reference, encrypted, not text in clear.
+type Dispatch = record {
+  id : text;
+  to : text;
+  topic : text;
+  title : text;
+  body : Value;
+  document : opt text;
+  codex : opt text;
+  queued_at : Timestamp;
+  status : DispatchStatus;
+};
+
+type TaskStatus = variant { Scheduled; Run; Failed; Cancelled };
+
+// One operation scheduled for a time. It runs with the authority of whoever scheduled it, never as the
+// realm's controller, and every guard and rule runs again when it does, so a task scheduled under old
+// legislation obeys the legislation in force on its date. The run writes the operation's own Event, with
+// origin `task`; `event` names it. There is no task_run operation.
+type Task = record {
+  id : text;
+  op : text;
+  args : Value;
+  at : Timestamp;
+  reason : opt text;
+  status : TaskStatus;
+  scheduled_by : Ref;
+  event : opt text;
+};
+
 type Event = record {
   id : text;
   op : text;
@@ -876,14 +1078,29 @@ type KeyEnvelope = record {
   at : Timestamp;
 };
 
+// A publication of the document in a journal: the dispatch that carried it, and when and under which
+// reference the journal published it, from the dispatch's confirmation.
+type Publication = record { journal : text; dispatch : text; published_at : opt Timestamp; ref : opt text };
+// Content in clear: where it lives and its hash. It holds no personal data.
+type Published = record { ref : text; hash : text };
+
 type Document = record {
   id : text;
   department : text;
   title : text;
+  // What the document is (minutes, an ordinance, an award), and the BCP 47 tags of its languages.
+  kind : opt text;
+  languages : vec text;
   ref : text;
   hash : text;
   author : principal;
   at : Timestamp;
+  // What legislation reads about the document when it is shared, such as its source and whether it was
+  // given freely.
+  facts : Value;
+  // Published to everyone: the content in clear, readable without signing in.
+  public : opt Published;
+  publications : vec Publication;
 };
 
 // ---- Operation arguments and results
@@ -921,19 +1138,49 @@ type Me = record {
   requests : vec DelegationRequest;
 };
 
-type JoinArgs = record { code : opt text; nickname : opt text };
-type ProfileUpdateArgs = record { nickname : opt text; avatar : opt text; on_behalf_of : opt principal };
+// `home_zone` names a zone the realm defined; an unknown zone, or a member's home cell, is InvalidArgument.
+type JoinArgs = record { code : opt text; nickname : opt text; language : opt text; home_zone : opt text };
+type ProfileUpdateArgs = record { nickname : opt text; avatar : opt text; language : opt text; on_behalf_of : opt principal };
 
 type NewUser = record { user : principal; nickname : opt text };
 type UserAddArgs = record { user : principal; nickname : opt text; department : opt text };
 // At most 500 users per call. Nobody is added if one is already known or listed twice.
 type UserImportArgs = record { users : vec NewUser; department : opt text };
-type UserEditArgs = record { user : principal; nickname : opt text; avatar : opt text; home_quarter : opt text };
+type UserEditArgs = record {
+  user : principal;
+  nickname : opt text;
+  avatar : opt text;
+  home_quarter : opt text;
+  language : opt text;
+  // A zone the realm defined; an unknown zone, or a member's home cell, is InvalidArgument.
+  home_zone : opt text;
+};
 type UserSetStatusArgs = record { user : principal; status : MemberStatus; department : opt text };
 type UserRemoveArgs = record { user : principal; department : opt text };
 
-type IdentitySubmitArgs = record { kind : text; issuer : opt text; ref : text; on_behalf_of : opt principal };
+type IdentitySubmitArgs = record {
+  kind : text;
+  category : opt text;
+  issuer : opt text;
+  ref : text;
+  expires_at : opt Timestamp;
+  on_behalf_of : opt principal;
+};
 type IdentityReviewArgs = record { identity : text; status : variant { Verified; Rejected } };
+
+// For the caller's own person. `ref` points to the proof, stored encrypted or off-chain.
+type AttributeSubmitArgs = record {
+  kind : text;
+  value : text;
+  issuer : opt text;
+  ref : text;
+  expires_at : opt Timestamp;
+  on_behalf_of : opt principal;
+};
+type AttributeReviewArgs = record { attribute : text; status : variant { Verified; Rejected } };
+// The caller's own attributes, of one kind or all.
+type AttributeListArgs = record { kind : opt text; cursor : opt text; limit : opt nat32; on_behalf_of : opt principal };
+type AttributePage = record { items : vec Attribute; next : opt text };
 
 type InviteCreateArgs = record {
   profile : opt text;
@@ -1002,11 +1249,12 @@ type OrganizationDetail = record { organization : Organization; seats : vec Seat
 type OrganizationListArgs = record { cursor : opt text; limit : opt nat32; status : opt OrganizationStatus };
 type OrganizationPage = record { items : vec Organization; next : opt text };
 
-type DepartmentCreateArgs = record { department : text; parent : opt text; description : text };
+type DepartmentCreateArgs = record { department : text; parent : opt text; description : text; kind : opt text };
 // The parent is never the department itself or one of its sub-departments; the root has none.
 type DepartmentEditArgs = record {
   department : text;
   description : opt text;
+  kind : opt text;
   parent : opt text;
   head : opt variant { Set : principal; Clear };
 };
@@ -1072,6 +1320,13 @@ type ProposalCreateArgs = record {
   title : text;
   description : text;
   department : opt text;
+  kind : opt text;
+  matter : opt text;
+  // Stricter than the realm's or the department's rule, never weaker (InvalidArgument): a higher threshold
+  // or quorum, or Eligible where the default is Cast. The casting vote is the scope's, not the proposer's.
+  threshold : opt Ratio;
+  quorum : opt Ratio;
+  threshold_of : opt ThresholdBasis;
   action : ProposalAction;
   // Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
   effective_at : opt Timestamp;
@@ -1103,6 +1358,9 @@ type ContractCreateArgs = record {
   title : text;
   parties : vec Ref;
   mandate : opt text;
+  kind : opt text;
+  procedure : opt text;
+  tender : opt text;
   value : Money;
   symbol : text;
   terms_ref : text;
@@ -1111,10 +1369,12 @@ type ContractCreateArgs = record {
   ends_at : opt Timestamp;
 };
 
+// `casting_vote` names an active member, else InvalidArgument.
 type GovernanceUpdateArgs = record {
   voting_window : opt Duration;
   voting_threshold : opt Ratio;
   voting_quorum : opt Ratio;
+  casting_vote : opt variant { Set : principal; Clear };
 };
 
 // §5
@@ -1182,13 +1442,19 @@ type TransferCreateArgs = record {
 };
 type TransferRevertArgs = record { transfer : text; reason : opt text };
 
+// At least one item, and the items sum to `amount` (InvalidArgument otherwise).
 type InvoiceCreateArgs = record {
   payer : Ref;
   amount : Money;
   symbol : opt text;
   due_at : opt Timestamp;
   reason : opt Ref;
+  items : vec InvoiceItem;
+  facts : opt Value;
 };
+// Adds a line to a pending invoice and raises (or, for a negative amount, lowers) its amount by the
+// line's; Conflict once the invoice is paid, overdue or cancelled, InvalidArgument below zero.
+type InvoiceItemAddArgs = record { invoice : text; item : InvoiceItem };
 // The invoice, and the account to pay it into.
 type InvoiceCreated = record { invoice : Invoice; pay_to : Account };
 type InvoiceCheckArgs = record { invoice : text; on_behalf_of : opt principal };
@@ -1204,13 +1470,19 @@ type InvoicePage = record { items : vec Invoice; next : opt text };
 type FundCreateArgs = record { fund : text; name : opt text; kind : opt text; department : opt text };
 // Periods open in order: one starts no earlier than the latest ends.
 type PeriodOpenArgs = record { period : text; name : opt text; starts_at : Timestamp; ends_at : Timestamp };
-type BudgetDraftArgs = record { fund : text; period : text; category : text; kind : opt text; planned : Money };
+type BudgetDraftArgs = record { fund : text; period : text; category : text; kind : BudgetKind; planned : Money };
 type BudgetAmendArgs = record { budget : text; planned : Money };
+// Proposes every draft line of the period together, under the root department's policy. `years` is how
+// many periods the plan covers, when more than one. Legislation reads the period's totals, `revenue` and
+// `expense` (the sums of `planned` over its Revenue and Expense lines), as facts of the call; a total out
+// of Money's range is InvalidArgument, like any other fact.
+type BudgetProposeArgs = record { period : text; years : opt nat };
 // Shares add up to at most 100 000 000 (100 %).
 type AllocationRuleDraftArgs = record { source_fund : text; rules : vec Allocation };
 // Pays each active, non-agent appointee once per period label.
 type PayrollRunArgs = record { department : text; period : text; symbol : opt text };
-type ReportIssueArgs = record { period : text; kind : opt text };
+// `adjustments` are figures the issuer adds to the ledger's, for a report in terms the ledger doesn't keep.
+type ReportIssueArgs = record { period : text; kind : opt text; adjustments : opt Value };
 
 // The entries are checked as they are when the policy is proposed (layered-codex §3.2).
 type TaxPolicyDraftArgs = record { document : Value; description : opt text; taxes : vec TaxEntry };
@@ -1226,6 +1498,19 @@ type TaxDeclareArgs = record {
   on_behalf_of : opt principal;
 };
 type TaxDeclared = record { declaration : TaxDeclaration; invoice : opt Invoice };
+
+// `lender` is an External; the loan is in the accounting currency. Governed by the root department.
+type LoanCreateArgs = record {
+  lender : text;
+  amount : Money;
+  term : Period;
+  rate : Rate;
+  fund : text;
+  facts : opt Value;
+};
+type LoanRepayArgs = record { loan : text; amount : Money; reason : opt text };
+type LoanListArgs = record { cursor : opt text; limit : opt nat32; status : opt LoanStatus };
+type LoanPage = record { items : vec Loan; next : opt text };
 
 type PaymentAccountAddArgs = record {
   network : text;
@@ -1267,8 +1552,20 @@ type LandRegisterArgs = record {
 // Under a court order: an issued or final verdict in a case about the parcel, with `to` a party.
 type LandTransferArgs = record { land : text; to : Ref; order : text };
 type LandMintArgs = record { land : text; prepared_by : opt principal };
+// What the assessor sets, signing for it; a field left absent keeps its value. `legislation` is the
+// provision the assessment follows.
+type LandAssessArgs = record {
+  land : text;
+  value : opt Money;
+  area : opt Area;
+  reference : opt text;
+  legislation : opt text;
+};
 type LandFreezeArgs = record { land : text; reason : opt text };
 
+// Defines a zone of the realm, such as a district, which members name as their home_zone; the same id
+// again redefines it.
+type ZoneDefineArgs = record { zone : text; name : text; kind : text };
 // An h3 cell as the caller's home; it replaces the previous one.
 type ZoneSetArgs = record { zone : text; name : opt text; kind : opt text; on_behalf_of : opt principal };
 type ZoneClearArgs = record { zone : text; on_behalf_of : opt principal };
@@ -1301,6 +1598,28 @@ type LicensePage = record { items : vec License; next : opt text };
 // A licence by id, or the one of `kind` that `holder` holds.
 type LicenseVerifyArgs = record { id : opt text; holder : opt Ref; kind : opt text };
 type LicenseCheck = record { valid : bool; license : opt License };
+
+// Defines, or redefines, the procedure of licences of `kind`.
+type ProcedureDefineArgs = record {
+  kind : text;
+  initiated_by : text;
+  matter : opt text;
+  decision_deadline : opt Period;
+  silence : opt Silence;
+  legislation : opt text;
+  facts : opt Value;
+};
+type ProcedurePage = record { items : vec Procedure; next : opt text };
+
+// For the caller, or an organization they administer.
+type RequestFileArgs = record { kind : text; body : Value; organization : opt text; on_behalf_of : opt principal };
+type RequestGetArgs = record { id : text; on_behalf_of : opt principal };
+type RequestListArgs = record { cursor : opt text; limit : opt nat32; kind : opt text; status : opt RequestStatus };
+type RequestPage = record { items : vec Request; next : opt text };
+// Sets or moves the deadline, never past `extension_limit`, which is set once (Conflict after that).
+type RequestSetDueArgs = record { request : text; due_at : Timestamp; extension_limit : opt Timestamp };
+// `decision` is the realm's word for the outcome (`granted`, `refused`, `refused_by_silence`).
+type RequestDecideArgs = record { request : text; decision : text; reply : opt text };
 
 // For the caller, or an organization they administer.
 type LicenseApplyArgs = record {
@@ -1404,6 +1723,9 @@ type TenderCreateArgs = record {
   requester : text;
   title : text;
   description : opt text;
+  kind : opt text;
+  procedure : opt text;
+  estimated_value : opt Money;
   opens_at : opt Timestamp;
   closes_at : opt Timestamp;
   rubric : vec Criterion;
@@ -1423,6 +1745,9 @@ type BidsRevealArgs = record { tender : text; openings : vec BidOpening };
 type BidScoreArgs = record { bid : text; scores : vec record { criterion : text; score : nat } };
 // `bid` defaults to the best-scored revealed bid; a lower-scored one needs a justification.
 type TenderAwardArgs = record { tender : text; bid : opt text; justification : opt text };
+// Records that a notice of the tender appeared in `journal`: an External of kind `journal`, or `realm` for
+// the realm's own journal. `at` defaults to now and is never in the future.
+type TenderNoticeArgs = record { tender : text; journal : text; ref : opt text; at : opt Timestamp };
 
 // §10
 
@@ -1469,6 +1794,8 @@ type SigningPolicy = record {
 // No method returns a Codex record.
 type CodexView = record {
   checksum : opt text;
+  // A codex installed and waiting to be activated, by its checksum.
+  pending : opt text;
   healthy : bool;
   signing : SigningPolicy;
   history : vec text;
@@ -1501,13 +1828,43 @@ type NotificationReadArgs = record {
   on_behalf_of : opt principal;
 };
 type NotificationsRead = record { read : nat; next : opt text };
+// A title and body in one language, for a notice sent in several.
+type Translation = record { language : text; title : text; body : opt text };
+// To a user, department or organization, a Notification; to an External, a Dispatch. With translations,
+// each reader gets the one in their language, else the title and body given.
 type NotificationSendArgs = record {
   recipient : Ref;
   title : text;
   body : opt text;
   href : opt text;
   topic : opt text;
+  translations : opt vec Translation;
 };
+type Delivery = variant { Notification : Notification; Dispatch : Dispatch };
+
+// A second external_add of the same id redefines the body.
+type ExternalAddArgs = record { external : text; name : text; kind : text; channel : text };
+type ExternalPage = record { items : vec External; next : opt text };
+// A report that reached the realm from an External, entered by whoever received it, with the file as
+// evidence. It is audited as an Event, which legislation hooks.
+type ExternalReportArgs = record { external : text; topic : text; body : Value; evidence_ref : opt text };
+// How the delivery went: Confirmed with when (`at` defaults to now, and lies between the dispatch's
+// `queued_at` and now) and the receipt that proves it, or Failed with the reason.
+type DispatchOutcome = variant { Confirmed : record { at : opt Timestamp; receipt : opt text }; Failed : text };
+// A dispatch takes one outcome; a second is Conflict.
+type DispatchConfirmArgs = record { dispatch : text; outcome : DispatchOutcome };
+type DispatchListArgs = record { cursor : opt text; limit : opt nat32; to : opt text; status : opt variant { Queued; Confirmed; Failed } };
+type DispatchPage = record { items : vec Dispatch; next : opt text };
+
+// `codex` is the pending codex's checksum (at most one codex is pending at a time). `at` defaults to now;
+// a time ahead schedules the activation.
+type CodexActivateArgs = record { codex : text; at : opt Timestamp };
+
+// `op` is an operation name (`user_set_status`), `args` its arguments as the Event records them.
+type TaskScheduleArgs = record { op : text; args : Value; at : Timestamp; reason : opt text };
+type TaskRescheduleArgs = record { task : text; at : Timestamp };
+type TaskListArgs = record { cursor : opt text; limit : opt nat32; op : opt text; status : opt TaskStatus };
+type TaskPage = record { items : vec Task; next : opt text };
 
 // §12
 
@@ -1517,6 +1874,8 @@ type RealmConfigureArgs = record {
   welcome_message : opt text;
   open_registration : opt bool;
   quarter_join_mode : opt text;
+  // BCP 47 tags, the first the default.
+  languages : opt vec text;
   // An IANA name; any other text is InvalidArgument.
   timezone : opt text;
 };
@@ -1572,7 +1931,13 @@ type ScopePage = record { items : vec text; next : opt text };
 type AccessArgs = record { scope : text; cursor : opt text; limit : opt nat32 };
 type PrincipalPage = record { items : vec principal; next : opt text };
 
-type DocumentListArgs = record { department : text; cursor : opt text; limit : opt nat32 };
+type DocumentListArgs = record {
+  department : text;
+  cursor : opt text;
+  limit : opt nat32;
+  kind : opt text;
+  language : opt text;
+};
 type DocumentPage = record { items : vec Document; next : opt text };
 
 // The document's ciphertext reference, its key scope, and the caller's envelope if it has one.
@@ -1588,12 +1953,23 @@ type DocumentStoreArgs = record {
   document : opt text;
   department : text;
   title : text;
+  kind : opt text;
+  languages : vec text;
   ref : text;
   hash : text;
+  facts : opt Value;
   keys : vec WrappedKey;
 };
 type DocumentStored = record { document : Document; scope : text };
-type DocumentShareArgs = record { document : text; keys : vec WrappedKey };
+// On what basis personal data is shared: the legal basis and purpose in the realm's own words, the
+// legislation that sets the duty or task, and whether the data is of a special category.
+type ShareBasis = record { legal_basis : text; purpose : text; legislation : opt text; special_category : bool };
+// `recipient` is whom the keys are for: a User, an Organization or an External. `facts` is what
+// legislation reads about this share beyond the basis.
+type DocumentShareArgs = record { document : text; recipient : Ref; basis : opt ShareBasis; facts : opt Value; keys : vec WrappedKey };
+// Publishes the content in clear at `ref`, with its `hash`: the document becomes public. With an External
+// journal in `to`, a Dispatch to it is queued too.
+type DocumentPublishArgs = record { document : text; to : opt text; ref : text; hash : text };
 type DocumentRevokeArgs = record { document : text; principals : vec principal };
 // Deletes the wrapped keys `limit` at a time (at most 500), then the document: call again until `deleted`.
 type DocumentDeleteArgs = record { document : text; limit : opt nat32 };
@@ -1606,6 +1982,7 @@ service : {
   ggg_user_list : (ListArgs) -> (variant { Ok : UserPage; Err : GggError }) query;
   ggg_invite_list : (ListArgs) -> (variant { Ok : InvitePage; Err : GggError }) query;
   ggg_delegation_list : (DelegationListArgs) -> (variant { Ok : DelegationPage; Err : GggError }) query;
+  ggg_attribute_list : (AttributeListArgs) -> (variant { Ok : AttributePage; Err : GggError }) query;
   ggg_delegable_operations : () -> (variant { Ok : vec DelegableOperation; Err : GggError }) query;
   ggg_me : (MeArgs) -> (variant { Ok : Me; Err : GggError }) query;
   ggg_realm_join : (JoinArgs) -> (variant { Ok : UserEntry; Err : GggError });
@@ -1618,6 +1995,8 @@ service : {
   ggg_user_remove : (UserRemoveArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_identity_submit : (IdentitySubmitArgs) -> (variant { Ok : Identity; Err : GggError });
   ggg_identity_review : (IdentityReviewArgs) -> (variant { Ok : Identity; Err : GggError });
+  ggg_attribute_submit : (AttributeSubmitArgs) -> (variant { Ok : Attribute; Err : GggError });
+  ggg_attribute_review : (AttributeReviewArgs) -> (variant { Ok : Attribute; Err : GggError });
   ggg_invite_create : (InviteCreateArgs) -> (variant { Ok : InviteCreated; Err : GggError });
   ggg_invite_revoke : (text) -> (variant { Ok : Invite; Err : GggError });
   ggg_profile_create : (ProfileCreateArgs) -> (variant { Ok : Governed; Err : GggError });
@@ -1679,6 +2058,7 @@ service : {
   ggg_treasury_view : (ListArgs) -> (variant { Ok : TreasuryView; Err : GggError }) query;
   ggg_ledger_view : (LedgerArgs) -> (variant { Ok : LedgerPage; Err : GggError }) query;
   ggg_report_view : (ReportArgs) -> (variant { Ok : ReportPage; Err : GggError }) query;
+  ggg_loan_list : (LoanListArgs) -> (variant { Ok : LoanPage; Err : GggError }) query;
   ggg_treasury_configure : (TreasuryConfigureArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_token_register : (TokenRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_nft_token_register : (NFTTokenRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
@@ -1688,15 +2068,22 @@ service : {
   ggg_invoice_check : (InvoiceCheckArgs) -> (variant { Ok : Invoice; Err : GggError });
   ggg_my_invoices : (MyInvoicesArgs) -> (variant { Ok : MyInvoicePage; Err : GggError }) query;
   ggg_invoice_refresh : (InvoiceRefreshArgs) -> (variant { Ok : InvoicePage; Err : GggError });
+  ggg_invoice_item_add : (InvoiceItemAddArgs) -> (variant { Ok : Invoice; Err : GggError });
   ggg_fund_create : (FundCreateArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_period_open : (PeriodOpenArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_period_close : (text) -> (variant { Ok : Governed; Err : GggError });
   ggg_budget_draft : (BudgetDraftArgs) -> (variant { Ok : Governed; Err : GggError });
-  ggg_budget_propose : (text) -> (variant { Ok : Governed; Err : GggError });
+  ggg_budget_propose : (BudgetProposeArgs) -> (variant { Ok : Governed; Err : GggError });
+  // Copies the previous period's adopted budget into the period named as Extended lines, without a vote,
+  // and replies how many lines it copied; Conflict once the period has an Extended, Proposed or Adopted
+  // line (Draft lines stand in no way).
+  ggg_budget_extend : (text) -> (variant { Ok : nat; Err : GggError });
   ggg_budget_amend : (BudgetAmendArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_allocation_rule_draft : (AllocationRuleDraftArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_allocation_rule_propose : (text) -> (variant { Ok : Governed; Err : GggError });
   ggg_payroll_run : (PayrollRunArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_loan_create : (LoanCreateArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_loan_repay : (LoanRepayArgs) -> (variant { Ok : Loan; Err : GggError });
   ggg_report_issue : (ReportIssueArgs) -> (variant { Ok : FinancialReport; Err : GggError });
   ggg_tax_policy_draft : (TaxPolicyDraftArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_tax_policy_propose : (text) -> (variant { Ok : Governed; Err : GggError });
@@ -1714,8 +2101,10 @@ service : {
   ggg_land_register : (LandRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_land_transfer : (LandTransferArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_land_mint_nft : (LandMintArgs) -> (variant { Ok : nat; Err : GggError });
+  ggg_land_assess : (LandAssessArgs) -> (variant { Ok : Land; Err : GggError });
   ggg_land_freeze : (LandFreezeArgs) -> (variant { Ok : Land; Err : GggError });
   ggg_land_unfreeze : (text) -> (variant { Ok : Land; Err : GggError });
+  ggg_zone_define : (ZoneDefineArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_zone_set : (ZoneSetArgs) -> (variant { Ok : Zone; Err : GggError });
   ggg_zone_clear : (ZoneClearArgs) -> (variant { Ok : Zone; Err : GggError });
   ggg_credential_issue : (CredentialIssueArgs) -> (variant { Ok : CredentialIssued; Err : GggError });
@@ -1724,11 +2113,18 @@ service : {
   // §7
   ggg_license_list : (LicenseListArgs) -> (variant { Ok : LicensePage; Err : GggError }) query;
   ggg_license_verify : (LicenseVerifyArgs) -> (variant { Ok : LicenseCheck; Err : GggError }) query;
+  ggg_procedure_list : (ListArgs) -> (variant { Ok : ProcedurePage; Err : GggError }) query;
+  ggg_request_get : (RequestGetArgs) -> (variant { Ok : opt Request; Err : GggError }) query;
+  ggg_request_list : (RequestListArgs) -> (variant { Ok : RequestPage; Err : GggError }) query;
   ggg_license_apply : (LicenseApplyArgs) -> (variant { Ok : License; Err : GggError });
   ggg_license_renew : (LicenseRenewArgs) -> (variant { Ok : License; Err : GggError });
   ggg_license_decide : (LicenseDecideArgs) -> (variant { Ok : License; Err : GggError });
   ggg_license_suspend : (LicenseSuspendArgs) -> (variant { Ok : License; Err : GggError });
   ggg_license_revoke : (text) -> (variant { Ok : License; Err : GggError });
+  ggg_procedure_define : (ProcedureDefineArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_request_file : (RequestFileArgs) -> (variant { Ok : Request; Err : GggError });
+  ggg_request_set_due : (RequestSetDueArgs) -> (variant { Ok : Request; Err : GggError });
+  ggg_request_decide : (RequestDecideArgs) -> (variant { Ok : Request; Err : GggError });
 
   // §8
   ggg_dispute_get : (DisputeGetArgs) -> (variant { Ok : opt Dispute; Err : GggError }) query;
@@ -1768,6 +2164,7 @@ service : {
   ggg_bids_reveal : (BidsRevealArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_bid_score : (BidScoreArgs) -> (variant { Ok : Bid; Err : GggError });
   ggg_tender_award : (TenderAwardArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_tender_notice : (TenderNoticeArgs) -> (variant { Ok : Tender; Err : GggError });
 
   // §10
   ggg_quarter_directory : (ListArgs) -> (variant { Ok : QuarterDirectory; Err : GggError }) query;
@@ -1789,11 +2186,21 @@ service : {
   ggg_codex_status : (ListArgs) -> (variant { Ok : CodexView; Err : GggError }) query;
   ggg_notification_list : (NotificationListArgs) -> (variant { Ok : NotificationPage; Err : GggError }) query;
   ggg_events : (ListArgs) -> (variant { Ok : EventPage; Err : GggError }) query;
+  ggg_external_list : (ListArgs) -> (variant { Ok : ExternalPage; Err : GggError }) query;
+  ggg_dispatch_list : (DispatchListArgs) -> (variant { Ok : DispatchPage; Err : GggError }) query;
+  ggg_task_list : (TaskListArgs) -> (variant { Ok : TaskPage; Err : GggError }) query;
   ggg_codex_install : (CodexSource) -> (variant { Ok : Governed; Err : GggError });
   ggg_codex_uninstall : () -> (variant { Ok : Governed; Err : GggError });
   ggg_codex_revert : () -> (variant { Ok : Governed; Err : GggError });
+  ggg_codex_activate : (CodexActivateArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_notification_read : (NotificationReadArgs) -> (variant { Ok : NotificationsRead; Err : GggError });
-  ggg_notification_send : (NotificationSendArgs) -> (variant { Ok : Notification; Err : GggError });
+  ggg_notification_send : (NotificationSendArgs) -> (variant { Ok : Delivery; Err : GggError });
+  ggg_external_add : (ExternalAddArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_external_report : (ExternalReportArgs) -> (variant { Ok : Event; Err : GggError });
+  ggg_dispatch_confirm : (DispatchConfirmArgs) -> (variant { Ok : Dispatch; Err : GggError });
+  ggg_task_schedule : (TaskScheduleArgs) -> (variant { Ok : Task; Err : GggError });
+  ggg_task_reschedule : (TaskRescheduleArgs) -> (variant { Ok : Task; Err : GggError });
+  ggg_task_cancel : (text) -> (variant { Ok : Task; Err : GggError });
 
   // §12
   ggg_realm_info : () -> (Realm) query;
@@ -1822,6 +2229,7 @@ service : {
   ggg_crypto_revoke : (KeyRevokeArgs) -> (variant { Ok : nat; Err : GggError });
   ggg_document_store : (DocumentStoreArgs) -> (variant { Ok : DocumentStored; Err : GggError });
   ggg_document_share : (DocumentShareArgs) -> (variant { Ok : nat; Err : GggError });
+  ggg_document_publish : (DocumentPublishArgs) -> (variant { Ok : Document; Err : GggError });
   ggg_document_revoke : (DocumentRevokeArgs) -> (variant { Ok : nat; Err : GggError });
   ggg_document_delete : (DocumentDeleteArgs) -> (variant { Ok : DocumentDeleted; Err : GggError });
 };

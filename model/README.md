@@ -92,9 +92,9 @@ method per operation:
   any record it created, or `Proposed` with the id of the proposal it filed. The proposal's action is
   the same call, `Call { method; arg }`, and replaying it applies the change. A `delegable` operation
   takes `on_behalf_of : opt principal`.
-- **Kinds.** `Ratio`, `Rate`, `Money`, `Timestamp`, `Duration` and `Period` are named aliases, so a
-  field's unit and range can be read off `ggg.did`. [`facts.json`](../facts.json) lists them for every
-  operation's facts, with every fact's range
+- **Kinds.** `Ratio`, `Rate`, `Money`, `SignedMoney`, `Area`, `Timestamp`, `Duration` and `Period` are
+  named aliases, so a field's unit and range can be read off `ggg.did`. [`facts.json`](../facts.json)
+  lists them for every operation's facts, with every fact's range
   ([layered codex §3.3](../docs/layered-codex.md#33-the-fact-schema-units-rates-money-and-periods)).
   **Ranges are enforced:** a call with a value outside its fact's range is refused with
   `InvalidArgument`, so what the schema says about a fact holds for every request a GOS accepts.
@@ -149,11 +149,12 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `User` | `id` (principal), `nickname`, `avatar`, `home_quarter`, `profiles` → `UserProfile`*, `private_data` (encrypted) | One per principal known to this quarter. | `alice`: nickname Alice, home quarter North, profiles `[member]` |
+| `User` | `id` (principal), `nickname`, `avatar`, `home_quarter`, `home_zone` → `Zone`, `language` (a BCP 47 tag), `profiles` → `UserProfile`*, `private_data` (encrypted) | One per principal known to this quarter. `home_zone` is a zone the realm defined, such as a district (§6): the member states it when joining, and `user_edit` changes it; a name that is no defined zone, or a member's home cell, is `InvalidArgument`. | `alice`: nickname Alice, home quarter North, home zone Riverside, language `en`, profiles `[member]` |
 | `Member` | `id`, `user` → `User`, `status`, `joined_at` | Membership of a user in this quarter. | Alice: `active` since 2026-03-02 |
 | `GuestUser` | `id` (principal), `home_quarter`, `permissions` (Json) | A user from another quarter acting here. | Bob from South, allowed to view and transact |
 | `Human` | `id`, `user` → `User`, `date_of_birth`, `h3_index` | A verified person behind a user. At most one user per human. | Alice's verified person record: born 1990-04-12, home cell `871f1d489ffffff` |
-| `Identity` | `id`, `human` → `Human`, `kind` (`passport`, `email`, `registry`, …), `issuer`, `ref`, `status`, `verified_at` | An attestation. Proof material is stored encrypted or off-chain; `ref` points to it. | Alice's passport proof: kind `passport`, issuer `zkpassport`, verified 2026-03-02 |
+| `Identity` | `id`, `human` → `Human`, `kind` (`national_id`, `passport`, `residence_permit`, `driver_license`, `email`, …), `category`, `issuer`, `ref`, `status`, `verified_at`, `expires_at` | An attestation. Proof material is stored encrypted or off-chain; `ref` points to it. The standard kinds are the ones named here, and a realm may add its own; `category` is a subdivision of the kind (a long-term permit); the issuer of a national id or passport is the country, so it says the nationality. | Alice's passport: kind `passport`, issuer `ES`, verified 2026-03-02, expires 2031-03-01 |
+| `Attribute` | `id`, `human` → `Human`, `kind`, `value`, `issuer`, `ref`, `status`, `verified_at`, `expires_at` | A certified attribute of a person, which another body certifies and the realm verifies as it verifies identities: a disability, a family status, being a student. The kinds and values are legislation's; GGG records the attestation. `kind` and `value` are in clear, readable only by the person, the reviewers and the codex (I-PRV-1). | Alice's large-family title: kind `large_family`, value `general`, issued by the regional government, `verified`, expires 2028-06-30 |
 | `UserProfile` | `id` (name), `description`, `allowed_to` (Json list of permissions), `permissions` → `Permission`* | A named role. Defaults: `admin` (`all`), `member`. | `member` → `[self.join, proposal.vote, proposal.create, dispute.create, …]` |
 | `Permission` | `id` (name), `description`, `category`, `scope`, `users` → `User`*, `profiles` → `UserProfile`*, `departments` → `Department`* | A fine-grained grant of one permission to users, profiles or departments. | `transfer.create` on scope `fund:ROADS`, granted to Infrastructure |
 | `Invite` | `id` (code hash), `profile`, `department`, `position`, `max_uses`, `uses`, `redeemed_by` (Json), `expires_at`, `revoked`, `created_by` | The code itself is never stored. | 50-use code for new clerks: profile `member`, Civil Registry, position `clerk`, expires in 30 days |
@@ -164,23 +165,27 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 
 - `Member.status`: `active` ⇄ `inactive`; `active` ⇄ `suspended`; any → `banned` (terminal).
 - `Identity`: `pending` → `verified` | `rejected`.
+- `Attribute.status`: `pending` → `verified` | `rejected`.
 - `Delegation.status`: `pending` → `active` → `revoked` | `expired`; `pending` → `declined`.
 
 ### Operations
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `realm_join` (with optional invite code) | `self.join` | | Bob joins with code `X7K-29Q` → `{user: "bob", status: "active", profiles: ["member"]}` |
+| `realm_join` (with optional invite code, language and home zone) | `self.join` | | Bob joins with code `X7K-29Q` → `{user: "bob", status: "active", profiles: ["member"]}` |
 | `user_get`, `user_list` | `user.view` | read | Dana looks up `bob`: nickname, status, profiles |
 | `me` (own record, profiles, permissions, delegations) | `self.data_view` | read, delegable | Alice's dashboard: her profiles, permissions and the grant to Claude |
-| `profile_update` (nickname, avatar) | `self.update_public_profile` | delegable | Claude sets Alice's avatar `{avatar: "…/alice.png", on_behalf_of: "alice"}` |
+| `profile_update` (nickname, avatar, language) | `self.update_public_profile` | delegable | Claude sets Alice's avatar `{avatar: "…/alice.png", on_behalf_of: "alice"}` |
 | `private_data_update` | `self.update_private_data` | | Alice stores her home address, encrypted |
 | `user_add`, `user_import` (bulk) | `user.add` | governed | Civil Registry imports 1,200 residents from the old register (2-of-3 approval) |
-| `user_edit` | `user.edit` | | Dana fixes a typo in Bob's nickname |
+| `user_edit` | `user.edit` | | Dana fixes a typo in Bob's nickname, and moves him to the district he lives in |
 | `user_set_status` | `user.update_status` | governed | `{user: "mallory", status: "suspended"}` → proposal `P-9` under Civil Registry's policy |
 | `user_remove` | `user.delete` | governed | Remove Bob's duplicate test account |
 | `identity_submit` | `identity.submit` | delegable | Alice submits her passport proof |
 | `identity_review` | `identity.review` | signing | Dana approves Alice's passport proof |
+| `attribute_submit` | `attribute.submit` | delegable | Alice submits her large-family title |
+| `attribute_review` | `attribute.review` | signing | Dana verifies it |
+| `attribute_list` (own) | `self.data_view` | read, delegable | Alice's verified attributes |
 | `invite_create`, `invite_revoke` | `invite.manage` | | Dana creates 50 clerk invites; revokes one sent to the wrong email |
 | `invite_list` | `invite.manage` | read | Dana checks which of her invites have been used |
 | `profile_create`, `profile_edit` | `permission.grant` | governed | New profile `treasurer` → `[treasury.view, transfer.create]` |
@@ -207,6 +212,8 @@ argument (it must hold that permission through its positions or grants); otherwi
   one year.
 - I-ID-7: A delegate acts only within `starts_at`…`expires_at` and while the grant is `active`.
 - I-ID-8: Every delegated act records both the grantor and the delegate.
+- I-ID-9: An identity or attribute authorizes nothing once `rejected`, or past its `expires_at`. What a
+  verified one means is legislation's to say, never GGG's.
 
 ## 3. Departments and organizations
 
@@ -222,7 +229,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Department` | `id` (name), `description`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals]}`, quorum in hundred-millionths (50 % = 50 000 000). Exactly one root department per realm. | Civil Registry: under Administration, 2-of-3 policy, head `dana` |
+| `Department` | `id` (name), `description`, `kind`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals], casting_vote}`, quorum in hundred-millionths (50 % = 50 000 000); `casting_vote` is a seat holder whose yes decides a tie in a proposal of the department counted over the votes cast (I-GOV-3). Exactly one root department per realm. `kind` says what the body is (the realm's plenary, a committee), so legislation from another source can address a kind without naming a department. | Civil Registry: under Administration, 2-of-3 policy, head `dana`; the Council: kind `plenary` |
 | `Organization` | `id` (name), `description`, `status`, `admins` → `User`* | An external party. Its admins manage its representatives. | Clinic B: `active`, admin `dr-ana` |
 | `Position` | `id` (key), `department` → `Department` or `organization` → `Organization`, `title`, `profile` → `UserProfile`, `headcount`, `salary` (int), `salary_period`, `status`, `inherit_from_capital` | A seat in a department, or a representative seat in an organization. | `civil-registry.clerk`: 4 seats, 2,000 REALM/month, profile `clerk`; `clinic-b.physician`: 3 seats |
 | `Appointment` | `id`, `position` → `Position`, `user` → `User`, `kind` (`substantive`, `acting`), `agent` (bool), `supervisor` → `User`, `started_at`, `ended_at`, `status`, `source_quarter` | One user holding one seat. Agents are users with `agent = true`. | Bob holds a clerk seat since 2026-05-01; `records-bot` holds `records_agent` at Clinic B, agent, supervisor `dr-ana` |
@@ -239,7 +246,7 @@ Two kinds of body:
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
 | `department_create` | `org.create` | governed | Create department Health under the root → proposal `P-12` |
-| `department_edit`, `department_delete` | `org.set_policy` | governed | Move Roads under Infrastructure; make `dana` head of Civil Registry |
+| `department_edit`, `department_delete` | `org.set_policy` | governed | Move Roads under Infrastructure; make `dana` head of Civil Registry; mark the Council as the `plenary` |
 | `department_set_policy` | `org.set_policy` | governed | Infrastructure goes from 1-of-1 to 2-of-3 with 50% quorum |
 | `department_get`, `department_list`, `department_chart` | `realm.data_view` | read | Civil Registry's chart: 3 positions, 7 of 9 seats filled |
 | `position_create`, `position_edit`, `position_close` | `org.manage_members` | governed | Open 2 `inspector` seats in Infrastructure at 2,400 REALM/month |
@@ -261,7 +268,8 @@ Two kinds of body:
   same department or organization, unless the signing policy makes supervision optional.
 - I-ORG-4: An agent holds a `signing` permission only if the active codex's signing policy allows
   agents to hold it.
-- I-ORG-5: A policy satisfies `1 ≤ m ≤ n`; veto principals hold an appointment in the department.
+- I-ORG-5: A policy satisfies `1 ≤ m ≤ n`; veto principals, and the casting vote, hold an appointment in
+  the department.
 - I-ORG-6: The root department always exists and cannot be deleted.
 - I-ORG-7: A department's positions and policy change only under the realm's rules; an organization's
   representatives are managed only by its admins.
@@ -273,10 +281,10 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `tally` (Json), `result` (Json), `links` | A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov |
+| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed at creation like the action; the casting vote is the scope's, never the proposer's. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of the `eligible` seats under Infrastructure's policy |
 | `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the vote ends. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
-| `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, terms `sha256:4be1…` |
+| `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `kind`, `procedure`, `tender` → `Tender`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. `kind` (works, supplies, services) and `procedure` are the realm's words; a contract made from a tender names it and takes its kind and procedure. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, from tender `T-5`, terms `sha256:4be1…` |
 
 ### Lifecycles
 
@@ -305,13 +313,40 @@ Two kinds of body:
 | `mandate_assign_executor` | `mandate.assign_executor` | governed | Make Infrastructure the mandate's executor |
 | `contract_create` | `contract.create_under_mandate` | | Sign `C-9` with BuildCo under the road-works mandate |
 | `contract_terminate` | `contract.terminate` | signing | End `C-9` after BuildCo misses two milestones (court order) |
-| `governance_update` (the realm's voting window, threshold and quorum) | `governance.update` | governed | Voting window from 7 to 5 days |
+| `governance_update` (the realm's voting window, threshold, quorum and casting vote) | `governance.update` | governed | Voting window from 7 to 5 days; Dana's vote decides ties |
 
 ### Invariants
 
 - I-GOV-1: A replayed proposal executes exactly the `action` that was voted on, and only once.
 - I-GOV-2: Votes count only from users eligible for the proposal's scope when they vote.
-- I-GOV-3: A proposal is accepted only if quorum and threshold are met at finalization.
+- I-GOV-3: A proposal is accepted only if its quorum and threshold are met when its vote ends. Its rule,
+  `threshold`, `quorum`, `threshold_of` and `casting_vote`, states the one that decides it, and that rule
+  is applied; it is fixed at creation, like the action. One comparison per scope:
+  - A **realm-wide** proposal takes the realm's `voting_threshold` and `voting_quorum`, over the votes
+    `cast`: it is accepted when the votes cast reach the quorum of the eligible voters and the yes votes
+    *exceed* `threshold` of the yes and no votes. Over the `eligible` voters, the yes votes must exceed
+    `threshold` of them all, so 50 % over the eligible is more than half of the members.
+  - A **department's** proposal under an m-of-n policy takes `threshold` m/n, in hundred-millionths
+    rounded down (2 of 3 is 66 666 666, shown as 66.666666 %), over the `eligible` voters, who are the
+    department's n seats, and the policy's quorum: it is accepted when the yes votes *reach* `threshold`
+    of the eligible seats, m under the policy's own rule, and a veto holder's `no` rejects it whatever
+    the count (I-GOV-7). A direct policy (1 of 1) is the same rule with threshold 100 % over one seat.
+  - Under `cast`, when the yes votes stand exactly at `threshold` of the yes and no votes (a tie at 50 %),
+    the `casting_vote` member's yes accepts; without one, or if that member did not vote yes, the tie
+    rejects. The casting vote is part of the scope's default rule, set by governed configuration: the
+    realm's `casting_vote` (`governance_update`, an active member) for a realm-wide proposal, the
+    department's `policy.casting_vote` (`department_set_policy`, a seat holder) for its proposals. The
+    proposal copies it at creation; the proposer never sets it.
+  - The proposer may state a stricter rule when creating the proposal, never a weaker one
+    (`InvalidArgument`): a higher threshold or quorum, or `eligible` where the default is `cast`. Each
+    change narrows what the default accepts, so legislation's guards, which may require them, only ever
+    tighten.
+  - A proposal that a governed call files takes its scope's default rule. Legislation may require a
+    matter to be filed as a proposal of its own, with `proposal_create`, a `Call` action and a stricter
+    rule, and a guard on the governed operation may refuse the direct path, so a chapter can demand a
+    larger majority for, say, the budget.
+  - `tally.eligible` is counted when the vote opens: the realm's active members, or the department's
+    seats.
 - I-GOV-4: A contract created under a mandate stays within the mandate's scope and term, and its
   `value` within the mandate's `max_value` in the same `symbol`.
 - I-GOV-5: A proposal may state `effective_at`, the time its action takes effect, in the future when
@@ -325,10 +360,12 @@ Two kinds of body:
 - I-GOV-7: A proposal whose vote ends after its `effective_at` ends `expired`, whatever was decided,
   and is not executed; the proposer submits a new one. A vote ends at its `deadline`, or earlier at
   the moment every eligible member has voted. The vote of a department under an m-of-n policy may
-  also end as soon as it can only be accepted: it has `m` approvals, every veto holder has voted and
-  none of them against (a veto holder's `no` rejects the proposal), and its quorum is met (I-GOV-3).
+  also end as soon as it can only be accepted: its yes votes reach its `threshold` of the eligible seats
+  (`m` under the policy's own rule, more under a stricter one the proposer stated), every veto holder
+  has voted and none of them against (a veto holder's `no` rejects the proposal), and its quorum is met
+  (I-GOV-3).
   Only an acceptance ends a department vote this early: until its deadline, or until every eligible
-  member has voted, a `no` can still be replaced, even when `m` approvals are out of reach, and a veto
+  member has voted, a `no` can still be replaced, even when the threshold is out of reach, and a veto
   holder yet to vote keeps it open. The end at which every eligible member has voted can still reject.
   A realm-wide vote has no such early end. When it is finalized doesn't matter: finalizing never moves
   the end of the vote (I-GOV-12 says how a GOS settles it). After the vote ends no vote is accepted or
@@ -375,21 +412,22 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Treasury` | `id` (`1`), `config` (Json: epoch length, anchor month, source fund, auto-allocate) | Singleton. | Monthly epochs, source fund `ROOT`, auto-allocation on |
+| `Treasury` | `id` (`1`), `config` (Json: epoch length, anchor month, source fund, auto-allocate), `debt_outstanding` | Singleton. `debt_outstanding` is the sum of the active loans' `outstanding`. | Monthly epochs, source fund `ROOT`, auto-allocation on, 420,000 REALM of debt |
 | `Token` | `id` (symbol), `ledger`, `indexer`, `decimals`, `fee` | A fungible ledger the realm uses (ICRC-1). | `ckBTC`: ledger `mxzaz-…`, 8 decimals, fee 10 |
 | `NFTToken` | `id` (symbol), `canister`, `name`, `description`, `transferable`, `required_license` (licence type or empty), `supply_cap`, `total_supply` | An NFT ledger (ICRC-7) the realm mints into. | `LAND` (transferable); `CRED` (non-transferable, minting needs a licence) |
 | `Fund` | `id` (code), `name`, `kind` (general, special revenue, …), `department` → `Department`, `balances` (Json: running balance per token), `allocation_rule` → `AllocationRule` | | `ROADS`: special revenue, owned by Infrastructure |
 | `FiscalPeriod` | `id`, `name`, `starts_at`, `ends_at`, `status`, `statements` (Json: running totals), `source_hash` (chained over its entries) | | `FY2026`: 2026-01-01 to 2026-12-31, `open` |
-| `Budget` | `id`, `fund` → `Fund`, `period` → `FiscalPeriod`, `category`, `kind`, `planned`, `actual`, `status`, `proposal` → `Proposal` | | Roads FY2026, capital: planned 300,000, actual 120,500, `adopted` |
+| `Budget` | `id`, `fund` → `Fund`, `period` → `FiscalPeriod`, `category`, `kind` (`revenue` or `expense`), `planned`, `actual`, `status`, `proposal` → `Proposal` | One line of a period's budget: `category` is the realm's word for what (capital, salaries, property tax), `kind` whether the money comes in or goes out. | Roads FY2026, expense, capital: planned 300,000, actual 120,500, `adopted` |
 | `AllocationRule` | `id`, `source_fund`, `rules` (Json: fund and `share`), `status`, `proposal` → `Proposal` | How revenue is split between funds. Shares are in hundred-millionths and add up to at most 100 000 000. | From `ROOT`: 30% `WELFARE`, 20% `ROADS`, 50% `GENERAL` |
 | `LedgerEntry` | `id`, `transaction`, `kind` (asset, liability, equity, revenue, expense), `category`, `debit`, `credit`, `symbol`, `fund` → `Fund`, `period` → `FiscalPeriod`, `transfer` → `Transfer`, `invoice` → `Invoice`, `user` → `User`, `organization` → `Organization`, `contract` → `Contract`, `case` → `Case`, `penalty` → `Penalty`, `appeal` → `Appeal`, `at`, `description` | Double entry. At most one of the source references is set. | Tx `T-88`: debit `ROADS` capital expense 50,000, credit cash 50,000, contract `C-9` |
-| `Invoice` | `id`, `payer` (`Entity:id`), `amount`, `symbol`, `due_at`, `status`, `reason` (`Entity:id`), `paid_at`, `payment` (Json) | Paid into the subaccount derived from its `id`. | `INV-301`: Alice owes 120 REALM property tax, due 2026-12-31, `pending` |
+| `Invoice` | `id`, `payer` (`Entity:id`), `amount`, `symbol`, `items` (lines, each an `InvoiceItem`: `concept`, `amount` (signed: a discount is negative), `quantity`, `unit`, `legislation`), `facts` (Json), `due_at`, `status`, `reason` (`Entity:id`), `paid_at`, `payment` (Json) | Paid into the subaccount derived from its `id`. At least one item, and the items sum to `amount`, which is never negative; `facts` is what legislation reads about the invoice beyond its items. | `INV-301`: Alice owes 120 REALM property tax, due 2026-12-31, `pending`: lines `property_tax` 150 and `large_family_bonus` −30 |
 | `Transfer` | `id`, `sender`, `to`, `symbol`, `amount`, `ledger_tx`, `invoice` → `Invoice`, `status`, `at`, `payroll` (the payroll run) | | 50,000 REALM from `ROADS` to BuildCo, ledger tx 18234, `completed` |
 | `Trade` | `id`, `contract` → `Contract`, `leg_a` → `Transfer`, `leg_b` → `Transfer`, `status` | An exchange of two transfers. | `C-9` milestone: realm pays 10,000 REALM, BuildCo hands over the road deed NFT |
 | `PaymentAccount` | `id`, `owner` (`Entity:id`), `network`, `address`, `symbol`, `label`, `verified` | External accounts for payouts. | Bob's ckBTC payout address, verified |
 | `FinancialReport` | `id`, `kind`, `period` → `FiscalPeriod`, `as_of`, `statements` (Json), `source_hash`, `issued_by`, `supersedes` → `FinancialReport` | Frozen statements. | FY2025 closing statements issued by Finance, `sha256:77d0…` |
 | `TaxPolicy` | `id`, `status`, `document` (Json), `description`, `proposal` → `Proposal`, `adopted_at`, `taxes` (typed entries, each a `TaxEntry`: `code`, `kind` (the realm's word, e.g. `tax`, `fee`, `surcharge`), `subject` (the entity assessed, e.g. `Land`, `User`, `Organization`), `rate`, `amount`, `facts` (Json)) | Typed entries, which legislation checks one by one; the codex computes each taxpayer's amount. `document` holds the policy's text and whatever else the realm records about it, as Json; the entries are what the rules and the assessment read. | `TAX-POLICY-3`: `property_tax` (tax on `Land`, rate 0.4 %) and `waste_fee` (fee on `User`, 120 REALM a year), `adopted` |
 | `TaxDeclaration` | `id`, `declarant` (`Entity:id`), `period`, `base`, `amount`, `status`, `invoice` → `Invoice` | Self-declared bases (revenue, payroll). | Clinic B declares 182,000 revenue for 2026-Q3 → `INV-412` |
+| `Loan` | `id`, `lender` → `External`, `amount`, `symbol`, `term` (a Period), `rate`, `fund` → `Fund`, `outstanding`, `status`, `facts` (Json) | Money the realm owes an outside lender (§11), in the accounting currency, so the treasury's `debt_outstanding` is one sum. The money itself moves outside the realm; GGG records the debt and its repayments. | `LOAN-2`: 500,000 REALM from Bank A over 10 years at 3.2 %, into `ROADS`, 420,000 outstanding, `active` |
 
 There is no balance entity: the ledgers are the source of truth.
 
@@ -398,10 +436,12 @@ There is no balance entity: the ledgers are the source of truth.
 - `Invoice.status`: `pending` → `paid` | `overdue` | `cancelled`; `overdue` → `paid` | `cancelled`.
 - `Trade.status`: `pending` → `completed` | `failed`.
 - `Transfer.status`: `sending` (ledger call in flight) → `completed` | `failed`; `sending` → `pending` (ledger refused) → `failed` (reverted).
-- `Budget.status`: `draft` → `proposed` → `adopted` → `amended`* → `closed`.
+- `Budget.status`: `draft` → `proposed` → `adopted` → `amended`* → `closed`; `extended` (copied from the
+  previous period by `budget_extend`) → `closed`.
 - `FiscalPeriod.status`: `open` → `closed` → `archived`.
 - `AllocationRule.status`, `TaxPolicy.status`: `draft` → `proposed` → `adopted` → `superseded`.
 - `TaxDeclaration.status`: `filed` → `assessed` → `settled` | `disputed`.
+- `Loan.status`: `active` → `repaid`.
 
 ### Operations
 
@@ -412,14 +452,19 @@ There is no balance entity: the ledgers are the source of truth.
 | `transfer_create` (from a fund) | `transfer.create` | delegable, governed | `{fund: "ROADS", to: "buildco", amount: 50000}` → proposal under Infrastructure's policy |
 | `transfer_revert` | `transfer.delete` | governed | Cancel a duplicate pending payment |
 | `invoice_create` | `treasury.manage` | | Registration fee: 10 REALM for new member Bob |
+| `invoice_item_add` | `treasury.manage` | | The sanitation charge joins Alice's pending water invoice as a second line |
 | `invoice_check` (own) | `self.invoice_refresh` | delegable | Alice paid `INV-301` → `paid` |
 | `invoice_refresh` (any) | `invoice.refresh` | | Finance re-checks all pending invoices |
 | `my_invoices` | `self.data_view` | read, delegable | Alice: `INV-301`, 120 REALM, due 31 Dec |
 | `fund_create`, `period_open`, `period_close` | `org.manage_budget` | governed | Create fund `WELFARE`; close `FY2025` |
-| `budget_draft`, `budget_propose`, `budget_amend` | `org.manage_budget` | governed | Roads FY2027: 400,000 capital → proposal |
+| `budget_draft`, `budget_propose` (every draft line of a period together), `budget_amend` | `org.manage_budget` | governed | FY2027's lines drafted, then proposed as one budget → proposal |
+| `budget_extend` | `org.manage_budget` | | FY2027 opens with no adopted budget: FY2026's adopted lines carry over as `extended`; `Conflict` once FY2027 has an extended, proposed or adopted line |
 | `allocation_rule_draft`, `allocation_rule_propose` | `org.manage_budget` | governed | Welfare share from 30% to 35% → proposal |
 | `payroll_run` | `org.manage_budget` | governed | November salaries: 23 seats, 51,200 REALM |
-| `report_issue` | `treasury.manage` | signing | Finance issues the FY2025 statements |
+| `loan_create` | `org.manage_budget` | governed | Borrow 500,000 REALM from Bank A over 10 years → proposal |
+| `loan_repay` | `org.manage_budget` | | Finance records a repayment of 80,000 REALM |
+| `loan_list` | `treasury.view` | read | The realm's loans and what is outstanding |
+| `report_issue` (with the issuer's `adjustments`, for a report in terms the ledger doesn't keep) | `treasury.manage` | signing | Finance issues the FY2025 statements |
 | `tax_policy_draft`, `tax_policy_propose` | `tax.manage` | governed | `TAX-POLICY-4` drafted with `property_tax` at 0.5 %, then proposed → realm-wide vote; legislation checks each entry at the draft and again at the proposal |
 | `tax_assess` | `tax.assess` | | Annual run: 1,180 property-tax invoices |
 | `tax_declare` | `tax.declare` | delegable | `{organization: "clinic-b", period: "2026-Q3", base: "revenue", amount: 182000}` → `INV-412` |
@@ -433,6 +478,17 @@ the entry's fields as its facts, and the same rules run when a draft is saved wi
 what it charges when no codex computes it; `tax_assess` asks the active codex for each taxpayer's
 amount where it has one to give.
 
+A budget is proposed per period: `budget_propose` takes every draft line of the period together, with
+`years` when the plan covers more than one period, and legislation reads the period's totals, `revenue`
+and `expense`, the sums of `planned` over its `revenue` and `expense` lines, as facts of the call
+(derived facts, [layered codex §3.3](../docs/layered-codex.md#33-the-fact-schema-units-rates-money-and-periods)).
+`budget_propose` and `loan_create` are governed by the root department: the realm's budget and its
+borrowing are the realm's. When a period opens with no adopted budget, `budget_extend` copies the
+previous period's adopted lines into it as `extended`, without a vote, and they hold until an adopted
+budget replaces them; once the period has an `extended`, `proposed` or `adopted` line it is refused with
+`Conflict`, while `draft` lines stand in no way. A `budget_propose` whose derived total, `revenue` or
+`expense`, is out of Money's range is refused with `InvalidArgument`, like any other fact.
+
 ### Invariants
 
 - I-FIN-1: Every transaction's ledger entries balance (Σ debit = Σ credit).
@@ -441,6 +497,10 @@ amount where it has one to give.
 - I-FIN-4: Adopted budgets, allocation rules and tax policies are frozen; changes create a new version.
 - I-FIN-5: A closed fiscal period accepts no new entries; corrections go into a restating report.
 - I-FIN-6: The realm never moves a member's own funds, except a court-ordered `token_force_transfer` on a realm-issued token (signing, governed).
+- I-FIN-7: An invoice has at least one item, and its items sum to its `amount`, which is never negative; a
+  line joins only a `pending` invoice.
+- I-FIN-8: `Treasury.debt_outstanding` is the sum of the active loans' `outstanding`; a repayment never
+  exceeds a loan's.
 
 ## 6. Assets: land and NFTs
 
@@ -448,8 +508,8 @@ amount where it has one to give.
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Land` | `id`, `x`, `y`, `width`, `height`, `kind`, `owner` (`Entity:id`), `status`, `token_id`, `registered_by`, `metadata` (Json) | A parcel, at most 16×16 cells. | `L-17`: 3×2 cells at (12, 40), residential, owner `alice`, `LAND` #4412 |
-| `Zone` | `id` (h3 index), `name`, `kind`, `land` → `Land`, `user` → `User`, `metadata` (Json) | | Cell `871f1d489ffffff` "Riverside", residential, Alice's home |
+| `Land` | `id`, `x`, `y`, `width`, `height`, `kind`, `owner` (`Entity:id`), `status`, `token_id`, `registered_by`, `assessed_value`, `area` (square metres), `assessed_at`, `assessment_ref`, `metadata` (Json) | A parcel, at most 16×16 cells. What an assessor set for taxes based on it, signing for it: its value in the accounting currency and its area, when, and under which reference in the assessor's register. | `L-17`: 3×2 cells at (12, 40), residential, owner `alice`, `LAND` #4412, assessed at 95,000 REALM and 120 m² |
+| `Zone` | `id`, `name`, `kind`, `land` → `Land`, `user` → `User`, `population`, `metadata` (Json) | Either a member's own home cell, an h3 index set with `zone_set` and tied to that `user`, or a zone the realm defines with `zone_define`, such as a district without a canister of its own, named by its id: members name it as their `home_zone`, and `population` counts them. | Cell `871f1d489ffffff`, Alice's home cell; `riverside` "Riverside", a district, population 1,240 |
 
 Certificates (prescriptions, diplomas, permits, titles) are NFTs, not realm entities: the ledger is
 the source of truth, and the token's `ggg:` header carries what the realm knows about it. Every NFT the
@@ -486,10 +546,12 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 |---|---|---|---|
 | `land_register` | `nft.mint` | governed | Register `L-17` for Alice after the survey |
 | `land_transfer` | `nft.force_transfer` | signing, governed | Court orders `L-17` moved from Mallory to Alice (normal sales use the ledger) |
+| `land_assess` | `land.assess` | signing | The assessor sets `L-17`'s value at 95,000 REALM and its area at 120 m² |
 | `land_list`, `land_map` (a viewport of at most 32×32 cells) | `realm.data_view` | read | Map of quarter North's parcels |
 | `land_mint_nft` | `nft.mint` | | Mint `LAND` #4412 for `L-17` to Alice |
 | `land_freeze`, `land_unfreeze` | `nft.freeze` | signing | Freeze `L-17` during an ownership dispute |
-| `zone_set`, `zone_clear` | `self.data_manage` | delegable | Alice picks Riverside as her home zone |
+| `zone_define` | `realm.configure` | governed | Define the district Riverside, which members name as their `home_zone` |
+| `zone_set`, `zone_clear` | `self.data_manage` | delegable | Alice sets the cell she lives in as her home cell |
 | `credential_issue` | `credential.sign` | signing | Dr. Ana issues `{schema: "health.prescription/1", holder: "alice", organization: "clinic-b", prepared_by: "records-bot"}` → `CRED` #4412 |
 | `credential_revoke` | `credential.sign` | signing | Revoke a diploma issued in error; the token is frozen as revoked |
 | `credential_verify` | — (public) | read | A pharmacy checks `CRED` #4412: valid, issuer licensed, not expired |
@@ -504,18 +566,21 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 - I-AST-4: NFT metadata never contains personal data in clear text.
 - I-AST-5: A parcel has exactly one owner.
 
-## 7. Licensing
+## 7. Licensing, procedures and requests
 
 ### Entities
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `License` | `id`, `kind` (court, business, professional, health, education, …), `holder` (`Entity:id`: organization or user), `issued_by` → `Department`, `status`, `applied_at`, `issued_at`, `expires_at`, `evidence_ref`, `conditions` (Json) | Many licences per holder. An application is a licence in `applied`. | `LIC-12`: health, holder Clinic B, issued by Health, active until 2028-10-25 |
+| `License` | `id`, `kind` (court, business, professional, health, education, …), `holder` (`Entity:id`: organization or user), `issued_by` → `Department`, `status`, `applied_at`, `decision_due`, `issued_at`, `expires_at`, `evidence_ref`, `conditions` (Json) | Many licences per holder. An application is a licence in `applied`; `decision_due` comes from the `Procedure` of its kind, when one is defined. | `LIC-12`: health, holder Clinic B, issued by Health, active until 2028-10-25 |
+| `Procedure` | `id` (the licence kind it governs), `initiated_by`, `matter`, `decision_deadline` (a Period), `silence` (`positive` grants, `negative` refuses), `legislation`, `facts` (Json) | How applications of one kind are decided. Legislation acts on the silence, with a task (§11). | `health`: initiated by the applicant, decided within 3 months, silence positive |
+| `Request` | `id`, `kind`, `by` (`Entity:id`), `body` (Json), `filed_at`, `due_at`, `extension_limit`, `status`, `decision`, `reply`, `decided_at` | A request to the realm by a person or a body: a petition, a complaint, a request for information or for one's personal data. The kinds are the realm's; legislation sets `due_at` and says what silence means, recording it as a decision. A `body` or `reply` that holds personal data is an encrypted `Document` reference (I-PRV-1). | `REQ-14`: Bob asks for last year's minor contracts, due in one month, `filed` |
 
 ### Lifecycles
 
 - `License.status`: `applied` → `active` | `rejected`; `active` ⇄ `suspended`; `active` |
   `suspended` → `revoked` | `expired`.
+- `Request.status`: `filed` → `decided`.
 
 ### Operations
 
@@ -525,11 +590,23 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 | `license_decide` | `license.issue` | signing | A Health officer approves → `LIC-12` active for 2 years |
 | `license_suspend`, `license_revoke` | `license.revoke` | signing | Suspend `LIC-12` pending an inspection |
 | `license_list`, `license_verify` | — (public) | read | A patient checks Clinic B: licence active |
+| `procedure_define` | `procedure.define` | governed | Health licences: decided within 3 months, silence positive |
+| `procedure_list` | `realm.data_view` | read | The realm's procedures |
+| `request_file` | `request.file` | delegable | Bob files an access-to-information request |
+| `request_get` (own) | `self.data_view` | read, delegable | Bob checks `REQ-14` |
+| `request_list` | `request.decide` | read | The clerk lists the requests due this week |
+| `request_set_due`, `request_decide` | `request.decide` | | The clerk extends `REQ-14` by a month, then grants it with the list |
 
 ### Invariants
 
 - I-LIC-1: Nobody decides a licence for an organization they hold an appointment in, or for themselves.
 - I-LIC-2: Only `active`, unexpired licences authorize anything.
+- I-LIC-3: A request's `extension_limit` is set once; its `due_at` never moves past it, and a decided
+  request is final.
+
+`license_apply` sets the licence's `decision_due` from the `Procedure` of its kind, when one is defined.
+What silence past a deadline means is legislation's: a procedure says it, and a task (§11) scheduled for
+the deadline records it, as `license_decide` or `request_decide`.
 
 Regulatory reports from licensed providers are department documents ([§13](#13-private-content)) or
 codex-defined credential NFTs; GGG has no report entity.
@@ -596,7 +673,7 @@ codex-defined credential NFTs; GGG has no report entity.
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Tender` | `id`, `title`, `description`, `requester` → `Department`, `status`, `opens_at`, `closes_at`, `rubric` (Json: criterion and `weight`), `winner` → `Bid`, `contract` → `Contract` | Weights are in hundred-millionths and add up to 100 000 000. | `T-5` Bike lane works, by Infrastructure, open 1–30 Nov, rubric: price 60%, quality 40% |
+| `Tender` | `id`, `title`, `description`, `requester` → `Department`, `kind`, `procedure`, `estimated_value`, `status`, `opens_at`, `closes_at`, `rubric` (Json: criterion and `weight`), `notices` (each a `Notice`: `journal`, `published_at`, `ref`), `winner` → `Bid`, `contract` → `Contract` | Weights are in hundred-millionths and add up to 100 000 000. `kind` (works, supplies, services) and `procedure` are the realm's words. `notices` records where the tender was published, and legislation reads `published_in`, the journals of the notices, as a fact of `tender_award`. | `T-5` Bike lane works, by Infrastructure, works by open procedure, 600,000 REALM estimated, open 1–30 Nov, rubric: price 60%, quality 40%, noticed in the realm's journal |
 | `Bid` | `id`, `tender` → `Tender`, `vendor` → `Organization`, `submitted_at`, `sealed`, `payload_ref`, `payload_hash` (`sha256:` of `price:nonce`), `price` (set at the reveal), `score` | Content is encrypted until the reveal. | BuildCo's bid on `T-5`, sealed until 30 Nov |
 | `BidScore` | `id`, `bid` → `Bid`, `evaluator` → `User`, `criterion`, `score`, `scored_at` | | Carla scores BuildCo's quality 8/10 |
 
@@ -614,6 +691,7 @@ it was awarded.
 |---|---|---|---|
 | `tender_create`, `tender_open`, `tender_close`, `tender_cancel` | `tender.manage` | governed | Infrastructure drafts `T-5`, then opens it |
 | `tender_list`, `tender_get` | `realm.data_view` | read | Open tenders |
+| `tender_notice` (in an `External` of kind `journal`, or `realm` for the realm's own; `at` defaults to now and is never in the future) | `tender.manage` | | Infrastructure records that `T-5`'s notice appeared in the realm's journal |
 | `bid_submit`, `bid_withdraw` | `bid.submit` | delegable | BuildCo's agent submits an encrypted bid on `T-5` |
 | `bids_reveal` | `tender.manage` | governed | After 30 Nov the 4 bids are decrypted |
 | `bid_score` | `bid.evaluate` | signing | Carla and two colleagues score each bid |
@@ -636,7 +714,7 @@ A realm can be one canister or a federation of quarters, one of which is the cap
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Realm` | `id` (`1`), `name`, `manifesto`, `welcome_message`, `status`, `calendar` → `Calendar`, `treasury` → `Treasury`, `accounting_currency`, `accounting_currency_decimals`; federation: `is_quarter`, `is_capital`, `federation_realm_id`, `federation_codex`, `quarter_join_mode`; trust: `trusted_principals`, `require_marketplace_approval`, `trusted_approvers`; governance: `voting_threshold`, `voting_quorum` (hundred-millionths, for realm-wide proposals); settings: `open_registration`, `logo_url`, `background_image_url`, `installed_version`, `network`, `timezone`; `member_count` (its members, and on a capital its quarters' as they last reported) | Singleton per canister. An implementation adds its own settings next to these. | Agora: `beta`, capital, currency REALM (8 decimals), open registration off |
+| `Realm` | `id` (`1`), `name`, `manifesto`, `welcome_message`, `status`, `calendar` → `Calendar`, `treasury` → `Treasury`, `accounting_currency`, `accounting_currency_decimals`; federation: `is_quarter`, `is_capital`, `federation_realm_id`, `federation_codex`, `quarter_join_mode`; trust: `trusted_principals`, `require_marketplace_approval`, `trusted_approvers`; governance: `voting_threshold`, `voting_quorum` (hundred-millionths, for realm-wide proposals), `casting_vote` → `User` (a member whose yes decides a tie, I-GOV-3); settings: `open_registration`, `logo_url`, `background_image_url`, `installed_version`, `network`, `timezone`, `languages` (BCP 47 tags, the first the default); `member_count` (its members, and on a capital its quarters' as they last reported) | Singleton per canister. An implementation adds its own settings next to these. | Agora: `beta`, capital, currency REALM (8 decimals), open registration off |
 | `Calendar` | `id`, `realm` → `Realm`, `epoch`, `fiscal_period`, `voting_window`, `codex_release_cycle`, `benefit_cycle`, `service_payment_cycle`, `license_review_cycle`, `custom_cycles` (Json) | The realm's governance time cycles, as durations. | Voting window 7 days, fiscal period 1 year, licence review every 2 years |
 | `Registry` | `id` (name), `description`, `principal_id` | A registry canister the realm is listed in. | `realm-registry`, `ufxgi-…` |
 | `Quarter` | `id` (canister id), `name`, `index`, `status`, `population`, `codex_id`, `codex_version`, `last_sync`, `last_activity_at` | Known on the capital. | North: population 1,240, `active`, codex agora 1.4.2 |
@@ -703,21 +781,30 @@ vote. If the quarter cannot apply it, the call fails and nothing changes.
 - I-FED-3: Every quarter runs the same federation codex version as the capital, or is flagged as drifting.
 - I-FED-4: Calls between quarters are accepted only from registered quarter canisters.
 
-## 11. Codex, notifications and audit
+## 11. Codex, notifications, outside bodies, tasks and audit
 
 ### Entities
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Codex` | `id` (`name@version`), `version`, `checksum`, `status` (`active`, `inactive`, `reverted`), `manifest` (Json, including the signing policy), `capabilities` (Json: operation names), `source` (its code), `installed_at`, `previous` → `Codex` | The realm's policy package. At most one is `active`. Methods return its `checksum` (`sha256:<hex>`), never this record. | `agora@1.4.2`, checksum `sha256:4be1…` |
+| `Codex` | `id` (`name@version`), `version`, `checksum`, `status` (`pending`, `active`, `inactive`, `reverted`), `manifest` (Json, including the signing policy), `capabilities` (Json: operation names), `source` (its code), `installed_at`, `previous` → `Codex` | The realm's policy package. At most one is `active`; a `pending` one is installed and checked, waiting for its time. Methods return its `checksum` (`sha256:<hex>`), never this record. | `agora@1.4.2`, checksum `sha256:4be1…` |
 | `Notification` | `id`, `recipient` (`Entity:id`: user, department or organization), `topic`, `title`, `body`, `href`, `sender`, `visibility`, `read_by` (Json), `at` | | To Alice: "P-7 passed", link `/proposals/P-7` |
+| `External` | `id`, `name`, `kind` (authority, journal, lender, …), `channel` | A body outside the realm and outside the Internet Computer. `channel` is how a dispatch reaches it: `manual`, an operator delivers it, or an https URL, a bridge does. A second `external_add` of the same id redefines it. | The statistics office: kind `authority`, channel `manual`; the provincial gazette: kind `journal` |
+| `Dispatch` | `id`, `to` → `External`, `topic`, `title`, `body` (Json), `document` → `Document`, `codex`, `queued_at`, `status` | One notice to an outside body, queued by the realm and confirmed by whoever delivered it, with the receipt that proves it. `document` is the document it carries and `codex` the codex it concerns, when either applies. A `body` that holds personal data is an encrypted `Document` reference (I-PRV-1). | To the gazette: the new ordinance's full text, `confirmed` on 12 Nov, bulletin 214 |
+| `Task` | `id`, `op`, `args` (Json), `at`, `reason`, `status`, `scheduled_by` (`Entity:id`), `event` → `Event` | One operation scheduled for a time. `event` is the operation's own `Event` once it ran. | `user_set_status` of Bob to `inactive` on 10 Mar 2028, scheduled by the codex: the registration lapses |
 | `Event` | `id`, `op`, `user`, `by` (the delegate, when delegated), `agent` (the caller acted as an agent), `supervisor` (that agent's supervisor), `origin`, `args` (Json, secrets stripped), `result` (Json), `at` | The audit log. Append-only. | `proposal_vote` by `claude-conn` for `alice` at 09:31 → ok |
 
 Services are not entities: they are provided by licensed organizations. Courts stand on their own,
 without a justice-system entity above them.
 
-Scheduled and multi-step automation is part of an implementation, not of the model. What it does
-goes through operations like any other call.
+A `Task` schedules one operation for a time. Multi-step automation beyond that is part of an
+implementation, not of the model; what it does goes through operations like any other call.
+
+### Lifecycles
+
+- `Codex.status`: `pending` → `active`; `active` → `inactive` | `reverted`.
+- `Dispatch.status`: `queued` → `confirmed` | `failed`.
+- `Task.status`: `scheduled` → `run` | `failed` | `cancelled`.
 
 ### Signing policy
 
@@ -745,11 +832,39 @@ supervisor, and the grantor when delegated (I-ALL-7).
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
 | `codex_install`, `codex_uninstall`, `codex_revert` | `codex.install`, `codex.uninstall`, `codex.revert` | governed | Install agora 1.5.0 → realm-wide vote; revert to 1.4.2 if it misbehaves |
+| `codex_activate` (the pending codex, by checksum) | `codex.install` | governed | Activate the pending 1.5.0 on 1 Jan |
 | `codex_status` (the active checksum, health and the signing policy; earlier checksums a page at a time) | `realm.data_view` | read | `sha256:4be1…`, healthy; agents may hold `bid.evaluate` |
 | `notification_list` (one recipient a page at a time) | `self.data_view` | read, delegable | Alice's notifications, then Civil Registry's |
 | `notification_read` (mark as read) | `self.data_manage` | delegable | Alice marks "P-7 passed" as read |
-| `notification_send` | `notification.send` | | Justice notifies Mallory of her fine |
+| `notification_send` (to a user, department or organization a `Notification`; to an `External` a `Dispatch`; with `translations`, each reader gets their language) | `notification.send` | | Justice notifies Mallory of her fine; Civil Registry tells the statistics office of Bob's registration |
+| `external_add` | `external.manage` | governed | Register the statistics office and the provincial gazette |
+| `external_list` | `realm.data_view` | read | The outside bodies the realm deals with |
+| `external_report` | `external.report` | | A clerk enters the statistics office's report of a duplicate registration, with the file as evidence |
+| `dispatch_confirm` (one outcome: confirmed, with when and the receipt, or failed, with the reason; a second is `Conflict`) | `dispatch.confirm` | | The clerk confirms the gazette published the ordinance, bulletin 214 |
+| `dispatch_list` | `dispatch.confirm` | read | The outbox: what is queued for delivery |
+| `task_schedule`, `task_reschedule`, `task_cancel` | `task.schedule` | | Schedule Bob's lapse for 10 Mar 2028; cancel it when he leaves |
+| `task_list` | `realm.monitor` | read | What is scheduled for next month |
 | `events` (newest first, and where archived events are kept) | `realm.monitor` | read | The last 100 audited calls |
+
+A codex may be installed before it is in force: `pending`, installed and checked, until `codex_activate`
+names its checksum and makes it active at `at`, or its adopting proposal's `effective_at` does. At most
+one codex is `pending` at a time: a second install while one waits is `Conflict`. A hook on
+`codex_activate` is the realm's own entry point ([layered codex §3.2](../docs/layered-codex.md#32-four-mechanisms)).
+
+Nothing outside the Internet Computer calls a realm, and no realm calls an outside body. An `External`
+is such a body. A notice to it is a `Dispatch`, which an operator or a bridge delivers and then gives
+one outcome: `confirmed`, with when (`at`, between the dispatch's `queued_at` and now) and the receipt
+that proves it, or `failed`, with the reason; a second outcome is `Conflict`. What the body says enters
+the realm only through `external_report`, entered by whoever received it, with the evidence. Both write
+`Event`s that legislation hooks, so what follows from the date a journal published or an authority
+received is legislation's.
+
+A `Task` runs one operation at `at`, with the authority of whoever scheduled it (`scheduled_by`: a
+user, a department, the codex), never as the realm's controller. Every guard and rule runs again when
+it does, so a task scheduled under old legislation obeys the legislation in force on its date, and one
+that is then refused ends `failed`. The run writes the operation's own `Event`, with origin `task`, which
+the task's `event` names; a hook on the operation sees it and reads the origin. There is no `task_run`
+operation, and no hook of that name.
 
 ### Invariants
 
@@ -759,6 +874,11 @@ supervisor, and the grantor when delegated (I-ALL-7).
 - I-EXT-4: The `Event` log is append-only: no event is edited or deleted. A GOS may move old events
   to archive canisters, as ICRC-3 ledgers do; `events` names them, and each answers `ggg_events` for
   the events it holds.
+- I-EXT-5: A task runs with its scheduler's authority and under the legislation in force when it runs;
+  a refused one ends `failed` and changes nothing.
+- I-EXT-6: A dispatch is confirmed only by a holder of `dispatch.confirm`, and a report from outside
+  enters only through `external_report`: the realm never takes an outside body's word without a
+  principal's.
 
 A codex reacts to what happens in the realm (it was installed, a user registered, the realm changed
 stage, a user needs a quarter) and answers with operations that the realm applies as itself, with
@@ -780,7 +900,7 @@ trusted approver.
 | `host_install` | `realm.host` (the host only) | | The installer names Alice founder, network `ic`, the registry that lists Agora |
 | `host_infrastructure` | `realm.host` (the host only) | | The installer gives Agora its frontend and file registry canisters |
 | `setup_state`, `setup_step`, `setup_launch` | `realm.configure` (founder during `setup`) | | The founder picks codex, token and branding, then launches |
-| `realm_configure` | `realm.configure` | governed | Turn on open registration |
+| `realm_configure` | `realm.configure` | governed | Turn on open registration; set the realm's languages |
 | `realm_configure_branding` | `realm.configure.branding` | governed | Logo and primary colour `#1E6B52` |
 | `realm_configure_tokens` | `realm.configure.tokens` | governed | Accounting currency ckUSDC |
 | `realm_configure_trust_policy` | `realm.configure.trust_policy` | governed | Require marketplace approval for new code |
@@ -836,7 +956,7 @@ for that principal. No canister ever sees a data key or the content.
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
 | `KeyEnvelope` | `id`, `scope`, `principal`, `wrapped_dek`, `granted_by`, `at` | One scope's data key, wrapped for one principal. | `dept:Health:doc:DOC-1` for `dr-ana`, granted by Health's head |
-| `Document` | `id`, `department` → `Department`, `title`, `ref` (where the ciphertext lives), `hash`, `author`, `at` | A department document. Its key scope is `dept:<department>:doc:<id>`. | Health's inspection report `DOC-1`, shared with Dr. Ana |
+| `Document` | `id`, `department` → `Department`, `title`, `kind`, `languages` (BCP 47 tags), `ref` (where the ciphertext lives), `hash`, `author`, `at`, `facts` (Json), `public` (the clear content's `ref` and `hash`, once published), `publications` (each a `Publication`: `journal`, `dispatch` → `Dispatch`, `published_at`, `ref`) | A department document. Its key scope is `dept:<department>:doc:<id>`. `kind` (minutes, an ordinance, an award) and `languages` let the realm list what it has and in which language; `facts` is what legislation reads about it when it is shared (its source, whether it was given freely). A published document is `public`: its content in clear, readable by anyone and holding no personal data, and `publications` records where a journal published it. | Health's inspection report `DOC-1`, kind `report`, in `en`, shared with Dr. Ana |
 
 ### Operations
 
@@ -848,16 +968,36 @@ for that principal. No canister ever sees a data key or the content.
 | `crypto_envelope` (the caller's own envelope) | `self.data_manage` | read | Dr. Ana fetches her envelope for `user:alice:address` |
 | `crypto_scopes` (the scopes the caller holds keys for) | `self.data_manage` | read | Dr. Ana's shared records |
 | `crypto_access` (who holds keys for a scope; its managers only) | `self.data_manage` | read | Alice checks who can read her address |
-| `document_store`, `document_share`, `document_revoke`, `document_delete` | `document.manage` | | Health stores the encrypted inspection report and shares it with Clinic B |
+| `document_store`, `document_share` (with a `recipient`, on a `basis`, with `facts`), `document_revoke`, `document_delete` | `document.manage` | | Health stores the encrypted inspection report and shares it with Clinic B, basis a public health duty |
+| `document_publish` (with the clear content's `ref` and `hash`) | `document.manage` | | Health publishes the annual report to everyone; Civil Registry sends the ordinance to the provincial gazette |
 | `document_list` (a department's documents, for its staff) | `document.manage` | read | Health's documents this year |
-| `document_get` (the department's staff and key holders) | `self.data_view` | read | Dr. Ana fetches the report's reference and her wrapped key |
+| `document_get` (the department's staff and key holders; for a published document anyone, signed in or not) | `self.data_view`; — (public) for a published document | read | Dr. Ana fetches the report's reference and her wrapped key |
+
+A share names its `recipient`, the `User`, `Organization` or `External` the keys are for, and may state
+its `basis`: the legal basis and purpose in the realm's own words, the legislation that sets the duty or
+task, and whether the data is of a special category. Legislation's rules and guards read them, with the
+share's `facts`. Legal bases are documented text, not an enumeration of the model. When the recipient is
+an `External`, the wrapped keys are for the principal that delivers to it, the operator or the bridge,
+which already handles what it delivers: no trust boundary is added.
+
+`document_publish` makes a document public: it carries the content in clear, its `ref` and `hash`, which
+the document's `public` field then holds, and anyone reads the record with `document_get`, signed in or
+not. With an `External` journal in `to` it also queues a `Dispatch` to it, whose confirmation fills a
+`Publication` with the journal's date and reference. Publication gates nothing: when legislation applies
+is its proposal's `effective_at` (I-GOV-5).
 
 ### Invariants
 
 - I-PRV-1: The realm never holds private content or an unwrapped data key, only ciphertext
-  references, hashes and wrapped keys.
+  references, hashes and wrapped keys. One exception: an attribute's `kind` and `value` (§2) are in
+  clear, and readable only by the person they belong to, by the holders of `attribute.review` and by the
+  codex. A request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
+  `Document` reference, encrypted, never text in clear, and a published copy (`Document.public`) holds
+  no personal data.
 - I-PRV-2: Only a scope's managers grant or revoke its keys, or see who holds them.
 - I-PRV-3: A key envelope is returned only to the principal it was wrapped for.
+- I-PRV-4: Only a published document's `public` copy is readable without a key, by anyone; its
+  ciphertext, and everything else, stays as I-PRV-1 says.
 
 ## 14. Permissions
 
@@ -867,8 +1007,8 @@ outside the model.
 - Identity: `self.join`, `self.update_public_profile`, `self.update_private_data`,
   `self.change_quarter`, `self.invoice_refresh`, `self.data_view`, `self.data_manage`,
   `self.delegate`, `user.add`, `user.edit`, `user.delete`, `user.update_status`, `user.view`,
-  `invite.manage`, `identity.submit`, `identity.review`, `role.assign`, `role.revoke`,
-  `permission.grant`.
+  `invite.manage`, `identity.submit`, `identity.review`, `attribute.submit`, `attribute.review`,
+  `role.assign`, `role.revoke`, `permission.grant`.
 - Departments: `org.create`, `org.appoint`, `org.expel`, `org.set_policy`, `org.grant_authority`,
   `org.revoke_authority`, `org.manage_budget`, `org.manage_members`.
 - Organizations: `organization.add`, `organization.edit`, `organization.delete`.
@@ -877,8 +1017,9 @@ outside the model.
 - Finance: `treasury.view`, `treasury.manage`, `transfer.create`, `transfer.delete`,
   `invoice.refresh`, `tax.manage`, `tax.assess`, `tax.declare`,
   `token.force_transfer`, `token.freeze`.
-- Assets: `nft.mint`, `nft.force_transfer`, `nft.freeze`, `credential.sign`.
-- Licensing: `license.apply`, `license.issue`, `license.revoke`.
+- Assets: `nft.mint`, `nft.force_transfer`, `nft.freeze`, `credential.sign`, `land.assess`.
+- Licensing, procedures and requests: `license.apply`, `license.issue`, `license.revoke`,
+  `procedure.define`, `request.file`, `request.decide`.
 - Justice: `dispute.create`, `dispute.view`, `dispute.view_all`, `dispute.accept`, `dispute.reject`,
   `dispute.assign`, `evidence.evaluate`, `resolution.draft`, `resolution.issue`,
   `resolution.link_contract`, `resolution.modify_terms`, `resolution.finalize`, `resolution.query`,
@@ -889,6 +1030,7 @@ outside the model.
 - Federation: `quarter.sync` (held by registered quarter canisters), `quarter.register`, `quarter.deregister`, `quarter.configure`, `quarter.secede`,
   `quarter.join_federation`, `federal_vote.propose`, `federal_vote.manage`, `realm.register`.
 - Codex: `codex.install`, `codex.uninstall`, `codex.revert`.
+- Outside bodies and tasks: `external.manage`, `external.report`, `dispatch.confirm`, `task.schedule`.
 - Private content: `document.manage`.
 - Administration: `all`, `realm.host` (the host's alone: `all` does not include it), `realm.upgrade`, `realm.configure`, `realm.configure.branding`,
   `realm.configure.infrastructure`, `realm.configure.tokens`,
@@ -897,12 +1039,12 @@ outside the model.
 There is no permission for raw database writes: everything is an operation.
 
 **Signing permissions** (held by agents and delegated only as the codex's
-[signing policy](#signing-policy) allows): `identity.review`,
+[signing policy](#signing-policy) allows): `identity.review`, `attribute.review`,
 `credential.sign`, `license.issue`, `license.revoke`, `dispute.accept`, `dispute.reject`,
 `evidence.evaluate`, `resolution.issue`, `resolution.finalize`, `resolution.link_contract`,
 `resolution.modify_terms`, `appeal.allow`, `fine.apply`, `access.revoke`, `contract.terminate`,
 `resource.reassign`, `instrument.lock`, `trade.execute`, `nft.force_transfer`, `nft.freeze`,
-`token.force_transfer`, `token.freeze`, `bid.evaluate`.
+`token.force_transfer`, `token.freeze`, `bid.evaluate`, `land.assess`.
 
 ## 15. Cross-cutting invariants
 
@@ -933,3 +1075,9 @@ There is no permission for raw database writes: everything is an operation.
 | D9 | Forbid agents from signing, as a guardrail | Rejected: the active codex's signing policy decides, defaulting to non-agents only; every signing act records who signed and how (I-ALL-7) |
 | D10 | Split GGG into separately adopted standards (GGG-1, GGG-2, …) | Rejected: one GGG, one interface, one version. A realm may hold nothing in a domain; its operations then answer with empty lists and ordinary errors |
 | D11 | Leave encrypted content to implementations | Rejected: key envelopes and documents are model entities (§13), with keys from vetKeys |
+| D12 | Sessions of a collegiate organ as entities, with operations to open and close one | Rejected: a proposal's `opens_at` and `deadline` are the session |
+| D13 | Holidays as realm data | Rejected: they stay in the codex, beside its chapters |
+| D14 | Outside bodies as registry entries, or as realms | Rejected: an `External` with a `Dispatch` outbox, confirmed by an operator or a bridge; what they say enters through `external_report` |
+| D15 | What a proposal's `threshold` means under a department's m-of-n policy | Decided 8 Nov 2026: it states the rule that decides the proposal and is applied, with one comparison per scope: a realm-wide proposal's yes votes *exceed* the threshold of its basis (votes cast, or all eligible members), a department's *reach* it over the eligible seats (m of n is m/n rounded down: 2 of 3 is 66 666 666); the proposer may only tighten the rule, and the casting vote is the scope's, set by governed configuration (I-GOV-3) |
+| D16 | Personal data in attributes, requests, dispatches and published documents | Decided 8 Nov 2026: an attribute's kind and value are in clear, readable only by the person, the reviewers and the codex; a request's or dispatch's personal content is an encrypted `Document` reference; a published copy holds no personal data (I-PRV-1) |
+| D17 | The majority of a proposal that a governed call files | Decided 8 Nov 2026: the scope's default rule; legislation that needs more requires a proposal of its own and may refuse the direct path with a guard (I-GOV-3) |

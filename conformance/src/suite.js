@@ -231,6 +231,7 @@ function listTable(actor) {
     list('ggg_invite_list', () => (a) => actor.ggg_invite_list(a)),
     list('ggg_delegation_list (as grantor)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Grantor: null } })),
     list('ggg_delegation_list (as delegate)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Delegate: null } })),
+    list('ggg_attribute_list', () => (a) => actor.ggg_attribute_list({ ...a, kind: [], on_behalf_of: [] })),
     list('ggg_department_list', () => (a) => actor.ggg_department_list(a), 'items', (items) => {
       department = items[0]?.id ?? null;
     }),
@@ -244,10 +245,13 @@ function listTable(actor) {
     list('ggg_ledger_view', () => (a) =>
       actor.ggg_ledger_view({ ...a, transaction: [], symbol: [], kind: [], fund: [], period: [] })),
     list('ggg_report_view', () => (a) => actor.ggg_report_view({ ...a, id: [] })),
+    list('ggg_loan_list', () => (a) => actor.ggg_loan_list({ ...a, status: [] })),
     list('ggg_my_invoices', () => (a) => actor.ggg_my_invoices({ ...a, on_behalf_of: [] })),
     list('ggg_land_list', () => (a) => actor.ggg_land_list({ ...a, owner: [] })),
     list('ggg_land_map (zones)', () => (a) => actor.ggg_land_map({ ...a, x: 0n, y: 0n, w: 32n, h: 32n }), 'zones'),
     list('ggg_license_list', () => (a) => actor.ggg_license_list({ ...a, holder: [], kind: [], status: [] })),
+    list('ggg_procedure_list', () => (a) => actor.ggg_procedure_list(a)),
+    list('ggg_request_list', () => (a) => actor.ggg_request_list({ ...a, kind: [], status: [] })),
     list('ggg_dispute_list_all', () => (a) => actor.ggg_dispute_list_all({ ...a, status: [] })),
     list('ggg_resolution_query', () => (a) => actor.ggg_resolution_query({ ...a, since: [], court: [], search: [] })),
     list('ggg_tender_list', () => (a) => actor.ggg_tender_list({ ...a, status: [] })),
@@ -267,6 +271,9 @@ function listTable(actor) {
     list('ggg_notification_list', () => (a) =>
       actor.ggg_notification_list({ ...a, recipient: [], unread: [], on_behalf_of: [] })),
     list('ggg_events', () => (a) => actor.ggg_events(a)),
+    list('ggg_external_list', () => (a) => actor.ggg_external_list(a)),
+    list('ggg_dispatch_list', () => (a) => actor.ggg_dispatch_list({ ...a, to: [], status: [] })),
+    list('ggg_task_list', () => (a) => actor.ggg_task_list({ ...a, op: [], status: [] })),
     list('ggg_crypto_scopes', () => (a) => actor.ggg_crypto_scopes(a), 'items', (items) => {
       scope = items[0] ?? null;
     }),
@@ -276,7 +283,7 @@ function listTable(actor) {
     }),
     list('ggg_document_list', () => {
       const d = needDepartment();
-      return (a) => actor.ggg_document_list({ ...a, department: d });
+      return (a) => actor.ggg_document_list({ ...a, department: d, kind: [], language: [] });
     }),
   ];
 }
@@ -288,6 +295,7 @@ const getTable = (actor) => [
   ['ggg_organization_get', (id) => actor.ggg_organization_get({ id, ...none })],
   ['ggg_tender_get', (id) => actor.ggg_tender_get({ id, ...none })],
   ['ggg_dispute_get', (id) => actor.ggg_dispute_get({ id, on_behalf_of: [] })],
+  ['ggg_request_get', (id) => actor.ggg_request_get({ id, on_behalf_of: [] })],
   ['ggg_crypto_envelope', (id) => actor.ggg_crypto_envelope(id)],
   ['ggg_document_get', (id) => actor.ggg_document_get(id)],
 ];
@@ -562,6 +570,11 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     description: 'Created by the GGG conformance suite. It can be withdrawn or ignored.',
     department: [],
     action: { Motion: null },
+    kind: [],
+    matter: [],
+    threshold: [],
+    quorum: [],
+    threshold_of: [],
     effective_at: [],
     links: [],
     on_behalf_of: [],
@@ -672,7 +685,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     const forStranger = [Ed25519KeyIdentity.generate().getPrincipal()];
     const real = [
       ['ggg_proposal_create', motion('no delegation', { on_behalf_of: forStranger })],
-      ['ggg_profile_update', { nickname: ['GGG conformance'], avatar: [], on_behalf_of: forStranger }],
+      ['ggg_profile_update', { nickname: ['GGG conformance'], avatar: [], language: [], on_behalf_of: forStranger }],
     ];
     if (created) {
       real.push(['ggg_proposal_vote', { ...vote(created.id, 'Yes'), on_behalf_of: forStranger }]);
@@ -802,6 +815,53 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
       await attempt([link('RelatesTo', UNKNOWN)], ['NotFound'], 'link to an unknown proposal');
       await attempt([link('Replaces', open)], ['Conflict'], 'replaces a proposal that is not withdrawn');
       await attempt([link('RelatesTo', open), link('RelatesTo', open)], ['InvalidArgument'], 'links the same proposal twice');
+    });
+  });
+
+  /** Files a Motion with `extra` on top of the defaults, runs `then` on the proposal, and withdraws it. */
+  const fileRule = async (title, extra, then) => {
+    const result = await mine.ggg_proposal_create(motion(`GGG conformance check ${new Date().toISOString()} (${title})`, extra));
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not propose');
+    const id = ok(result, `ggg_proposal_create(${title})`);
+    try {
+      return await then((await getProposal(mine, id)).proposal);
+    } finally {
+      await mine.ggg_proposal_withdraw({ proposal: id, on_behalf_of: [] });
+    }
+  };
+
+  await check('GGG', 'W18', "a proposal's rule defaults to the realm's over the votes cast, and its kind and matter are kept", async () => {
+    needMember();
+    const realm = await anon.ggg_realm_info();
+    await fileRule('default rule', { kind: ['motion'], matter: ['conformance'] }, (p) => {
+      assert(p.threshold === realm.voting_threshold, `threshold is ${p.threshold}, the realm's is ${realm.voting_threshold}`);
+      assert(p.quorum === realm.voting_quorum, `quorum is ${p.quorum}, the realm's is ${realm.voting_quorum}`);
+      assert(tag(p.threshold_of) === 'Cast', `threshold_of is ${tag(p.threshold_of)}`);
+      assert(show(p.casting_vote) === show(realm.casting_vote), `casting_vote is ${show(p.casting_vote)}, the realm's is ${show(realm.casting_vote)}`);
+      assert(opt(p.kind) === 'motion' && opt(p.matter) === 'conformance', `kind and matter are ${show(p.kind)}, ${show(p.matter)}`);
+    });
+  });
+
+  await check('GGG', 'W19', 'a rule weaker than the default is refused', async () => {
+    needMember();
+    const realm = await anon.ggg_realm_info();
+    const weaker = [];
+    if (realm.voting_threshold > 0n) weaker.push(['lower threshold', { threshold: [realm.voting_threshold - 1n] }]);
+    if (realm.voting_quorum > 0n) weaker.push(['lower quorum', { quorum: [realm.voting_quorum - 1n] }]);
+    if (!weaker.length) throw new Skip('the realm has no threshold and no quorum, so nothing is weaker');
+    for (const [what, extra] of weaker) await proposeAs(motion(what, extra), `ggg_proposal_create(${what})`);
+    return weaker.map(([what]) => what).join(', ');
+  });
+
+  await check('GGG', 'W20', 'a stricter rule is stored as stated', async () => {
+    needMember();
+    const realm = await anon.ggg_realm_info();
+    const stricter = (ratio) => (ratio < WHOLE ? ratio + 1n : ratio);
+    const threshold = stricter(realm.voting_threshold);
+    const quorum = stricter(realm.voting_quorum);
+    await fileRule('stricter rule', { threshold: [threshold], quorum: [quorum], threshold_of: [{ Eligible: null }] }, (p) => {
+      assert(p.threshold === threshold && p.quorum === quorum, `the rule is ${p.threshold}, ${p.quorum}, not ${threshold}, ${quorum}`);
+      assert(tag(p.threshold_of) === 'Eligible', `threshold_of is ${tag(p.threshold_of)}`);
     });
   });
 
