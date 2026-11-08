@@ -987,8 +987,11 @@ one codex is `pending` at a time: a second install while one waits is `Conflict`
 
 A **revert** restores any earlier codex in the realm's history: `codex_revert` names its checksum, or
 none for the one the active codex replaced. A checksum not in the history is `NotFound`; a revert with
-nothing to restore is `Conflict`. The restored codex is `active` again and the one it displaces
-`reverted`, and a revert never runs `on_codex_activate`. A GOS reserves its revert operations, so no
+nothing to restore is `Conflict`, and so is naming the active codex or a pending one, which are not
+earlier codices: a pending codex is activated only by `codex_activate`. A revert filed as a proposal
+names the codex it restores, resolved when it is filed, so what is voted on is what runs. The restored
+codex is `active` again and the one it displaces `reverted`, and a revert never runs
+`on_codex_activate`. A GOS reserves its revert operations, so no
 legislation can refuse or delay one ([layered codex §1](../docs/layered-codex.md#1-chapters-use-gggs-operations-directly)),
 and which rule decides a revert vote is the GOS's: Realms GOS applies the rule recorded with the codex
 being restored.
@@ -1251,4 +1254,4 @@ There is no permission for raw database writes: everything is an operation.
 | D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3) |
 | D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the nearest cent (a multiple of 10^(decimals − 2) smallest units); never bracket by bracket (§5) |
 | D24 | What replaces a fund's extended lines, and what an adopted budget allows | Decided 9 Nov 2026: an adopted budget that replaces a fund's extended lines makes them `amended`, so a category it dropped does not come back at the next extension (`closed` keeps meaning closed with its period); once a fund has an adopted budget for a period, a transfer from it in a category with no adopted line is refused (`Conflict`), while a fund with only extended lines, or none, spends as before, and the ledger's fee for a payment is exempt; within a fund and period a category is either revenue or expense, a draft of the other kind `InvalidArgument` (§5) |
-| D25 | What `codex_revert` restores | Decided 8 Nov 2026: any earlier codex in the history, named by its checksum, or the one the active codex replaced when none is named (`opt CodexRevertArgs`, so existing callers keep working); never `on_codex_activate`; which rule decides the vote is the GOS's (§11) |
+| D25 | What `codex_revert` restores | Decided 8 Nov 2026: any earlier codex in the history, named by its checksum, or the one the active codex replaced when none is named (`opt CodexRevertArgs`, so existing callers keep working); a revert filed as a proposal names the codex it restores; the active or a pending codex is not an earlier one (`Conflict`); never `on_codex_activate`; which rule decides the vote is the GOS's (§11) |
