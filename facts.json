@@ -1790,7 +1790,10 @@
         },
         "category": {
           "type": "text",
-          "optional": true
+          "optional": true,
+          "reserved": [
+            "ledger_fee"
+          ]
         },
         "description": {
           "type": "text",
@@ -2111,7 +2114,10 @@
           "type": "text"
         },
         "category": {
-          "type": "text"
+          "type": "text",
+          "reserved": [
+            "ledger_fee"
+          ]
         },
         "kind": {
           "type": "BudgetKind",

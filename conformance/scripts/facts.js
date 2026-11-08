@@ -76,6 +76,13 @@ const DERIVED = {
   },
 };
 
+// Values a text fact never takes: the GOS keeps them for what it books itself, and a call naming one is
+// refused with InvalidArgument, so a rule need not forbid them (model §5, D30).
+const RESERVED = {
+  transfer_create: { category: ['ledger_fee'] },
+  budget_draft: { category: ['ledger_fee'] },
+};
+
 // Lists an operation's rules may range over although the operation's argument is only an id: the list
 // of the saved record that the id names. Every list of records among the arguments gets a per-list
 // action as well, without being named here.
@@ -294,6 +301,10 @@ export function generate(source = readFileSync(DID, 'utf8')) {
     for (const [fact, { type, derived }] of Object.entries(DERIVED[operation] ?? {})) {
       if (action.facts[fact]) throw new Error(`${operation}: the derived fact ${fact} collides with an argument`);
       action.facts[fact] = { ...describe(type), derived };
+    }
+    for (const [fact, reserved] of Object.entries(RESERVED[operation] ?? {})) {
+      if (!action.facts[fact]) throw new Error(`${operation}: the reserved fact ${fact} is not an argument`);
+      action.facts[fact] = { ...action.facts[fact], reserved };
     }
     const lists = { ...recordLists(types, argFields), ...(SAVED_LISTS[operation] ?? {}) };
     if (Object.keys(lists).length) action.lists = Object.fromEntries(Object.keys(lists).map((list) => [list, `${operation}.${list}`]));

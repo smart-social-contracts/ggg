@@ -60,6 +60,16 @@ test('every kind is declared by named aliases of ggg.did, with the ratio scale a
   assert.deepEqual(types.get('PeriodUnit').variant.map((unit) => unit.name), ['Day', 'WorkingDay', 'Month', 'Year']);
 });
 
+test('a reserved value is one a text argument never takes', () => {
+  for (const operation of ['transfer_create', 'budget_draft']) {
+    const { category } = committed.actions[operation].facts;
+    assert.equal(category.type, 'text');
+    assert.deepEqual(category.reserved, ['ledger_fee']);
+  }
+  const reserved = Object.values(committed.actions).flatMap((a) => Object.values(a.facts)).filter((f) => f.reserved);
+  assert.equal(reserved.length, 2, 'reserved values are few and declared one by one');
+});
+
 test('a derived fact says what the GOS computes it from, and never shadows an argument', () => {
   const { published_in } = committed.actions.tender_award.facts;
   assert.equal(published_in.type, 'vec');
