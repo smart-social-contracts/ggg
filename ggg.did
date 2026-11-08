@@ -11,6 +11,15 @@ type Timestamp = nat64;
 // Nanoseconds.
 type Duration = nat64;
 
+// A count of calendar units: three months is three months, whatever the days. Deadlines and terms in
+// legislation are Periods, never Durations. A WorkingDay is a day that is neither a weekend day nor a
+// holiday in the realm's calendar, taken in the realm's time zone; GGG names the unit and the GOS
+// counts it, failing closed when its calendar has no entries for a year the count reaches. Periods
+// compare only within one unit: comparing two units fails closed, with no conversion through the
+// calendar (model §1).
+type PeriodUnit = variant { Day; WorkingDay; Month; Year };
+type Period = record { count : nat; unit : PeriodUnit };
+
 // The ICRC-3 generic value, for structured data whose shape the model leaves open.
 type Value = variant {
   Nat : nat;

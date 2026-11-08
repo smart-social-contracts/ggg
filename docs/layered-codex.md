@@ -171,8 +171,8 @@ No layer of legislation names a department of a lower layer.
   becomes −2.35), as euro legislation requires (Regulation (EC) 1103/97 Art. 5). GGG states it with
   the money kind of its fact schema, so every implementation rounds the same way. Another rule is
   added only when a piece of legislation needs it.
-- **A `Period` is a count and a unit:** `PeriodUnit = variant { Day; WorkingDay; Month; Year }`
-  (§7 for `WorkingDay`). A deadline is a `Period`, not a `Duration` in nanoseconds: three months is
+- **A `Period` is a count and a unit:** `PeriodUnit = variant { Day; WorkingDay; Month; Year }`, both
+  in `ggg.did` (§7 for `WorkingDay`). A deadline is a `Period`, not a `Duration` in nanoseconds: three months is
   three months, whatever the days. Periods compare only within one unit: comparing two units, such as
   45 days against 30 working days, fails closed, with no conversion through the calendar. A codex's
   settings are the GOS's, but their values use GGG's Period units and no others, and no setting shares
@@ -314,7 +314,8 @@ or the call is refused with `InvalidArgument`. The rules:
 
 ## 7. The `WorkingDay` unit ([ggg#7](https://github.com/smart-social-contracts/ggg/issues/7))
 
-`PeriodUnit = variant { Day; WorkingDay; Month; Year }`.
+`PeriodUnit = variant { Day; WorkingDay; Month; Year }` and `Period = record { count : nat; unit : PeriodUnit }`
+are in `ggg.did`, and the [model's conventions](../model/README.md#1-conventions) define them.
 
 A **working day** is a day that is neither a weekend day nor a holiday in **the realm's calendar**,
 taken in **the realm's time zone** (§6; for a matter of one quarter alone, the quarter's). Much
