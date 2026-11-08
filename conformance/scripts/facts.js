@@ -69,7 +69,7 @@ const DERIVED = {
   },
   // Operations between realms carry the other realm's compliance, as it last reported it (model §10).
   transfer_create: {
-    follower_compliance: { type: { name: 'Compliance' }, derived: 'the compliance the follower whose capital `to` names last reported; Unknown for any other recipient' },
+    follower_compliance: { type: { name: 'Compliance' }, derived: 'the compliance last reported by the follower that `to` names ({kind: "Follower", id: its capital}) over an active link; Unknown for any other recipient or a link not active' },
   },
   quarter_report: {
     follower_compliance: { type: { name: 'Compliance' }, derived: "the reporting quarter's compliance" },

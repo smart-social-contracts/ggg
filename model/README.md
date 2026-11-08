@@ -742,7 +742,7 @@ takes legislation from other realms, its sync sources, over links both sides vot
 | `FederalVote` | `id`, `title`, `origin_quarter`, `action` (one operation call, as a proposal's), `rule` (Json), `hash`, `deadline`, `status`, `tally` (Json) | | `FV-3` Adopt tax policy 3: majority of quarters, deadline 15 Nov |
 | `FederalVoteLeg` | `id`, `vote` → `FederalVote`, `quarter`, `proposal_id`, `outcome`, `yes`, `no`, `abstain`, `eligible`, `status`, `hash` | One per quarter. | North on `FV-3`: 812 yes, 301 no of 1,240 eligible → passed |
 | `FederationMessage` | `id`, `topic`, `source`, `body` (Json), `response` (Json) | | North → capital: population report |
-| `SyncSource` | `source` (a realm, by its capital, or a stand-in record: a URL and the checksum of its content), `name`, `status` | On a follower, in `Realm.sync_sources`: a realm it takes legislation from, with the link's status. A stand-in record stands for a source that runs no realm. | CV, `active`; the EU's record at `https://…/releases.json`, `sha256:…`, `active` |
+| `SyncSource` | `source` (a realm, by its capital, or a stand-in record: an https URL and the checksum of its content), `name`, `status` | On a follower, in `Realm.sync_sources`: a realm it takes legislation from, with the link's status. A stand-in record stands for a source that runs no realm. | CV, `active`; the EU's record at `https://…/releases.json`, `sha256:…`, `active` |
 | `Follower` | `id` (the follower's capital, as text), `capital`, `status`, `layers` (each a `ReportedLayer`), `compliance`, `population`, `reported_at` | On a sync source: a realm that takes legislation from it, with the link's status and the follower's last report. | València on CV: `active`; reported Spain's 2.4.0 and CV's 1.1.0, compliant, population 800,000, on 3 Nov |
 | `ReportedLayer` | `version`, `checksum` | One layer a follower runs, as it reports it. It names no source: the sync source finds the layer by its checksum in its own record. | Spain's 2.4.0, `sha256:…` |
 
@@ -775,7 +775,7 @@ whole federation.
 | `federation_message` | `quarter.sync` | | The capital announces codex 1.5.0 to its quarters |
 | `sync_source_add`, `sync_source_remove` | `sync_source.manage` | governed | València votes to take legislation from CV; later it stops taking EMSHI's |
 | `follower_accept`, `follower_remove` | `follower.manage` | governed | CV votes to accept València as a follower |
-| `link_notify` (from the capital at the other side of a link) | `link.sync` (held by the capitals of the realm's links) | | CV tells València their link is `active`; later, València tells CV it `ended` |
+| `link_notify` (from the capital at the other side of a link) | `link.sync` (held only by the capitals of the realm's links) | | CV tells València their link is `active`; later, València tells CV it `ended` |
 | `follower_report` (from a follower's capital, over an active link) | `link.sync` | | València reports to CV the layers it runs, that it is compliant, and its population |
 | `follower_list` | `realm.data_view` | read | CV's followers, with what each runs |
 
@@ -812,7 +812,9 @@ stand-in record at a public URL, pinned by the checksum of its content. `sync_so
 `sync_source_remove` are the follower's votes, `follower_accept` and `follower_remove` the source's.
 The side whose vote changes a link tells the other side's capital with `link_notify`, and a follower's
 capital reports with `follower_report` what it runs, a `ReportedLayer` per layer, its compliance
-against that source and its population; the source keeps the last report on the follower's entry.
+against that source and its population; the source keeps the last report on the follower's entry. The
+layers, compliance and population are the follower's own report; the follower's `codex_status` remains
+the authority, and a source refuses a layer whose checksum is not in its record (`InvalidArgument`).
 Which followers a source counts, for its population or a vote, its own legislation decides by reading
 its `Follower` records. A source's legislation may hook `link_notify` (`on_link_notify`, reading the
 new status, such as `ended` by the follower) but never guard or forbid it, so a side always learns
@@ -821,9 +823,12 @@ guard or hook it, and a realm can always leave
 ([layered codex §1](../docs/layered-codex.md#1-chapters-use-gggs-operations-directly)).
 
 Operations between realms carry a derived fact, `follower_compliance`, for a source's legislation to
-test like an argument: on `transfer_create`, the compliance the follower whose capital receives the
-transfer last reported, `unknown` for any other recipient; on `quarter_report`, the reporting
-quarter's `compliance`.
+test like an argument: on `transfer_create`, the compliance last reported by the follower that `to`
+names (`{kind: "Follower", id: its capital}`) over an active link, `unknown` for any other recipient
+or a link not active; on `quarter_report`, the reporting quarter's `compliance`.
+
+Calls between realms are bounded-wait: a call that times out counts as unanswered (the realm cannot be
+read, or the notice is sent again).
 
 How a follower installs what a sync source relays is the GOS's business, not the model's; §11 says
 what GGG provides. Realms GOS adds three install rules there: a follower checks each layer from above
@@ -845,14 +850,21 @@ installed whole; and the paths from several sync sources must form one chain in 
   `follower_remove`): it is `ended`, by that side's capital and at that time, the follower keeps what
   it installed, and a new vote on each side opens a new link.
 - I-NEST-2: No cycles: a realm never takes legislation from itself, directly or through other realms.
-  `sync_source_add` of a realm that takes legislation from this one, at any remove and over any link
-  not `ended`, is refused with `Conflict` before any vote.
+  Both votes check it, at any remove and over any link not `ended`: `sync_source_add` that the source
+  does not take legislation from this realm, `follower_accept` that this realm does not take
+  legislation from the follower; and the check runs again when the call applies. A cycle is refused
+  with `Conflict`, and a realm that cannot be read fails the check with `Unavailable`: never an open
+  link. A vote records the link as `requested` before it checks, so a vote cast at the same time on
+  the other side sees it.
 - I-NEST-3: Calls between realms go between the capitals of a link and nowhere else. `link_notify`
   and `follower_report` are accepted only from the capital at the other side of a link this realm has
   voted on, and a report only over an `active` link: any other caller is refused with `Forbidden`, a
-  report over a link that is not active with `Conflict`. A side whose notice is refused because the
-  other has not voted yet loses nothing: when the other side votes, its own notice completes the link,
-  and the receiver, now `active`, tells it so.
+  report over a link that is not active with `Conflict`. Neither is delegable: the caller is the other
+  realm's capital. A notice that a link ended names its sender as `by`, at a time not ahead of the
+  receiver's clock; any other is refused with `InvalidArgument`. A side whose notice is refused because
+  the other has not voted yet loses nothing: when the other side votes, its own notice completes the
+  link, and the receiver's reply, `active`, tells it so. A notice that is not answered (the call is
+  rejected or times out; a `GggError` is an answer) is sent again until it is answered.
 
 ## 11. Codex, notifications, outside bodies, tasks and audit
 
@@ -929,21 +941,25 @@ one codex is `pending` at a time: a second install while one waits is `Conflict`
 
 A codex may also be installed as a **release** of a layer: `codex_install` with `Release { source;
 version }` installs that release whole, found in the record of one of the realm's active sync sources
-(§10), the record that vouches for it; `NotFound` when none lists it. The GOS builds the change list
-from that record. A member files it like any governed call, or as a `proposal_create` whose action is
-the call, so anyone with `proposal.create` may propose an install, and no legislation guard of the
-follower's own codex runs on that `proposal_create`: the release's date is the source's legislation's.
+(§10), the record that vouches for it; `NotFound` when none lists it. When two active sync sources
+list that release with different chapters or calendar, the install is refused with `Conflict`. The
+GOS builds the change list from that record. A member files it like any governed call, or as a
+`proposal_create` whose action is the call, so anyone with `proposal.create` may propose an install,
+and no legislation guard of the follower's own codex runs on that `proposal_create`: the release's
+date is the source's legislation's.
 
 A realm **publishes** a release of its own layer with `legislation_release_publish`, governed by the
 root: its source id, the version, every chapter's domain and checksum, its calendar's checksum, the
-commit it was built from and the date it is in force; `published` is the time of the vote. Every
-checksum it names is already stored by the realm, installed or pending (`InvalidArgument` otherwise),
-so a published release can always be served. A realm publishes under one source id, the one of its
-first release (`InvalidArgument` otherwise), and a version once (`Conflict`): a release is never edited
-or removed, and a correction is a new version. `legislation_releases` is the realm's **published
-record**: the releases of the layers it relays, top to bottom as it installed them, each with its
-`source`, then its own, oldest first. `legislation_chapter` returns the bytes of a chapter by its
-checksum, or none. Both are public: legislation is public, and the checksum pins the bytes.
+commit it was built from and the date it is in force; `published` is when the publish applies, set by
+the realm (for a proposal, when it executes). Every checksum it names is already stored by the realm,
+installed or pending (`InvalidArgument` otherwise), so a published release can always be served. A
+realm publishes under one source id, the one of its first release, which is not one of the layers it
+relays (`InvalidArgument` otherwise), and a version once (`Conflict`): a release is never edited or
+removed, and a correction is a new version. `legislation_releases` is the realm's **published
+record**: the releases of the layers it relays, top to bottom (the order of the record that vouches
+for them), each the release it installed, with its `source`; then its own, oldest first.
+`legislation_chapter` returns the bytes of a chapter by its checksum, or none. Both are public:
+legislation is public, and the checksum pins the bytes.
 
 Nothing outside the Internet Computer calls a realm, and no realm calls an outside body. An `External`
 is such a body. A notice to it is a `Dispatch`, which an operator or a bridge delivers and then gives
@@ -1123,7 +1139,7 @@ outside the model.
 - Procurement: `tender.manage`, `bid.submit`, `bid.evaluate`.
 - Federation: `quarter.sync` (held by registered quarter canisters), `quarter.register`, `quarter.deregister`, `quarter.configure`, `quarter.secede`,
   `quarter.join_federation`, `federal_vote.propose`, `federal_vote.manage`, `realm.register`.
-- Links between realms: `sync_source.manage`, `follower.manage`, `link.sync` (held by the capitals at the other side of the realm's links).
+- Links between realms: `sync_source.manage`, `follower.manage`, `link.sync` (held only by the capitals at the other side of the realm's links: nobody grants it, and `all` does not include it).
 - Codex: `codex.install`, `codex.uninstall`, `codex.revert`, `legislation.publish`.
 - Outside bodies and tasks: `external.manage`, `external.report`, `dispatch.confirm`, `task.schedule`.
 - Private content: `document.manage`.

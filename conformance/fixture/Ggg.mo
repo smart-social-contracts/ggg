@@ -769,8 +769,8 @@ module {
   };
   public type FollowerArgs = { follower : Principal };
   public type FollowerPage = { next : ?Text; items : [Follower] };
-  /// What a follower's capital reports to a sync source: the layers it runs, its compliance against that
-  /// source and its population.
+  /// What a follower's capital reports to a sync source, its own claims: the layers it runs, each a
+  /// checksum of the source's record, its compliance against that source and its population.
   public type FollowerReportArgs = {
     compliance : Compliance;
     layers : [ReportedLayer];
@@ -1081,6 +1081,16 @@ module {
   };
   public type LedgerKind = { #Asset; #Liability; #Revenue; #Expense; #Equity };
   public type LedgerPage = { next : ?Text; items : [LedgerEntry] };
+  /// A release of the realm's own layer. `published` is set by the realm when the publish applies.
+  public type LegislationReleasePublishArgs = {
+    source : Text;
+    version : Text;
+    calendar : ?Text;
+    effective_from : Timestamp;
+    chapters : [ChapterRef];
+    notes : Value;
+    commit : Text;
+  };
   public type License = {
     id : Text;
     status : LicenseStatus;
@@ -1744,16 +1754,6 @@ module {
     commit : Text;
   };
   public type ReleasePage = { next : ?Text; items : [Release] };
-  /// A release of the realm's own layer. `published` is the time of the vote.
-  public type ReleasePublishArgs = {
-    source : Text;
-    version : Text;
-    calendar : ?Text;
-    effective_from : Timestamp;
-    chapters : [ChapterRef];
-    notes : Value;
-    commit : Text;
-  };
   /// One report by id, or a page of reports.
   public type ReportArgs = { id : ?Text; cursor : ?Text; limit : ?Nat32 };
   /// `adjustments` are figures the issuer adds to the ledger's, for a report in terms the ledger doesn't keep.
@@ -1876,8 +1876,8 @@ module {
     name : Text;
   };
   public type SyncSourceAddArgs = { source : SyncSourceRef; name : Text };
-  /// A realm, by its capital, or a stand-in record at a public URL for a source that runs no realm,
-  /// pinned by the checksum of its content.
+  /// A realm, by its capital, or a stand-in record at a public https URL for a source that runs no
+  /// realm, pinned by the checksum of its content.
   public type SyncSourceRef = {
     #Record : { url : Text; checksum : Text };
     #Realm : Principal;
@@ -2671,7 +2671,7 @@ module {
         #Ok : ?Blob;
         #Err : GggError;
       };
-    ggg_legislation_release_publish : shared ReleasePublishArgs -> async {
+    ggg_legislation_release_publish : shared LegislationReleasePublishArgs -> async {
         #Ok : Governed;
         #Err : GggError;
       };

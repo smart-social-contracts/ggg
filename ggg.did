@@ -984,8 +984,8 @@ type FederationMessage = record {
 
 // Requested: one side has voted. Active: both have. Ended: a side ended the link, `by` its capital.
 type LinkStatus = variant { Requested; Active; Ended : record { by : principal; at : Timestamp } };
-// A realm, by its capital, or a stand-in record at a public URL for a source that runs no realm,
-// pinned by the checksum of its content.
+// A realm, by its capital, or a stand-in record at a public https URL for a source that runs no
+// realm, pinned by the checksum of its content.
 type SyncSourceRef = variant { Realm : principal; Record : record { url : text; checksum : text } };
 type SyncSource = record { source : SyncSourceRef; name : text; status : LinkStatus };
 // Compliant: every layer the realm runs is at least the latest release in effect in the source's
@@ -1816,8 +1816,8 @@ type SyncSourceAddArgs = record { source : SyncSourceRef; name : text };
 // A Record is the same source when its url is the same, whatever the checksum.
 type SyncSourceRemoveArgs = record { source : SyncSourceRef };
 type FollowerArgs = record { follower : principal };
-// What a follower's capital reports to a sync source: the layers it runs, its compliance against that
-// source and its population.
+// What a follower's capital reports to a sync source, its own claims: the layers it runs, each a
+// checksum of the source's record, its compliance against that source and its population.
 type FollowerReportArgs = record { layers : vec ReportedLayer; compliance : Compliance; population : nat };
 type FollowerPage = record { items : vec Follower; next : opt text };
 // What the caller is to the receiver: its sync source, or its follower.
@@ -1921,8 +1921,8 @@ type DispatchPage = record { items : vec Dispatch; next : opt text };
 // `codex` is the pending codex's checksum (at most one codex is pending at a time). `at` defaults to now;
 // a time ahead schedules the activation.
 type CodexActivateArgs = record { codex : text; at : opt Timestamp };
-// A release of the realm's own layer. `published` is the time of the vote.
-type ReleasePublishArgs = record {
+// A release of the realm's own layer. `published` is set by the realm when the publish applies.
+type LegislationReleasePublishArgs = record {
   source : text;
   version : text;
   effective_from : Timestamp;
@@ -2275,7 +2275,7 @@ service : {
   ggg_codex_uninstall : () -> (variant { Ok : Governed; Err : GggError });
   ggg_codex_revert : () -> (variant { Ok : Governed; Err : GggError });
   ggg_codex_activate : (CodexActivateArgs) -> (variant { Ok : Governed; Err : GggError });
-  ggg_legislation_release_publish : (ReleasePublishArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_legislation_release_publish : (LegislationReleasePublishArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_notification_read : (NotificationReadArgs) -> (variant { Ok : NotificationsRead; Err : GggError });
   ggg_notification_send : (NotificationSendArgs) -> (variant { Ok : Delivery; Err : GggError });
   ggg_external_add : (ExternalAddArgs) -> (variant { Ok : Governed; Err : GggError });

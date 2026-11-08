@@ -1142,7 +1142,7 @@ export const idlFactory = ({ IDL }) => {
     'items' : IDL.Vec(LedgerEntry),
   });
   const ChapterRef = IDL.Record({ 'domain' : IDL.Text, 'checksum' : IDL.Text });
-  const ReleasePublishArgs = IDL.Record({
+  const LegislationReleasePublishArgs = IDL.Record({
     'source' : IDL.Text,
     'version' : IDL.Text,
     'calendar' : IDL.Opt(IDL.Text),
@@ -2797,7 +2797,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'ggg_legislation_release_publish' : IDL.Func(
-        [ReleasePublishArgs],
+        [LegislationReleasePublishArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),

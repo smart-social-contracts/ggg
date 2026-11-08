@@ -1814,7 +1814,7 @@
               }
             }
           },
-          "derived": "the compliance the follower whose capital `to` names last reported; Unknown for any other recipient"
+          "derived": "the compliance last reported by the follower that `to` names ({kind: \"Follower\", id: its capital}) over an active link; Unknown for any other recipient or a link not active"
         }
       }
     },
