@@ -28,7 +28,7 @@ before(async () => {
   pic = await PocketIc.create(server.getUrl());
   const canisterId = await pic.createCanister();
   const wasm = readFileSync(new URL('../fixture/ggg_fixture.wasm', import.meta.url));
-  const arg = IDL.encode([IDL.Vec(IDL.Principal)], [[alice.getPrincipal(), bob.getPrincipal()]]);
+  const arg = IDL.encode([IDL.Vec(IDL.Principal), IDL.Vec(IDL.Tuple(IDL.Text, IDL.Vec(IDL.Nat8)))], [[alice.getPrincipal(), bob.getPrincipal()], []]);
   await pic.installCode({ canisterId, wasm, arg });
   as = (identity) => pic.createActor({ idlFactory, canisterId, sender: identity.getPrincipal() });
   asOldCaller = (identity) => pic.createActor({ idlFactory: callerWithoutLinks, canisterId, sender: identity.getPrincipal() });

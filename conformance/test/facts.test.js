@@ -69,8 +69,13 @@ test('a derived fact says what the GOS computes it from, and never shadows an ar
     assert.equal(fact.kind, 'money');
     assert.match(fact.derived, /sum/);
   }
+  for (const operation of ['transfer_create', 'quarter_report']) {
+    const fact = committed.actions[operation].facts.follower_compliance;
+    assert.deepEqual(fact.values, ['Compliant', 'NonCompliant', 'Unknown']);
+    assert.match(fact.derived, /compliance/);
+  }
   const derived = Object.values(committed.actions).flatMap((a) => Object.values(a.facts)).filter((f) => f.derived);
-  assert.equal(derived.length, 3, 'derived facts are few and declared one by one');
+  assert.equal(derived.length, 5, 'derived facts are few and declared one by one');
   const did = read('ggg.did').replace('type TenderAwardArgs = record { tender : text;', 'type TenderAwardArgs = record { tender : text; published_in : text;');
   assert.throws(() => generate(did), /published_in collides with an argument/);
 });

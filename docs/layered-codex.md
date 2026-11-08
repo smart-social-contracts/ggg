@@ -35,14 +35,16 @@ operations, and GGG's arguments, events and entities are the whole interface:
   Cedar. A few facts are not arguments: a GOS computes each from its own records when the operation is
   called, deterministically, and the fact schema (§3.3) declares it as `derived`, with what it is:
   `published_in` of `tender_award`, the journals of the tender's notices; `revenue` and `expense` of
-  `budget_propose`, the period's totals.
+  `budget_propose`, the period's totals; `follower_compliance` of `transfer_create` and
+  `quarter_report`, the compliance the other realm last reported (§4).
 - **Effects are operations.** A hook changes nothing itself. It queues GGG operations, which the GOS
   runs as the realm, under the same permissions as any caller.
 - **Entity reads are read-only.** A chapter may read entities (`Member`, `Land`, `TaxPolicy`); it
   never writes one.
 - **Reserved operations.** `sync_source_remove` (§4) may not be forbidden, guarded or hooked by any
   codex, so no legislation can stop a follower from leaving. A GOS reserves its own revert operations
-  the same way.
+  the same way. `link_notify` (§4) is not reserved: a sync source's legislation hooks it, but no
+  chapter guards or forbids it, so a side always learns that a link ended.
 
 The two entry points of a realm's own legislation are ordinary members of these kinds:
 
@@ -245,27 +247,33 @@ A fact that is not an argument is marked `derived`, with what the GOS computes i
 
 A realm chooses by vote the realms it takes legislation from, its **sync sources**, and each of them
 accepts it by vote. There is no parent, no tier and no national code. This is its own issue, not part
-of ggg#2.
+of ggg#2. The model states it in §10 (links between realms) and §11 (releases).
 
 | Part | What |
 |---|---|
-| `Realm.sync_sources` | the realms this one syncs from, each with its link status |
-| `Follower` | on a sync source: a realm that syncs from it, with its link status and its last report |
-| `sync_source_add`, `sync_source_remove` | the follower's side: ask to sync from a realm, stop syncing from it. `sync_source_remove` is reserved (§1) |
+| `Realm.sync_sources` | the realms this one takes legislation from, each with its link status. A source is a realm, by its capital, or a stand-in record for a source that runs no realm: a public URL and the checksum of its content |
+| `Follower` | on a sync source: a realm that takes legislation from it, with its link status and its last report |
+| `LinkStatus` | `Requested` (one side has voted), `Active` (both have), `Ended { by; at }` (a side ended it) |
+| `sync_source_add`, `sync_source_remove` | the follower's side: ask to take legislation from a realm, stop taking it. `sync_source_remove` is reserved (§1). A stand-in record's link is active on this vote alone, and a second add of the same URL pins a new checksum without ending the link |
 | `follower_accept`, `follower_remove` | the sync source's side: accept a follower, end a link |
-| `link_notify` | an operation of ggg#3 between the two sides of a link. The event a sync source's legislation hooks when a follower leaves is named in ggg#3 |
-| `follower_report`, `follower_list` | a follower reports what it runs; a sync source lists its followers |
+| `link_notify` | the one operation between the two sides of a link: the side whose vote changes a link calls it on the other side's capital with the new `LinkStatus`. Its event is what a sync source's legislation hooks when a follower leaves: `on_link_notify`, reading `Ended { by; at }`. On the receiving side it is hook-only: no chapter may guard or forbid it |
+| `follower_report`, `follower_list` | a follower's capital reports what it runs; a sync source lists its followers. Which followers a source counts, for its population or a vote, its legislation decides by reading its `Follower` records, which are read-only like any entity |
 | `ReportedLayer { version; checksum }` | what a follower reports per layer it runs, with its compliance against that source and its population. It does not send the layer's source: the sync source finds the layer by its checksum in its own record |
-| `Quarter.compliance` | the same flag on a realm's own quarters |
-| `legislation_releases`, `legislation_chapter` | a sync source's published record: its releases, and the releases of every layer it relays; the bytes of a chapter, so a follower can fetch them from the source's capital |
-| `follower_compliance` | a fact on operations between realms, such as a transfer to a follower, so a sync source's legislation can test it |
+| `Quarter.compliance` | the same flag on a realm's own quarters: `Compliant`, `NonCompliant { since; stale }`, `Unknown` |
+| `legislation_release_publish` | a source publishes a release of its own layer by its own vote, governed by the root. Every checksum it names is already stored by the realm, so the release can always be served; releases are never edited or removed, a correction is a new version |
+| `legislation_releases`, `legislation_chapter` | a sync source's published record, public reads: the releases of the layers it relays, top to bottom (the order of the record that vouches for them), each the release it installed, with its `source`; then its own, oldest first; and the bytes of a chapter by checksum, so a follower can fetch them from the source's capital |
+| `CodexSource.Release { source; version }` | installs that release whole, found in an active sync source's record, the record that vouches for it. A member files it as a governed call or as a `proposal_create` whose action is the call, so anyone with `proposal.create` may propose an install; no guard of the follower's codex runs on that `proposal_create` |
+| `follower_compliance` | a derived fact on operations between realms, `transfer_create` to a follower's capital and `quarter_report`, so a sync source's legislation can test it |
 
 The invariants, in words:
 
 - **A link is active only after both votes:** the follower's vote to add the sync source and the
-  sync source's vote to accept it.
-- **No cycles:** no realm syncs from itself, directly or through other realms.
-- **Calls between realms go between the capitals** of an active link, and nowhere else.
+  sync source's vote to accept it, in either order; a stand-in record's, on the follower's vote
+  alone. Either side may end a link, and the follower keeps what it installed.
+- **No cycles:** no realm takes legislation from itself, directly or through other realms; adding
+  such a source is refused with `Conflict`.
+- **Calls between realms go between the capitals** of a link, and nowhere else: `link_notify` and
+  `follower_report` are refused from any other principal.
 
 How a follower installs what a sync source relays is the GOS's business, not the model's. Realms GOS
 adds three install rules there: a follower checks each layer from above against the record that
