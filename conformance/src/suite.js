@@ -893,6 +893,16 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     });
   });
 
+  /** The active grants the member holds as a delegate. */
+  const grantsHeld = async () => {
+    const grants = await walk((a) => mine.ggg_delegation_list({ ...a, role: { Delegate: null } }), (d) => d.id);
+    refused(grants.err, 'ggg_delegation_list');
+    if (grants.err) throw new Error(`ggg_delegation_list returned Err ${show(grants.err)}`);
+    return grants.items.filter((d) => tag(d.status) === 'Active');
+  };
+  /** A grant covers an operation by its permission (a grant made before groups) or by its group. */
+  const covers = (grant, permission, group) => grant.scope.some((s) => [permission, `group:${group}`, 'group:*'].includes(s));
+
   await check('GGG', 'W21', 'the generic call refuses to carry a member-only operation on behalf of a stranger', async () => {
     needMember();
     const stranger = Ed25519KeyIdentity.generate().getPrincipal();
@@ -928,16 +938,6 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     needMember();
     err(await mine.ggg_action_collect(UNKNOWN), ['NotFound', 'Forbidden'], 'ggg_action_collect(unknown)');
   });
-
-  /** The active grants the member holds as a delegate. */
-  const grantsHeld = async () => {
-    const grants = await walk((a) => mine.ggg_delegation_list({ ...a, role: { Delegate: null } }), (d) => d.id);
-    refused(grants.err, 'ggg_delegation_list');
-    if (grants.err) throw new Error(`ggg_delegation_list returned Err ${show(grants.err)}`);
-    return grants.items.filter((d) => tag(d.status) === 'Active');
-  };
-  /** A grant covers an operation by its permission (a grant made before groups) or by its group. */
-  const covers = (grant, permission, group) => grant.scope.some((s) => [permission, `group:${group}`, 'group:*'].includes(s));
 
   await check('GGG', 'W23', 'a delegate never votes on a proposal it filed, whichever grantor it votes for', async () => {
     needMember();
