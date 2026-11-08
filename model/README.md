@@ -580,15 +580,15 @@ There is no balance entity: the ledgers are the source of truth.
 | `my_invoices` | `self.data_view` | read, delegable | Alice: `INV-301`, 120 REALM, due 31 Dec |
 | `fund_create`, `period_open`, `period_close` | `org.manage_budget` | governed, delegable | Create fund `WELFARE`; close `FY2025` |
 | `budget_draft`, `budget_propose` (the draft lines of a period together: a fund's, or every fund's), `budget_amend` | `org.manage_budget` | governed, delegable | FY2027's lines drafted, then proposed as one budget → proposal |
-| `budget_extend` | `org.manage_budget` | delegable
+| `budget_extend` | `org.manage_budget` | delegable | FY2027 opens: FY2026's adopted lines carry over as `extended`, fund by fund, for the funds with no extended, proposed or adopted line in FY2027 yet; `Conflict` when none is left |
 | `allocation_rule_draft`, `allocation_rule_propose` | `org.manage_budget` | governed, delegable | Welfare share from 30% to 35% → proposal |
 | `payroll_run` | `org.manage_budget` | governed, delegable | November salaries: 23 seats, 51,200 REALM |
 | `loan_create` | `org.manage_budget` | governed, delegable | Borrow 500,000 REALM from Bank A over 10 years → proposal |
-| `loan_repay` | `org.manage_budget` | delegable
+| `loan_repay` | `org.manage_budget` | delegable | Finance records a repayment of 80,000 REALM |
 | `loan_list` | `treasury.view` | read, delegable | The realm's loans and what is outstanding |
 | `report_issue` (with the issuer's `adjustments`, for a report in terms the ledger doesn't keep) | `treasury.manage` | signing, confirm | Finance issues the FY2025 statements |
 | `tax_policy_draft`, `tax_policy_propose` | `tax.manage` | governed, delegable | `TAX-POLICY-4` drafted with `property_tax` at 0.5 %, then proposed → realm-wide vote; legislation checks each entry at the draft and again at the proposal |
-| `tax_assess` | `tax.assess` | delegable
+| `tax_assess` | `tax.assess` | delegable | Annual run: 1,180 property-tax invoices |
 | `tax_declare` | `tax.declare` | delegable | `{organization: "clinic-b", period: "2026-Q3", base: "revenue", amount: 182000}` → `INV-412` |
 | `payment_account_add`, `payment_account_remove` | `self.data_manage` | confirm | Bob adds his ckBTC address; prepared by a delegate, it waits for his approval |
 | `token_force_transfer`, `token_freeze` | `token.force_transfer`, `token.freeze` | signing, governed, confirm | Court-ordered restitution: 500 REALM from Mallory to Alice; freeze Mallory's account meanwhile |
