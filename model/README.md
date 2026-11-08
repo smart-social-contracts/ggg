@@ -337,9 +337,9 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 - I-GOV-3: A proposal is accepted only if its quorum and threshold are met when its vote ends. Its rule,
   `threshold`, `quorum`, `threshold_of` and `casting_vote`, states the one that decides it, and that rule
   is applied; it is fixed when the vote opens, together with `tally.eligible` and `tally.seats`: at
-  creation for a proposal filed open, at `proposal_open` for a draft, which then takes the stricter of
-  the rule it stated and the scope's default of that moment, never a weaker one; after that it never
-  moves, like the action. One comparison per scope:
+  creation for a proposal filed open, at `proposal_open` for a draft, which then takes, for each of
+  threshold, quorum and basis, the stricter of the rule it stated and the scope's default of that
+  moment, never a weaker one; after that it never moves, like the action. One comparison per scope:
   - A **realm-wide** proposal takes the realm's `voting_threshold` and `voting_quorum`, over the votes
     `cast`: it is accepted when the votes cast reach the quorum of the eligible voters and the yes votes
     *exceed* `threshold` of the yes and no votes. Over the `eligible` voters, the yes votes must exceed

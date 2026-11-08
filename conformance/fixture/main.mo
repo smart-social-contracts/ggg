@@ -23,10 +23,10 @@
 /// require it): that needs veto holders, who must hold a seat (I-ORG-5). Nor does it settle a
 /// proposal as its vote ends or run an accepted action as it finalizes (I-GOV-12): proposal_finalize
 /// records the outcome of a vote that has ended, and proposal_execute runs the action. Nobody has
-/// granted a delegation, so nobody acts on
-/// another's behalf. Every other domain is empty, which the model allows. A proposal's rule is its
-/// scope's, the realm's over the votes cast or a department's m/n over its policy's n, unless the
-/// proposer states a stricter one, which the fixture stores and applies (I-GOV-3).
+/// granted a delegation, so nobody acts on another's behalf. Every other domain is empty, which the
+/// model allows. A proposal's rule is its scope's, the realm's over the votes cast or a
+/// department's m/n over its policy's n, unless the proposer states a stricter one, which the
+/// fixture stores and applies (I-GOV-3).
 /// Links between realms (I-NEST-1 to 3): members vote to take legislation from a sync source and to
 /// accept a follower, which the root's direct policy applies at once; each vote records the link,
 /// then reads the realms' realm_info to refuse a cycle (Unavailable when one cannot be read), and
