@@ -2,9 +2,9 @@
 /// Members are fixed at install time. They may propose, vote, manage proposals (open, finalize,
 /// execute and stop them), set the realm's governance rule (governance_update, which the root's direct
 /// policy applies at once), read the realm, manage their own profile, and submit and review attributes
-/// (every member holds attribute.review here, without a scope, so each reads and decides every pending
-/// attribute but their own, and the audit log keeps an attribute's id, never its kind or value); every
-/// other permission is held by nobody, so those operations are refused. There are four departments:
+/// (every member holds attribute.review here, without a scope, so each reads every pending attribute
+/// and decides all but their own, and the audit log keeps an attribute's id, never its kind or value);
+/// every other permission is held by nobody, so those operations are refused. There are four departments:
 /// the root, with a direct policy, so a governed call on a realm-wide proposal is applied at once; a
 /// council under it, deciding 2 of 3 with a 60 % quorum, so a governed call on one of its proposals
 /// files a proposal instead; and two committees under the council, each deciding alone, so that a
