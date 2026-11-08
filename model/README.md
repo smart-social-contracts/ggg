@@ -643,13 +643,15 @@ whole federation.
 
 Each quarter is a realm canister with its own `Realm.timezone` (I-ADM-4, §12). It starts on its
 capital's zone, copied once when it joins the federation, and after that the zone is the quarter's
-own. The quarter may change it with `realm_configure`. The realm may also set it by a realm-wide vote:
-`quarter_configure` takes a `timezone` for the `quarter` it names, which the capital sends to the
-quarter (`quarter.sync`) and the quarter applies. A name that is not an IANA name of I-ADM-4's shape is
-refused with `InvalidArgument` before any vote, and so is a `timezone` with no `quarter`; the
-capital's own zone is set with `realm_configure`. If the quarter cannot apply the zone, the call fails
-and nothing changes. In a federation, the capital's zone is the realm's official time and a quarter's
-zone its local time.
+own. Only a realm still on `UTC` takes the capital's zone: a realm that already chose one keeps it
+when it joins as a quarter. The quarter may change it with `realm_configure`. The realm may also set
+it by a realm-wide vote: `quarter_configure` takes a `timezone` for the `quarter` it names, which the
+capital sends to the quarter (`quarter.sync`) and the quarter applies. A name that is not an IANA name
+of I-ADM-4's shape is refused with `InvalidArgument` before any vote, and so is a `timezone` with no
+`quarter`; the capital's own zone is set with `realm_configure`. If the quarter cannot apply the zone,
+the call fails and nothing changes. In a federation, the capital's zone is the realm's official time
+and a quarter's zone its local time. Realm-wide counts are made on the capital: a `FederalVote` has
+one `deadline`, set there once as an instant, and every quarter's leg keeps it.
 
 ### Invariants
 
@@ -765,7 +767,8 @@ with the founder, the network, the registry and whether test features are allowe
   chosen. A realm's setup should ask for a zone. A name of any other shape is refused with
   `InvalidArgument`. It is never taken from another realm, from legislation or from a sync source.
   A quarter of a federation is a realm of its own, and starts from its capital's zone, copied once
-  when it joins (`quarter_join_federation`); after that the zone is the quarter's own (§10).
+  when it joins (`quarter_join_federation`) if it is still on `UTC`, which means it has not chosen; a
+  realm that already chose a zone keeps it. After that the zone is the quarter's own (§10).
   Legislation never sets a zone, though its guards may constrain who may change one.
 
 ## 13. Private content

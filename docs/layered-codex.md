@@ -254,14 +254,16 @@ day (for a daily journal issue or a working-day count) is the GOS's job.
 starting value comes from elsewhere, and only from inside its own realm:
 
 - A new quarter starts on its capital's zone, copied once when it joins the federation
-  (`quarter_join_federation`). After that the zone is the quarter's own.
+  (`quarter_join_federation`). Only a realm still on `UTC` takes it; a realm that already chose a
+  zone keeps it when it joins as a quarter. After that the zone is the quarter's own.
 - The quarter may change it with `realm_configure`.
 - The realm may set it by a realm-wide vote: `quarter_configure` on the capital takes a `timezone`
   for the `quarter` it names, which the capital sends to the quarter (`quarter.sync`) and the quarter
   applies. A malformed name is refused with `InvalidArgument` before any vote.
 - In a federation, the capital's zone is the realm's official time, and a quarter's zone is its
-  local time. Effective times (below) are exact UTC instants, so they are the same moment in every
-  quarter.
+  local time. Realm-wide counts are made on the capital: a federal vote has one `deadline`, set there
+  once as an instant, and every quarter's leg keeps it. Effective times (below) are exact UTC
+  instants, so they are the same moment in every quarter.
 - Legislation never sets a zone. Its guards (`check_<op>`) may constrain who may change one, like
   those of any governed operation.
 
