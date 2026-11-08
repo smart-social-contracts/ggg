@@ -278,10 +278,13 @@ export function generate(source = readFileSync(DID, 'utf8')) {
     let argFields = [];
     if (args.length === 1) {
       const arg = args[0];
-      const defined = arg.name && types.get(arg.name);
+      // An optional argument record (codex_revert) has its fields as facts, each of them optional.
+      const inner = arg.opt ?? arg;
+      const defined = inner.name && types.get(inner.name);
       if (defined?.record) {
         argFields = defined.record;
-        action.facts = describe(arg).fields;
+        action.facts = describe(inner).fields;
+        if (arg.opt) for (const fact of Object.values(action.facts)) fact.optional = true;
       } else {
         action.facts = { [SCALAR_NAMES[operation] ?? 'id']: describe(arg) };
       }

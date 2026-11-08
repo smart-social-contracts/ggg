@@ -1927,6 +1927,9 @@ type DispatchPage = record { items : vec Dispatch; next : opt text };
 // `codex` is the pending codex's checksum (at most one codex is pending at a time). `at` defaults to now;
 // a time ahead schedules the activation.
 type CodexActivateArgs = record { codex : text; at : opt Timestamp };
+// The checksum of a codex in the realm's history to restore; absent means the one the active codex
+// replaced.
+type CodexRevertArgs = record { codex : opt text };
 // A release of the realm's own layer. `published` is set by the realm when the publish applies.
 type LegislationReleasePublishArgs = record {
   source : text;
@@ -2279,7 +2282,7 @@ service : {
   ggg_task_list : (TaskListArgs) -> (variant { Ok : TaskPage; Err : GggError }) query;
   ggg_codex_install : (CodexSource) -> (variant { Ok : Governed; Err : GggError });
   ggg_codex_uninstall : () -> (variant { Ok : Governed; Err : GggError });
-  ggg_codex_revert : () -> (variant { Ok : Governed; Err : GggError });
+  ggg_codex_revert : (opt CodexRevertArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_codex_activate : (CodexActivateArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_legislation_release_publish : (LegislationReleasePublishArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_notification_read : (NotificationReadArgs) -> (variant { Ok : NotificationsRead; Err : GggError });

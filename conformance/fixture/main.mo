@@ -33,7 +33,9 @@
 /// install time too (the fixture runs no install job), so it can publish releases that name them and
 /// serve them with legislation_chapter. codex_install with a Release that the active sync sources'
 /// records list alike adds that release to this realm's record as a relayed layer, where the
-/// vouching record lists it, and installs nothing else.
+/// vouching record lists it. codex_install with a Package whose source names a checksum the realm
+/// holds makes that checksum the active codex, keeping the history, and codex_revert restores the one
+/// it replaced, or any earlier one by checksum; the fixture runs no codex.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
@@ -173,6 +175,11 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   for ((checksum, bytes) in initChapters.vals()) Map.add(chapters, Text.compare, checksum, bytes);
   var relayed : [T.Release] = [];
   var published : [T.Release] = [];
+  // The codices installed here, by checksum, with the one each replaced; `codexHistory` in install order.
+  type Installed = { previous : ?Text; status : T.CodexStatus };
+  let codices = Map.empty<Text, Installed>();
+  var codexHistory : [Text] = [];
+  var activeCodex : ?Text = null;
   // Notices to the other side of a link that were not answered yet, sent again on a timer (I-NEST-3).
   type Notice = { capital : Principal; side : T.LinkSide; status : T.LinkStatus };
   let pending = Map.empty<Text, Notice>();
@@ -248,6 +255,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case "ggg_budget_draft" { let a : ?T.BudgetDraftArgs = from_candid (arg); a != null };
       case "ggg_budget_propose" { let a : ?T.BudgetProposeArgs = from_candid (arg); a != null };
       case "ggg_codex_install" { let a : ?T.CodexSource = from_candid (arg); a != null };
+      case "ggg_codex_revert" { let a : ?(?T.CodexRevertArgs) = from_candid (arg); a != null };
       case "ggg_profile_update" { let a : ?T.ProfileUpdateArgs = from_candid (arg); a != null };
       case _ return ?#InvalidArgument(method # " is not an update method of this canister");
     };
@@ -511,6 +519,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         "governance.update",
         "org.set_policy",
         "org.manage_budget",
+        "codex.install",
+        "codex.revert",
         "realm.data_view",
         "realm.monitor",
       ];
@@ -1135,8 +1145,15 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       };
       case "ggg_codex_install" {
         let ?source : ?T.CodexSource = from_candid (arg) else return undecodable();
-        let (#Release({ source = id; version })) = source else return (#Failed, ?#Error(NOT_A_RELEASE));
-        switch (await* installRelease(id, version)) { case (#Err(e)) #Err(e); case (#Ok(_)) #Ok(null) };
+        switch (source) {
+          case (#Release { source = id; version }) { switch (await* installRelease(id, version)) { case (#Err(e)) #Err(e); case (#Ok(_)) #Ok(null) } };
+          case (#Package { source = checksum }) installCodex(caller, checksum);
+          case (#Registry _) #Err(#InvalidArgument(NOT_INSTALLABLE));
+        };
+      };
+      case "ggg_codex_revert" {
+        let ?args : ?(?T.CodexRevertArgs) = from_candid (arg) else return undecodable();
+        switch (revertTarget(args)) { case (#Err(e)) #Err(e); case (#Ok(target)) revertCodex(caller, target) };
       };
       case _ return (#Failed, ?#Error(method # " is not replayed by this fixture"));
     };
@@ -1723,28 +1740,103 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     #Ok(release);
   };
 
-  let NOT_A_RELEASE = "this fixture installs a codex only as a release of a sync source's layer";
+  let NOT_INSTALLABLE = "this fixture installs a codex as a release of a sync source's layer, or as a package whose source is the checksum of bytes it holds";
 
-  /// Governed by the root, whose direct policy applies it at once (see installRelease).
+  /// Governed by the root, whose direct policy applies it at once: a Release joins the record (see
+  /// installRelease); a Package whose source names a checksum this realm holds becomes the active codex.
   public shared ({ caller }) func ggg_codex_install(source : T.CodexSource) : async Result<T.Governed> {
     switch (requireMember(caller, "codex.install")) { case (?e) return #Err(e); case null {} };
-    let (#Release({ source = id; version })) = source else return #Err(#InvalidArgument(NOT_A_RELEASE));
-    switch (await* installRelease(id, version)) {
-      case (#Err(e)) #Err(e);
-      case (#Ok(_)) {
-        audit("codex_install", caller, #Map([("source", #Text(id)), ("version", #Text(version))]), #Text("ok"));
-        #Ok(#Done(null));
+    switch (source) {
+      case (#Release { source = id; version }) {
+        switch (await* installRelease(id, version)) {
+          case (#Err(e)) #Err(e);
+          case (#Ok(_)) {
+            audit("codex_install", caller, #Map([("source", #Text(id)), ("version", #Text(version))]), #Text("ok"));
+            #Ok(#Done(null));
+          };
+        };
+      };
+      case (#Package { source = checksum }) {
+        let ?root = findDepartment(ROOT_ID) else return #Err(#Unavailable("the realm has no root department"));
+        switch (checkInstall(checksum)) { case (?e) return #Err(e); case null {} };
+        govern(caller, "codex_install", root, to_candid (source), "Install codex " # checksum, "Installs the codex " # checksum # ".", func() {
+          installCodex(caller, checksum);
+        });
+      };
+      case (#Registry _) #Err(#InvalidArgument(NOT_INSTALLABLE));
+    };
+  };
+
+  func checkInstall(checksum : Text) : ?T.GggError {
+    if (not stored(checksum)) return ?#InvalidArgument(NOT_INSTALLABLE);
+    if (Map.containsKey(codices, Text.compare, checksum)) return ?#Conflict("codex " # checksum # " is installed already");
+    null;
+  };
+
+  /// The codex becomes active, the active one inactive; it remembers which codex it replaced.
+  func installCodex(caller : Principal, checksum : Text) : Result<?Text> {
+    switch (checkInstall(checksum)) { case (?e) return #Err(e); case null {} };
+    switch (activeCodex) {
+      case (?c) { switch (Map.get(codices, Text.compare, c)) { case (?i) Map.add(codices, Text.compare, c, { i with status = #Inactive }); case null {} } };
+      case null {};
+    };
+    Map.add(codices, Text.compare, checksum, { previous = activeCodex; status = #Active });
+    codexHistory := Array.concat(codexHistory, [checksum]);
+    activeCodex := ?checksum;
+    audit("codex_install", caller, #Map([("codex", #Text(checksum))]), #Text(checksum));
+    #Ok(?checksum);
+  };
+
+  /// The codex a revert restores: the one named, or the one the active codex replaced (model §11).
+  func revertTarget(args : ?T.CodexRevertArgs) : Result<Text> {
+    let ?active = activeCodex else return #Err(#Conflict("no codex is active"));
+    let target = switch (args) {
+      case (?{ codex = ?c }) c;
+      case _ {
+        let ?i = Map.get(codices, Text.compare, active) else return #Err(#Conflict("no codex is active"));
+        let ?previous = i.previous else return #Err(#Conflict("the active codex replaced none"));
+        previous;
       };
     };
+    if (not Map.containsKey(codices, Text.compare, target)) return #Err(#NotFound);
+    if (target == active) return #Err(#Conflict("codex " # target # " is active already"));
+    #Ok(target);
+  };
+
+  /// Restores `target`: it is active again, and the codex it displaces is reverted. It never runs a hook.
+  func revertCodex(caller : Principal, target : Text) : Result<?Text> {
+    switch (activeCodex) {
+      case (?c) { switch (Map.get(codices, Text.compare, c)) { case (?i) Map.add(codices, Text.compare, c, { i with status = #Reverted }); case null {} } };
+      case null {};
+    };
+    switch (Map.get(codices, Text.compare, target)) {
+      case (?i) Map.add(codices, Text.compare, target, { i with status = #Active });
+      case null return #Err(#NotFound);
+    };
+    activeCodex := ?target;
+    audit("codex_revert", caller, #Map([("codex", #Text(target))]), #Text(target));
+    #Ok(null);
+  };
+
+  /// Governed by the root, whose direct policy applies it at once (model §11).
+  public shared ({ caller }) func ggg_codex_revert(args : ?T.CodexRevertArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "codex.revert")) { case (?e) return #Err(e); case null {} };
+    let ?root = findDepartment(ROOT_ID) else return #Err(#Unavailable("the realm has no root department"));
+    let target = switch (revertTarget(args)) { case (#Err(e)) return #Err(e); case (#Ok(t)) t };
+    govern(caller, "codex_revert", root, to_candid (args), "Revert to codex " # target, "Restores the codex " # target # ".", func() {
+      switch (revertTarget(args)) { case (#Err(e)) #Err(e); case (#Ok(t)) revertCodex(caller, t) };
+    });
   };
 
   // §11
 
+  /// The active codex and the earlier ones, in install order.
   public query func ggg_codex_status(args : T.ListArgs) : async Result<T.CodexView> {
     let signing = { agents = []; delegable = []; supervision = #Required };
-    switch (none<Text>(args.cursor, args.limit)) {
+    let earlier = Iter.filter<Text>(codexHistory.vals(), func(c) { ?c != activeCodex });
+    switch (page(earlier, args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok({ checksum = null; pending = null; healthy = false; signing; history = items; next });
+      case (#Ok({ items; next })) #Ok({ checksum = activeCodex; pending = null; healthy = activeCodex != null; signing; history = items; next });
     };
   };
 
@@ -1968,7 +2060,6 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
 
   // §11
   public shared ({ caller }) func ggg_codex_uninstall() : async Result<T.Governed> { nobody(caller, "codex.install") };
-  public shared ({ caller }) func ggg_codex_revert() : async Result<T.Governed> { nobody(caller, "codex.install") };
   public shared ({ caller }) func ggg_codex_activate(_ : T.CodexActivateArgs) : async Result<T.Governed> { nobody(caller, "codex.install") };
   public shared ({ caller }) func ggg_notification_read(_ : T.NotificationReadArgs) : async Result<T.NotificationsRead> { nobody(caller, "self.data_manage") };
   public shared ({ caller }) func ggg_notification_send(_ : T.NotificationSendArgs) : async Result<T.Delivery> { nobody(caller, "notification.send") };

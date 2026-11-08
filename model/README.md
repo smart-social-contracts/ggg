@@ -948,7 +948,8 @@ supervisor, and the grantor when delegated (I-ALL-7).
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `codex_install`, `codex_uninstall`, `codex_revert` | `codex.install`, `codex.uninstall`, `codex.revert` | governed | Install agora 1.5.0 → realm-wide vote; revert to 1.4.2 if it misbehaves |
+| `codex_install`, `codex_uninstall` | `codex.install`, `codex.uninstall` | governed | Install agora 1.5.0 → realm-wide vote |
+| `codex_revert` (the codex the active one replaced, or any earlier one by its checksum) | `codex.revert` | governed | Revert to 1.4.2 when 1.5.0 misbehaves; to 1.3.0, by its checksum, when 1.4.2 does too |
 | `codex_activate` (the pending codex, by checksum) | `codex.install` | governed | Activate the pending 1.5.0 on 1 Jan |
 | `codex_status` (the active checksum, health and the signing policy; earlier checksums a page at a time) | `realm.data_view` | read | `sha256:4be1…`, healthy; agents may hold `bid.evaluate` |
 | `legislation_release_publish` | `legislation.publish` | governed | CV publishes 1.1.0: its chapters' checksums, its calendar's, the commit, in force from 1 Jan 2027 |
@@ -969,6 +970,14 @@ A codex may be installed before it is in force: `pending`, installed and checked
 names its checksum and makes it active at `at`, or its adopting proposal's `effective_at` does. At most
 one codex is `pending` at a time: a second install while one waits is `Conflict`. A hook on
 `codex_activate` is the realm's own entry point ([layered codex §3.2](../docs/layered-codex.md#32-four-mechanisms)).
+
+A **revert** restores any earlier codex in the realm's history: `codex_revert` names its checksum, or
+none for the one the active codex replaced. A checksum not in the history is `NotFound`; a revert with
+nothing to restore is `Conflict`. The restored codex is `active` again and the one it displaces
+`reverted`, and a revert never runs `on_codex_activate`. A GOS reserves its revert operations, so no
+legislation can refuse or delay one ([layered codex §1](../docs/layered-codex.md#1-chapters-use-gggs-operations-directly)),
+and which rule decides a revert vote is the GOS's: Realms GOS applies the rule recorded with the codex
+being restored.
 
 A codex may also be installed as a **release** of a layer: `codex_install` with `Release { source;
 version }` installs that release whole, found in the record of one of the realm's active sync sources
