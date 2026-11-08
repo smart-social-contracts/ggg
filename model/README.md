@@ -413,13 +413,16 @@ Two kinds of body:
   action runs once (I-GOV-1).
 - I-GOV-13: A proposal carries a call only within its scope. A realm-wide proposal may carry any call.
   A department's proposal may carry a call only when it is governed and its governing department (§1)
-  is that department or one below it; `proposal_create` refuses any other with `Forbidden`. The check
+  is that department or one below it; `proposal_create` refuses any other with `Forbidden`. A call on
+  a record that does not exist has no governing department: a department's proposal carrying it is
+  refused with `NotFound`; a realm-wide one may carry it, and its execution ends `failed`. The check
   is made at creation and again when the action executes, against the departments as they are then: a
-  proposal whose department has since been moved so that it no longer governs the call, or deleted,
-  carries nothing, and its execution ends `failed` (I-GOV-1: nothing runs). So a department's vote
-  cannot stop a realm-wide scheduled proposal, the realm's can stop a department's, and a parent's can
-  act on a department below it, where a sibling's cannot. A governed call that files a proposal itself
-  (§1) scopes it to the governing department, so that proposal always carries it.
+  proposal carries nothing when its department has been deleted, or when the department that governs
+  its call is no longer that department or one below it (it was moved out from under it), and its
+  execution ends `failed` (I-GOV-1: nothing runs). So a department's vote cannot stop a realm-wide
+  scheduled proposal, the realm's can stop a department's, and a parent's can act on a department
+  below it, where a sibling's cannot. A governed call that files a proposal itself (§1) scopes it to
+  the governing department, so that proposal carries it when it is filed.
 
 ## 5. Finance
 
@@ -1096,3 +1099,4 @@ There is no permission for raw database writes: everything is an operation.
 | D15 | What a proposal's `threshold` means under a department's m-of-n policy | Decided 8 Nov 2026: it states the rule that decides the proposal and is applied, with one comparison per scope: a realm-wide proposal's yes votes *exceed* the threshold of its basis (votes cast, or all eligible members), a department's *reach* it over the eligible seats (m of n is m/n rounded down: 2 of 3 is 66 666 666); the proposer may only tighten the rule, and the casting vote is the realm's, for a realm-wide proposal only, set by governed configuration (I-GOV-3) |
 | D16 | Personal data in attributes, requests, dispatches and published documents | Decided 8 Nov 2026: an attribute's kind and value are in clear, readable only by the person, the reviewers and the codex; a request's or dispatch's personal content is an encrypted `Document` reference; a published copy holds no personal data (I-PRV-1) |
 | D17 | The majority of a proposal that a governed call files | Decided 8 Nov 2026: the scope's default rule; legislation that needs more requires a proposal of its own and may refuse the direct path with a guard (I-GOV-3) |
+| D18 | Which vote may carry a governed call on another department's record | Decided 8 Nov 2026: a realm-wide proposal carries any call; a department's only a governed call whose governing department is that department or one below it, checked at creation and again when the action executes (I-GOV-13) |

@@ -8,7 +8,8 @@
 /// committees under the council, each deciding alone, so that a proposal of the council can carry a
 /// call on a committee's records where a committee's cannot carry one on its sibling's (I-GOV-13).
 /// Members may also edit a department (department_edit, governed by that department), so a committee
-/// can be moved while a proposal that acts on it waits. No department has seats: their proposals are
+/// can be moved while a proposal that acts on it waits; they hold org.set_policy for that alone, and
+/// department_delete and department_set_policy are refused. No department has seats: their proposals are
 /// counted like any other here, by every member, and a policy only decides whether a governed call on
 /// the department's records applies at once or files a proposal. So the fixture never ends a
 /// department vote early (I-GOV-7 allows it, it does not require it): that needs seats to count and
@@ -144,18 +145,25 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   /// A page of a domain this realm has nothing in.
   func none<A>(cursor : ?Text, limit : ?Nat32) : Result<Page<A>> = page(Iter.empty<A>(), cursor, limit);
 
+  func isActiveMember(p : Principal) : Bool {
+    switch (Map.get(members, Principal.compare, p)) { case (?{ member = ?{ status = #Active } }) true; case _ false };
+  };
+
   func requireMember(caller : Principal, permission : Text) : ?T.GggError {
     if (Principal.isAnonymous(caller)) return ?#Unauthenticated;
-    switch (Map.get(members, Principal.compare, caller)) {
-      case (?{ member = ?{ status = #Active } }) null;
-      case _ ?#Forbidden({ permission = ?permission; message = "Only active members may do this." });
-    };
+    if (isActiveMember(caller)) null else ?#Forbidden({ permission = ?permission; message = "Only active members may do this." });
   };
 
   /// Refuses an operation whose permission no member holds.
   func nobody<A>(caller : Principal, permission : Text) : Result<A> {
     switch (requireMember(caller, permission)) { case (?e) return #Err(e); case null {} };
     #Err(#Forbidden({ permission = ?permission; message = "No member of this realm holds " # permission # "." }));
+  };
+
+  /// Refuses an operation this fixture leaves out, although members hold its permission.
+  func notHere<A>(caller : Principal, permission : Text, what : Text) : Result<A> {
+    switch (requireMember(caller, permission)) { case (?e) return #Err(e); case null {} };
+    #Err(#Forbidden({ permission = null; message = "This fixture " # what # "." }));
   };
 
   func noDelegation(permission : Text) : T.GggError {
@@ -379,6 +387,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         "proposal.create",
         "proposal.vote",
         "governance.update",
+        "org.set_policy",
         "realm.data_view",
         "realm.monitor",
       ];
@@ -530,7 +539,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       };
     };
     switch (args.head) {
-      case (?#Set(head)) { if (requireMember(head, "org.set_policy") != null) return ?#InvalidArgument("the head names a principal who is not an active member") };
+      case (?#Set(head)) { if (not isActiveMember(head)) return ?#InvalidArgument("the head names a principal who is not an active member") };
       case _ {};
     };
     null;
@@ -884,7 +893,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       switch (ratio) { case (?r) { if (r > WHOLE) return #Err(#InvalidArgument("a ratio is at most 100 000 000 (100 %)")) }; case null {} };
     };
     switch (args.casting_vote) {
-      case (?#Set(member)) { if (requireMember(member, "proposal.vote") != null) return #Err(#InvalidArgument("the casting vote names a principal who is not an active member")) };
+      case (?#Set(member)) { if (not isActiveMember(member)) return #Err(#InvalidArgument("the casting vote names a principal who is not an active member")) };
       case _ {};
     };
     switch (args.voting_window) { case (?w) votingWindow := w; case null {} };
@@ -1112,8 +1121,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
 
   // §3
   public shared ({ caller }) func ggg_department_create(_ : T.DepartmentCreateArgs) : async Result<T.Governed> { nobody(caller, "org.create") };
-  public shared ({ caller }) func ggg_department_delete(_ : Text) : async Result<T.Governed> { nobody(caller, "org.set_policy") };
-  public shared ({ caller }) func ggg_department_set_policy(_ : T.DepartmentPolicyArgs) : async Result<T.Governed> { nobody(caller, "org.set_policy") };
+  public shared ({ caller }) func ggg_department_delete(_ : Text) : async Result<T.Governed> { notHere(caller, "org.set_policy", "deletes no department") };
+  public shared ({ caller }) func ggg_department_set_policy(_ : T.DepartmentPolicyArgs) : async Result<T.Governed> { notHere(caller, "org.set_policy", "changes no policy") };
   public shared ({ caller }) func ggg_position_create(_ : T.PositionCreateArgs) : async Result<T.Governed> { nobody(caller, "org.manage_members") };
   public shared ({ caller }) func ggg_position_edit(_ : T.PositionEditArgs) : async Result<T.Governed> { nobody(caller, "org.manage_members") };
   public shared ({ caller }) func ggg_position_close(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_members") };

@@ -103,12 +103,10 @@ async function file({ everyone = false, ...proposal } = {}) {
  */
 const ownStop = async (department) => stopping(await file({ department }));
 
-/** The department_edit arguments that move a department under `parent`. */
+/** The department_edit arguments that move a department under `parent`, or give it a description. */
 const move = (department, parent) => ({ department, parent: [parent], description: [], kind: [], head: [] });
-const parentOf = async (department) => {
-  const detail = ok(await as(alice).ggg_department_get({ id: department, cursor: [], limit: [] }));
-  return detail[0].department.parent;
-};
+const describe = (department, description) => ({ department, parent: [], description: [description], kind: [], head: [] });
+const department = async (id) => ok(await as(alice).ggg_department_get({ id, cursor: [], limit: [] }))[0].department;
 
 const get = async (id) => ok(await as(alice).ggg_proposal_get({ id, cursor: [], limit: [] }))[0].proposal;
 const status = async (id) => tag((await get(id)).status);
@@ -433,7 +431,7 @@ test('a proposal whose department no longer governs its call when it runs ends F
   assert.equal(await finalize(stopper), 'ExecutionScheduled');
   // Roads moves out from under the council before the stop runs: the council's vote no longer reaches it.
   assert.deepEqual(ok(await as(bob).ggg_department_edit(move('roads', 'root'))), { Done: [] });
-  assert.deepEqual(await parentOf('roads'), ['root']);
+  assert.deepEqual((await department('roads')).parent, ['root']);
   await wait(2.5);
   const ran = await runScheduled(stopper);
   assert.equal(tag(ran.status), 'Failed');
@@ -441,5 +439,19 @@ test('a proposal whose department no longer governs its call when it runs ends F
   assert.equal(await status(target), 'ExecutionScheduled');
   // Back under the council, for the tests that follow.
   ok(await as(bob).ggg_department_edit(move('roads', 'council')));
-  assert.deepEqual(await parentOf('roads'), ['council']);
+  assert.deepEqual((await department('roads')).parent, ['council']);
+});
+
+test('a department edits itself under its own policy: alone at once, 2 of 3 through a proposal that replays the edit', async () => {
+  assert.deepEqual(ok(await as(bob).ggg_department_edit(describe('roads', 'Roads and bridges.'))), { Done: [] });
+  assert.equal((await department('roads')).description, 'Roads and bridges.');
+
+  const filedId = ok(await as(bob).ggg_department_edit(describe('council', 'The town council.'))).Proposed;
+  const filed = await get(filedId);
+  assert.deepEqual(filed.department, ['council']);
+  assert.equal(filed.action.Call.method, 'ggg_department_edit');
+  assert.notEqual((await department('council')).description, 'The town council.');
+  await approve(filedId);
+  assert.equal(tag((await finalizeAndRun(filedId)).status), 'Executed');
+  assert.equal((await department('council')).description, 'The town council.');
 });
