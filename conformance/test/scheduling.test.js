@@ -1,6 +1,13 @@
 // The life of a proposal with an effective_at, driven on PocketIC with its own clock.
 // The fixture decides a vote after its deadline (7 days), or earlier once both members have voted, so
 // the tests move the clock forward.
+//
+// A GOS may settle a proposal as its vote ends, or run an accepted action in the same step as the
+// finalize, or leave it for proposal_execute (I-GOV-12). The tests go through finalize, finalizeAndRun
+// and runScheduled, which accept all three; this fixture finalizes, and leaves the action for
+// proposal_execute. A GOS that settles as a vote ends runs a stopper then, so the tests finalize a
+// target before the votes on the proposal that stops it, and cast the votes on a late stop only after
+// its target has run.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, before, test } from 'node:test';
@@ -47,7 +54,8 @@ const refusedWith = (result, error) => {
 const nowNs = async () => BigInt(await pic.getTime()) * 1_000_000n;
 const wait = async (days) => {
   await pic.setTime((await pic.getTime()) + days * DAY_MS);
-  await pic.tick();
+  // A GOS that settles proposals with timers may need a round for each timer a timer sets.
+  for (let round = 0; round < 5; round++) await pic.tick();
 };
 
 const motion = { Motion: null };
@@ -77,8 +85,68 @@ async function file({ action = motion, days = null, everyone = false, department
 
 const get = async (id) => ok(await as(alice).ggg_proposal_get({ id, cursor: [], limit: [] }))[0].proposal;
 const status = async (id) => tag((await get(id)).status);
-const finalize = async (id) => tag(ok(await as(bob).ggg_proposal_finalize(id)).status);
 const execute = (id) => as(bob).ggg_proposal_execute(id);
+const RAN = ['Executed', 'Failed'];
+
+/**
+ * The proposal after a finalize that the GOS refused with Conflict: it settled the proposal as its vote
+ * ended (I-GOV-12), so the proposal already shows how it ended.
+ */
+async function settledAlready(id, refused) {
+  refusedWith(refused, 'Conflict');
+  const settled = await get(id);
+  assert.notEqual(tag(settled.status), 'Voting', `${id} was refused a finalize, but its vote is open`);
+  return settled;
+}
+
+/** Returns the proposal once its vote is closed: as finalize replies, or as the GOS had already settled it. */
+async function finalizeProposal(id) {
+  const finalized = await as(bob).ggg_proposal_finalize(id);
+  return 'Ok' in finalized ? finalized.Ok : settledAlready(id, finalized);
+}
+const finalize = async (id) => tag((await finalizeProposal(id)).status);
+
+/** The proposal, which has run its action already: a later proposal_execute is a Conflict. */
+async function alreadyRan(proposal) {
+  assert.ok(RAN.includes(tag(proposal.status)), `${proposal.id} is ${tag(proposal.status)}`);
+  refusedWith(await execute(proposal.id), 'Conflict');
+  return proposal;
+}
+
+/**
+ * Finalizes a proposal whose effective_at, if it has one, has come by now, and returns the proposal once
+ * the action has run. A finalize that settles it now replies Accepted, and proposal_execute runs the
+ * action, or Executed or Failed, and a later proposal_execute is a Conflict. A finalize refused with
+ * Conflict means the GOS settled it as the vote ended, perhaps before its effective_at, and then it
+ * shows Executed or Failed, or ExecutionScheduled until the GOS runs it, which runScheduled follows.
+ */
+async function finalizeAndRun(id) {
+  const finalized = await as(bob).ggg_proposal_finalize(id);
+  if ('Err' in finalized) {
+    const settled = await settledAlready(id, finalized);
+    return tag(settled.status) === 'ExecutionScheduled' ? runScheduled(id) : alreadyRan(settled);
+  }
+  if (tag(finalized.Ok.status) === 'Accepted') return ok(await execute(id));
+  return alreadyRan(finalized.Ok);
+}
+
+/**
+ * Returns the proposal whose action was scheduled, once its effective_at has come and the action has
+ * run: by proposal_execute, or by the GOS itself, which then refuses proposal_execute with Conflict.
+ */
+async function runScheduled(id) {
+  const executed = await execute(id);
+  if ('Ok' in executed) return executed.Ok;
+  refusedWith(executed, 'Conflict');
+  const proposal = await get(id);
+  assert.ok(RAN.includes(tag(proposal.status)), `${id} is ${tag(proposal.status)}, but its effective_at has come`);
+  return proposal;
+}
+
+/** Both members vote yes. */
+async function approve(id) {
+  for (const voter of [alice, bob]) ok(await as(voter).ggg_proposal_vote({ proposal: id, choice: { Yes: null }, on_behalf_of: [] }));
+}
 
 test('effective_at is stored with the proposal and never changes', async () => {
   const id = await file({ days: 30 });
@@ -105,8 +173,7 @@ test('an accepted proposal with an action waits as ExecutionScheduled and execut
   refusedWith(await execute(stopper), 'Conflict');
   assert.equal(await status(stopper), 'ExecutionScheduled');
   await wait(3);
-  const executed = ok(await execute(stopper));
-  assert.equal(tag(executed.status), 'Executed');
+  assert.equal(tag((await runScheduled(stopper)).status), 'Executed');
   assert.equal(await status(stopper), 'Executed');
   // The target was scheduled for later, and the stopper's action ended it.
   assert.equal(await status(target), 'Withdrawn');
@@ -114,13 +181,11 @@ test('an accepted proposal with an action waits as ExecutionScheduled and execut
 });
 
 test('without an effective_at, an accepted proposal with an action executes at once, and can stop a scheduled one', async () => {
-  const target = await file({ action: stopping('0'), days: 60 });
-  const stopper = await file({ action: stopping(target) });
-  await wait(8);
-  await finalize(target);
-  assert.equal(await finalize(stopper), 'Accepted');
-  assert.equal(await status(target), 'ExecutionScheduled');
-  const executed = ok(await execute(stopper));
+  // The target is scheduled before the stopper's vote ends: a GOS that settles as the vote ends runs the stopper then.
+  const target = await file({ action: stopping('0'), days: 60, everyone: true });
+  assert.equal(await finalize(target), 'ExecutionScheduled');
+  const stopper = await file({ action: stopping(target), everyone: true });
+  const executed = await finalizeAndRun(stopper);
   assert.equal(tag(executed.status), 'Executed');
   assert.deepEqual(executed.result.map(tag), ['Reply']);
   assert.equal(await status(target), 'Withdrawn');
@@ -170,11 +235,10 @@ test('a vote that ends after effective_at expires the proposal, whatever was dec
 
 test('a finalizer who waits cannot expire a vote that ended before effective_at', async () => {
   const target = await file({ action: stopping('0'), days: 60, everyone: true });
+  assert.equal(await finalize(target), 'ExecutionScheduled');
   const decided = await file({ action: stopping(target), days: 3, everyone: true }); // the vote ends on day 0
   await wait(4); // before the 7-day deadline, after effective_at
-  assert.equal(await finalize(target), 'ExecutionScheduled');
-  assert.equal(await finalize(decided), 'Accepted');
-  assert.equal(tag(ok(await execute(decided)).status), 'Executed');
+  assert.equal(tag((await finalizeAndRun(decided)).status), 'Executed');
   assert.equal(await status(target), 'Withdrawn');
 });
 
@@ -184,7 +248,6 @@ test('once every eligible member has voted the vote has ended: no vote is accept
     refusedWith(await as(voter).ggg_proposal_vote({ proposal: id, choice: { No: null }, on_behalf_of: [] }), 'Conflict');
   }
   assert.deepEqual((await get(id)).tally, { yes: 2n, no: 0n, abstain: 0n, eligible: [2n] });
-  assert.equal(await status(id), 'Voting');
   assert.equal(await finalize(id), 'Accepted');
 });
 
@@ -193,6 +256,14 @@ test('a proposal is finalized once', async () => {
   assert.equal(await finalize(id), 'Accepted');
   refusedWith(await as(bob).ggg_proposal_finalize(id), 'Conflict');
   assert.equal(await status(id), 'Accepted');
+});
+
+test('in a department vote a no can be replaced, though two approvals are out of reach', async () => {
+  const id = await file({ department: 'council' }); // the council decides 2 of 3; Alice votes yes
+  ok(await as(alice).ggg_proposal_vote({ proposal: id, choice: { No: null }, on_behalf_of: [] })); // only Bob's yes is left
+  assert.equal(await status(id), 'Voting');
+  await approve(id);
+  assert.equal(await finalize(id), 'Accepted');
 });
 
 test('a vote can be finalized early once every eligible member has voted, and is then scheduled', async () => {
@@ -205,7 +276,7 @@ test('a vote can be finalized early once every eligible member has voted, and is
   assert.equal(await finalize(stopper), 'ExecutionScheduled');
   refusedWith(await execute(stopper), 'Conflict');
   await wait(2.5);
-  assert.equal(tag(ok(await execute(stopper)).status), 'Executed');
+  assert.equal(tag((await runScheduled(stopper)).status), 'Executed');
   assert.equal(await status(target), 'Withdrawn');
 });
 
@@ -213,9 +284,8 @@ test('a vote that ended before effective_at but is finalized after it is accepte
   const target = await file({ action: stopping('0'), days: 60 });
   const late = await file({ action: stopping(target), days: 8 }); // the vote ends on day 7, effective on day 8
   await wait(9);
-  assert.equal(await finalize(target), 'ExecutionScheduled');
-  assert.equal(await finalize(late), 'Accepted');
-  assert.equal(tag(ok(await execute(late)).status), 'Executed');
+  await finalize(target); // ExecutionScheduled, or Withdrawn when the GOS has already run `late` by itself
+  assert.equal(tag((await finalizeAndRun(late)).status), 'Executed');
   assert.equal(await status(target), 'Withdrawn');
 });
 
@@ -241,11 +311,8 @@ test('proposal_stop follows the policy of the department that owns the proposal'
   assert.deepEqual(IDL.decode([IDL.Text], filed.action.Call.arg), [target]);
 
   // Once the council's proposal is accepted and executed, the scheduled proposal ends.
-  for (const voter of [alice, bob]) {
-    ok(await as(voter).ggg_proposal_vote({ proposal: filedId, choice: { Yes: null }, on_behalf_of: [] }));
-  }
-  assert.equal(await finalize(filedId), 'Accepted');
-  assert.equal(tag(ok(await execute(filedId)).status), 'Executed');
+  await approve(filedId);
+  assert.equal(tag((await finalizeAndRun(filedId)).status), 'Executed');
   assert.equal(await status(target), 'Withdrawn');
 
   // Nothing is filed for a proposal that is not scheduled.
@@ -255,17 +322,15 @@ test('proposal_stop follows the policy of the department that owns the proposal'
 
 test('a stop proposal that runs after its target executed, or was withdrawn, ends Failed', async () => {
   const stopProposal = async (target) => ok(await as(bob).ggg_proposal_stop(target)).Proposed;
-  const carry = async (id) => {
-    for (const voter of [alice, bob]) ok(await as(voter).ggg_proposal_vote({ proposal: id, choice: { Yes: null }, on_behalf_of: [] }));
-    assert.equal(await finalize(id), 'Accepted');
-  };
+  // A GOS may run a stop proposal as its vote ends, so the votes on a late stop are cast only once its target
+  // is no longer scheduled; finalizeAndRun then gets it run, whichever way the GOS settles.
   const failed = async (id) => {
-    const executed = ok(await execute(id));
-    assert.equal(tag(executed.status), 'Failed');
-    assert.deepEqual(executed.result.map(tag), ['Error']);
+    const ran = await finalizeAndRun(id);
+    assert.equal(tag(ran.status), 'Failed');
+    assert.deepEqual(ran.result.map(tag), ['Error']);
   };
 
-  // The target takes effect before the stop proposal is carried out. Everything here is a council
+  // The target takes effect before the stop proposal is finalized. Everything here is a council
   // proposal, so no council vote has to stop a realm-wide proposal (ggg#15).
   const far = await file({ action: stopping('0'), days: 60, everyone: true, department: 'council' });
   const executing = await file({ action: stopping(far), days: 3, everyone: true, department: 'council' });
@@ -273,9 +338,9 @@ test('a stop proposal that runs after its target executed, or was withdrawn, end
   await finalize(far);
   assert.equal(await finalize(executing), 'ExecutionScheduled');
   const lateStop = await stopProposal(executing);
-  await carry(lateStop);
   await wait(2.5);
-  assert.equal(tag(ok(await execute(executing)).status), 'Executed');
+  assert.equal(tag((await runScheduled(executing)).status), 'Executed');
+  await approve(lateStop);
   await failed(lateStop);
   assert.equal(await status(executing), 'Executed');
 
@@ -284,9 +349,9 @@ test('a stop proposal that runs after its target executed, or was withdrawn, end
   assert.equal(await finalize(target), 'ExecutionScheduled');
   const first = await stopProposal(target);
   const second = await stopProposal(target);
-  await carry(first);
-  await carry(second);
-  assert.equal(tag(ok(await execute(first)).status), 'Executed');
+  await approve(first);
+  await approve(second);
+  assert.equal(tag((await finalizeAndRun(first)).status), 'Executed');
   assert.equal(await status(target), 'Withdrawn');
   await failed(second);
   assert.equal(await status(target), 'Withdrawn');
