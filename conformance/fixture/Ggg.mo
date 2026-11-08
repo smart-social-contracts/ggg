@@ -1273,6 +1273,8 @@ module {
     rule : ?Value;
     federation_codex : ?Text;
     quarter_join_mode : ?Text;
+    /// For the `quarter` named; a `welcome_message` with no `quarter` is InvalidArgument.
+    welcome_message : ?Text;
   };
   public type QuarterDirectory = {
     next : ?Text;
