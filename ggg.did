@@ -286,7 +286,9 @@ type ProposalLink = record { kind : ProposalLinkKind; proposal : text };
 // What a threshold is measured against: the yes and no votes cast, or every eligible voter.
 type ThresholdBasis = variant { Cast; Eligible };
 
-type Tally = record { yes : nat; no : nat; abstain : nat; eligible : opt nat };
+// `eligible`: who may vote, counted when the vote opens. `seats`: a department's policy n, what its
+// threshold is measured against (I-GOV-3); absent for a realm-wide proposal.
+type Tally = record { yes : nat; no : nat; abstain : nat; eligible : opt nat; seats : opt nat };
 
 type Proposal = record {
   id : text;

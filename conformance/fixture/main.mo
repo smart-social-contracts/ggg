@@ -14,17 +14,16 @@
 /// refused. They also create funds and draft and propose budget lines (fund_create, budget_draft,
 /// budget_propose, each governed by the fund's owner, or by the root for every fund's lines), with
 /// org.manage_budget; this fixture has no fiscal periods, a period is a name, and a line goes from draft
-/// to adopted when the call applies. No department has seats: their proposals are
-/// counted like any other here, by every member, and a policy only decides whether a governed call on
-/// the department's records applies at once or files a proposal. So the fixture never ends a
-/// department vote early (I-GOV-7 allows it, it does not require it): that needs seats to count and
-/// veto holders, who must hold a seat (I-ORG-5). Nor does it settle a proposal as its vote ends or run
+/// to adopted when the call applies. No department has seats: every member may vote on a
+/// department's proposal (its tally.eligible), and its threshold is measured against its policy's n
+/// (tally.seats), as I-GOV-3 says: two yes votes carry a council proposal whether two or twenty
+/// members vote. The fixture never ends a department vote early (I-GOV-7 allows it, it does not
+/// require it): that needs veto holders, who must hold a seat (I-ORG-5). Nor does it settle a proposal as its vote ends or run
 /// an accepted action as it finalizes (I-GOV-12): proposal_finalize records the outcome of a vote that
 /// has ended, and proposal_execute runs the action. Nobody has granted a delegation, so nobody acts on
-/// another's behalf. Every other domain is empty, which the model allows. A proposal's rule is the
-/// realm's over the votes cast unless the proposer states a stricter one, which the fixture stores and
-/// applies (I-GOV-3); the departments have no seats, so their proposals keep that rule too, while a GOS
-/// with seats sets a department proposal's threshold to the policy's m/n over the eligible seats.
+/// another's behalf. Every other domain is empty, which the model allows. A proposal's rule is its
+/// scope's, the realm's over the votes cast or a department's m/n over its policy's n, unless the
+/// proposer states a stricter one, which the fixture stores and applies (I-GOV-3).
 /// Links between realms (I-NEST-1 to 3): members vote to take legislation from a sync source and to
 /// accept a follower, which the root's direct policy applies at once; each vote records the link,
 /// then reads the realms' realm_info to refuse a cycle (Unavailable when one cannot be read), and
@@ -71,9 +70,13 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   /// proposal only.
   type Rule = { threshold : T.Ratio; quorum : T.Ratio; threshold_of : T.ThresholdBasis; casting_vote : ?Principal };
   func defaultRule() : Rule = { threshold = votingThreshold; quorum = votingQuorum; threshold_of = #Cast; casting_vote = castingVote };
-  /// The rule of the proposal a governed call files: the scope's default, with the realm's casting vote
-  /// for a realm-wide one only.
-  func scopeRule(department : T.Department) : Rule = { defaultRule() with casting_vote = if (department.is_root) castingVote else null };
+  /// The rule of a proposal of `department` (I-GOV-3): the realm's, over the votes cast and with its
+  /// casting vote, for the root; for any other, m/n of its policy, rounded down, over its n seats, with
+  /// the policy's quorum.
+  func scopeRule(department : T.Department) : Rule {
+    if (department.is_root) return defaultRule();
+    { threshold = department.policy.m * WHOLE / department.policy.n; quorum = department.policy.quorum; threshold_of = #Eligible; casting_vote = null };
+  };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
   let NO_MORE_BUDGETING = "keeps no fiscal periods, allocation rules, payroll or loans";
   let OUT_OF_SCOPE = "a department's proposal carries only the calls that department, or one below it, governs";
@@ -390,20 +393,21 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
 
   /// The rule a proposer states, checked against the scope's default: stricter is allowed, weaker is
   /// refused (I-GOV-3). The casting vote is the realm's, for a realm-wide proposal only.
+  /// The scope's rule, tightened as the proposer states (I-GOV-3): a higher threshold or quorum, or the
+  /// eligible basis where the scope counts the votes cast.
   func statedRule(args : T.ProposalCreateArgs) : Result<Rule> {
-    let scope = defaultRule();
+    let scope = switch (args.department) {
+      case (?d) { switch (findDepartment(d)) { case (?found) scopeRule(found); case null return #Err(#NotFound) } };
+      case null defaultRule();
+    };
     let threshold = switch (args.threshold) { case (?t) t; case null scope.threshold };
     let quorum = switch (args.quorum) { case (?q) q; case null scope.quorum };
     let threshold_of = switch (args.threshold_of) { case (?b) b; case null scope.threshold_of };
-    if (threshold < scope.threshold or quorum < scope.quorum) {
-      return #Err(#InvalidArgument("the rule is weaker than the realm's: a proposer may only tighten it"));
+    if (threshold < scope.threshold or quorum < scope.quorum or (threshold_of == #Cast and scope.threshold_of == #Eligible)) {
+      return #Err(#InvalidArgument("the rule is weaker than the scope's: a proposer may only tighten it"));
     };
     if (threshold > WHOLE or quorum > WHOLE) return #Err(#InvalidArgument("a ratio is at most 100 000 000 (100 %)"));
-    let casting_vote = switch (args.department) {
-      case (?d) { switch (findDepartment(d)) { case (?found) { if (found.is_root) scope.casting_vote else null }; case null null } };
-      case null scope.casting_vote;
-    };
-    #Ok({ threshold; quorum; threshold_of; casting_vote });
+    #Ok({ threshold; quorum; threshold_of; casting_vote = scope.casting_vote });
   };
 
   /// The member a proposal was filed for: the grantor when it was filed on their behalf.
@@ -914,6 +918,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     switch (department) { case (?d) { if (d == ROOT_ID) null else ?d }; case null null };
   };
 
+  /// The policy's n of a department's proposal, what its threshold is measured against; none realm-wide.
+  func policySeats(scope : ?Text) : ?Nat {
+    let ?d = scope else return null;
+    switch (findDepartment(d)) { case (?found) ?found.policy.n; case null null };
+  };
+
   /// Files a proposal, open for voting at once. `department` is its scope; the root's is realm-wide.
   func fileProposal(
     proposer : Principal,
@@ -948,7 +958,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       quorum = rule.quorum;
       threshold_of = rule.threshold_of;
       casting_vote = rule.casting_vote;
-      tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members) };
+      tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members); seats = policySeats(scopeOf(department)) };
       result = null;
       links;
     };
@@ -1013,11 +1023,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
   };
 
-  /// Whether the yes votes exceed the proposal's threshold of its basis (I-GOV-3, a realm-wide rule: this
-  /// fixture's department has no seats, so its proposals keep the realm's rule). A tie over the votes
-  /// cast is decided by the casting vote's yes.
+  /// Whether the yes votes reach a department proposal's threshold of its policy's seats, or exceed a
+  /// realm-wide proposal's threshold of its basis (I-GOV-3). A tie over the votes cast is decided by the
+  /// casting vote's yes.
   func thresholdMet(n : Nat, p : T.Proposal) : Bool {
-    let { yes; no; eligible } = p.tally;
+    let { yes; no; eligible; seats } = p.tally;
+    switch (seats) { case (?policySeats) return yes * WHOLE >= p.threshold * policySeats; case null {} };
     let basis = switch (p.threshold_of) {
       case (#Cast) yes + no;
       case (#Eligible) { switch (eligible) { case (?e) e; case null yes + no } };
@@ -1420,6 +1431,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   transient let _retry = Timer.recurringTimer<system>(#seconds 60, resendNotices);
 
   let WALK_LIMIT = 32; // realms read in one cycle check
+  let PAGE_LIMIT = 32; // pages read of one record
 
   /// Whether `realm` takes legislation from `target`, directly or through other realms, over links not
   /// ended, as their realm_info says now (I-NEST-2). A realm that cannot be read, or a walk past
@@ -1665,11 +1677,14 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   };
 
   /// Every release a sync source's record lists, page by page, read bounded-wait; null when it cannot
-  /// be read.
+  /// be read, or runs past PAGE_LIMIT pages.
   func readRecord(capital : Principal) : async* ?[T.Release] {
     let all = List.empty<T.Release>();
     var cursor : ?Text = null;
+    var pages = 0;
     loop {
+      if (pages >= PAGE_LIMIT) return null;
+      pages += 1;
       let reply = try { ?(await (with timeout = CALL_TIMEOUT) peer(capital).ggg_legislation_releases({ cursor; limit = ?100 })) } catch (_) { null };
       let ?(#Ok({ items; next })) = reply else return null;
       List.addAll(all, items.vals());
@@ -1685,7 +1700,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     for (s in Iter.toArray(Map.values(sources)).vals()) {
       switch (s.source, linkStatus(s.link)) {
         case (#Realm(capital), #Active) {
-          let ?items = await* readRecord(capital) else return #Err(#Unavailable("the record of a sync source could not be read: " # Principal.toText(capital)));
+          let ?items = await* readRecord(capital) else return #Err(#Unavailable("the record of a sync source could not be read, or ran past " # Nat.toText(PAGE_LIMIT) # " pages: " # Principal.toText(capital)));
           let order = Array.map<T.Release, Text>(items, func(r) { r.source });
           for (r in items.vals()) {
             if (r.source == source and r.version == version) {

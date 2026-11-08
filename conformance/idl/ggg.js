@@ -1577,6 +1577,7 @@ export const idlFactory = ({ IDL }) => {
     'no' : IDL.Nat,
     'yes' : IDL.Nat,
     'abstain' : IDL.Nat,
+    'seats' : IDL.Opt(IDL.Nat),
     'eligible' : IDL.Opt(IDL.Nat),
   });
   const Proposal = IDL.Record({

@@ -291,7 +291,7 @@ test('once every eligible member has voted the vote has ended: no vote is accept
   for (const voter of [alice, bob]) {
     refusedWith(await as(voter).ggg_proposal_vote({ proposal: id, choice: { No: null }, on_behalf_of: [] }), 'Conflict');
   }
-  assert.deepEqual((await get(id)).tally, { yes: 2n, no: 0n, abstain: 0n, eligible: [2n] });
+  assert.deepEqual((await get(id)).tally, { yes: 2n, no: 0n, abstain: 0n, eligible: [2n], seats: [] });
   assert.equal(await finalize(id), 'Accepted');
 });
 

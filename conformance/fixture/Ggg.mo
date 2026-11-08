@@ -1888,7 +1888,15 @@ module {
   };
   /// A Record is the same source when its url is the same, whatever the checksum.
   public type SyncSourceRemoveArgs = { source : SyncSourceRef };
-  public type Tally = { no : Nat; yes : Nat; abstain : Nat; eligible : ?Nat };
+  /// `eligible`: who may vote, counted when the vote opens. `seats`: a department's policy n, what its
+  /// threshold is measured against (I-GOV-3); absent for a realm-wide proposal.
+  public type Tally = {
+    no : Nat;
+    yes : Nat;
+    abstain : Nat;
+    seats : ?Nat;
+    eligible : ?Nat;
+  };
   /// One operation scheduled for a time. It runs with the authority of whoever scheduled it, never as the
   /// realm's controller, and every guard and rule runs again when it does, so a task scheduled under old
   /// legislation obeys the legislation in force on its date. The run writes the operation's own Event, with

@@ -236,7 +236,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Department` | `id` (name), `description`, `kind`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals]}`, quorum in hundred-millionths (50 % = 50 000 000). Exactly one root department per realm. `kind` says what the body is (the realm's plenary, a committee), so legislation from another source can address a kind without naming a department. | Civil Registry: under Administration, 2-of-3 policy, head `dana`; the Council: kind `plenary` |
+| `Department` | `id` (name), `description`, `kind`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals]}`, quorum in hundred-millionths (50 % = 50 000 000); `n` is what a proposal's threshold is measured against, not the seats filled: Civil Registry decides 2 of 3 though it seats seven (I-GOV-3). Exactly one root department per realm. `kind` says what the body is (the realm's plenary, a committee), so legislation from another source can address a kind without naming a department. | Civil Registry: under Administration, 2-of-3 policy, head `dana`; the Council: kind `plenary` |
 | `Organization` | `id` (name), `description`, `status`, `admins` → `User`* | An external party. Its admins manage its representatives. | Clinic B: `active`, admin `dr-ana` |
 | `Position` | `id` (key), `department` → `Department` or `organization` → `Organization`, `title`, `profile` → `UserProfile`, `headcount`, `salary` (int), `salary_period`, `status`, `inherit_from_capital` | A seat in a department, or a representative seat in an organization. | `civil-registry.clerk`: 4 seats, 2,000 REALM/month, profile `clerk`; `clinic-b.physician`: 3 seats |
 | `Appointment` | `id`, `position` → `Position`, `user` → `User`, `kind` (`substantive`, `acting`), `agent` (bool), `supervisor` → `User`, `started_at`, `ended_at`, `status`, `source_quarter` | One user holding one seat. Agents are users with `agent = true`. | Bob holds a clerk seat since 2026-05-01; `records-bot` holds `records_agent` at Clinic B, agent, supervisor `dr-ana` |
@@ -296,7 +296,7 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed at creation like the action; the casting vote is the realm's, for a realm-wide proposal only, never the proposer's. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of the `eligible` seats under Infrastructure's policy |
+| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed at creation like the action; the casting vote is the realm's, for a realm-wide proposal only, never the proposer's. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of Infrastructure's 3 policy seats |
 | `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the vote ends. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
 | `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `kind`, `procedure`, `tender` → `Tender`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. `kind` (works, supplies, services) and `procedure` are the realm's words; a contract made from a tender names it and takes its kind and procedure. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, from tender `T-5`, terms `sha256:4be1…` |
@@ -342,10 +342,13 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
     *exceed* `threshold` of the yes and no votes. Over the `eligible` voters, the yes votes must exceed
     `threshold` of them all, so 50 % over the eligible is more than half of the members.
   - A **department's** proposal under an m-of-n policy takes `threshold` m/n, in hundred-millionths
-    rounded down (2 of 3 is 66 666 666, shown as 66.666666 %), over the `eligible` voters, who are the
-    department's n seats, and the policy's quorum: it is accepted when the yes votes *reach* `threshold`
-    of the eligible seats, m under the policy's own rule, and a veto holder's `no` rejects it whatever
-    the count (I-GOV-7). A direct policy (1 of 1) is the same rule with threshold 100 % over one seat.
+    rounded down (2 of 3 is 66 666 666, shown as 66.666666 %), over the policy's n (`tally.seats`, fixed
+    when the vote opens), not over the seats filled, and the policy's quorum: it is accepted when the
+    yes votes *reach* `threshold` of n, exactly m under the policy's own rule and the next whole number
+    at or above t·n under a stricter threshold t, and a veto holder's `no` rejects it whatever the count
+    (I-GOV-7). A direct policy (1 of 1) needs one yes. The eligible voters are the department's seated
+    members (`tally.eligible`): they drive the quorum and the end at which everyone has voted, never
+    the threshold, so a vacancy never makes a vote easier.
   - Under `cast`, when the yes votes stand exactly at `threshold` of the yes and no votes (a tie at 50 %),
     the `casting_vote` member's yes accepts; without one, or if that member did not vote yes, the tie
     rejects. The casting vote is part of the realm's default rule, set by governed configuration:
@@ -363,7 +366,7 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
     rule, and a guard on the governed operation may refuse the direct path, so a chapter can demand a
     larger majority for, say, the budget.
   - `tally.eligible` is counted when the vote opens: the realm's active members, or the department's
-    seats.
+    seated members; a department's `tally.seats`, its policy's n, is fixed then too.
 - I-GOV-4: A contract created under a mandate stays within the mandate's scope and term, and its
   `value` within the mandate's `max_value` in the same `symbol`.
 - I-GOV-5: A proposal may state `effective_at`, the time its action takes effect, in the future when
@@ -377,8 +380,8 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 - I-GOV-7: A proposal whose vote ends after its `effective_at` ends `expired`, whatever was decided,
   and is not executed; the proposer submits a new one. A vote ends at its `deadline`, or earlier at
   the moment every eligible member has voted. The vote of a department under an m-of-n policy may
-  also end as soon as it can only be accepted: its yes votes reach its `threshold` of the eligible seats
-  (`m` under the policy's own rule, more under a stricter one the proposer stated), every veto holder
+  also end as soon as it can only be accepted: its yes votes reach its `threshold` of its policy's n
+  seats (`m` under the policy's own rule, more under a stricter one the proposer stated), every veto holder
   has voted and none of them against (a veto holder's `no` rejects the proposal), and its quorum is met
   (I-GOV-3).
   Only an acceptance ends a department vote this early: until its deadline, or until every eligible
@@ -877,15 +880,15 @@ installed whole; and the paths from several sync sources must form one chain in 
   link. A vote records the link as `requested` before it checks, so a vote cast at the same time on
   the other side sees it.
 - I-NEST-3: Calls between realms go between the capitals of a link and nowhere else. `link_notify`
-  and `follower_report` are accepted only from the capital at the other side of a link this realm has
-  voted on, and a report only over an `active` link: any other caller is refused with `Forbidden`, a
-  report over a link that is not active with `Conflict`. Neither is delegable: the caller is the other
-  realm's capital. A notice that a link ended names its sender as `by`, at a time not ahead of the
-  receiver's clock by more than a few minutes; any other is refused with `InvalidArgument`. A side
-  whose notice is refused because
-  the other has not voted yet loses nothing: when the other side votes, its own notice completes the
-  link, and the receiver's reply, `active`, tells it so. A notice that is not answered (the call is
-  rejected or times out; a `GggError` is an answer) is sent again until it is answered.
+  and `follower_report` are accepted only from the capital at the other side of a link this realm
+  has voted on, and a report only over an `active` link: any other caller is refused with
+  `Forbidden`, a report over a link that is not active with `Conflict`. Neither is delegable: the
+  caller is the other realm's capital. A notice that a link ended names its sender as `by`, at a
+  time not ahead of the receiver's clock by more than a few minutes; any other is refused with
+  `InvalidArgument`. A side whose notice is refused because the other has not voted yet loses
+  nothing: when the other side votes, its own notice completes the link, and the receiver's reply,
+  `active`, tells it so. A notice that is not answered (the call is rejected or times out; a
+  `GggError` is an answer) is sent again until it is answered.
 
 ## 11. Codex, notifications, outside bodies, tasks and audit
 
@@ -1215,3 +1218,4 @@ There is no permission for raw database writes: everything is an operation.
 | D17 | The majority of a proposal that a governed call files | Decided 8 Nov 2026: the scope's default rule; legislation that needs more requires a proposal of its own and may refuse the direct path with a guard (I-GOV-3) |
 | D18 | Which vote may carry a governed call on another department's record | Decided 8 Nov 2026: a realm-wide proposal carries any call; a department's only a governed call whose governing department is that department or one below it, checked at creation and again when the action executes (I-GOV-13) |
 | D19 | Which department governs a change of parent, `department_delete`, `fund_create` and `budget_propose` | Decided 8 Nov 2026: a change of `parent` is governed by the lowest department that is, or is above, both the old and the new parent (an unknown new parent is `NotFound`), and every other edit by the department itself; `department_delete` by the parent, the root for a top-level department, never the root (`InvalidArgument`) nor a department that owns a fund (`Conflict`); creating an owned record, `fund_create`, by the owner named; `budget_propose` by the owner of the `fund` it names, or by the root when it names none and proposes every fund's lines; its lines are fixed when it files (`proposed`, with the proposal), a later one takes only `draft` lines, its totals are the sums over the lines it proposes, and `budget_extend` and the replacement of extended lines are per fund (§1, §3, §5) |
+| D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3) |

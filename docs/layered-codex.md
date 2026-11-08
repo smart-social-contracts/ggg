@@ -102,7 +102,7 @@ addition is in the [model](../model/README.md) and `ggg.did`; the model's sectio
   proposal, not a forbid on `proposal_finalize`: the proposer may state a stricter rule than the realm's
   or the department's, never a weaker one, and a guard on `proposal_create` requires the majority the
   matter needs. A realm-wide proposal's yes votes exceed the threshold of the basis, a department's reach
-  it over the eligible seats; the casting vote is the realm's, for a realm-wide proposal only, set by
+  it over its policy's n seats, whatever seats are filled; the casting vote is the realm's, for a realm-wide proposal only, set by
   governed configuration, never the proposer's. A proposal a governed call files takes the scope's default rule, so legislation that needs
   more requires a proposal of its own and may refuse the direct path with a guard (model I-GOV-3);
 - **outside bodies**: `External` parties with a `Dispatch` outbox (`external_add`, `dispatch_confirm`,
@@ -362,7 +362,7 @@ or the call is refused with `InvalidArgument`. The rules:
 - A vote that ends after `effective_at` does not execute: the proposal ends `Expired`, whatever was
   decided, and the proposer submits a new one. A vote ends at its deadline, or earlier at the moment
   every eligible member has voted. The vote of a department under an m-of-n policy may also end as
-  soon as it can only be accepted: its yes votes reach its threshold of the eligible seats (`m` under
+  soon as it can only be accepted: its yes votes reach its threshold of its policy's n seats (`m` under
   the policy's own rule, more under a stricter one the proposer stated), every veto holder has voted
   and none of them against, and its quorum is met. Only an acceptance ends a department vote this
   early: until its deadline, or until every eligible member has voted, a `no` can still be replaced,
