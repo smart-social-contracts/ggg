@@ -229,7 +229,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Department` | `id` (name), `description`, `kind`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals], casting_vote}`, quorum in hundred-millionths (50 % = 50 000 000); `casting_vote` is a seat holder whose yes decides a tie in a proposal of the department counted over the votes cast (I-GOV-3). Exactly one root department per realm. `kind` says what the body is (the realm's plenary, a committee), so legislation from another source can address a kind without naming a department. | Civil Registry: under Administration, 2-of-3 policy, head `dana`; the Council: kind `plenary` |
+| `Department` | `id` (name), `description`, `kind`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals]}`, quorum in hundred-millionths (50 % = 50 000 000). Exactly one root department per realm. `kind` says what the body is (the realm's plenary, a committee), so legislation from another source can address a kind without naming a department. | Civil Registry: under Administration, 2-of-3 policy, head `dana`; the Council: kind `plenary` |
 | `Organization` | `id` (name), `description`, `status`, `admins` → `User`* | An external party. Its admins manage its representatives. | Clinic B: `active`, admin `dr-ana` |
 | `Position` | `id` (key), `department` → `Department` or `organization` → `Organization`, `title`, `profile` → `UserProfile`, `headcount`, `salary` (int), `salary_period`, `status`, `inherit_from_capital` | A seat in a department, or a representative seat in an organization. | `civil-registry.clerk`: 4 seats, 2,000 REALM/month, profile `clerk`; `clinic-b.physician`: 3 seats |
 | `Appointment` | `id`, `position` → `Position`, `user` → `User`, `kind` (`substantive`, `acting`), `agent` (bool), `supervisor` → `User`, `started_at`, `ended_at`, `status`, `source_quarter` | One user holding one seat. Agents are users with `agent = true`. | Bob holds a clerk seat since 2026-05-01; `records-bot` holds `records_agent` at Clinic B, agent, supervisor `dr-ana` |
@@ -268,8 +268,7 @@ Two kinds of body:
   same department or organization, unless the signing policy makes supervision optional.
 - I-ORG-4: An agent holds a `signing` permission only if the active codex's signing policy allows
   agents to hold it.
-- I-ORG-5: A policy satisfies `1 ≤ m ≤ n`; veto principals, and the casting vote, hold an appointment in
-  the department.
+- I-ORG-5: A policy satisfies `1 ≤ m ≤ n`; veto principals hold an appointment in the department.
 - I-ORG-6: The root department always exists and cannot be deleted.
 - I-ORG-7: A department's positions and policy change only under the realm's rules; an organization's
   representatives are managed only by its admins.
@@ -333,10 +332,11 @@ Two kinds of body:
     the count (I-GOV-7). A direct policy (1 of 1) is the same rule with threshold 100 % over one seat.
   - Under `cast`, when the yes votes stand exactly at `threshold` of the yes and no votes (a tie at 50 %),
     the `casting_vote` member's yes accepts; without one, or if that member did not vote yes, the tie
-    rejects. The casting vote is part of the scope's default rule, set by governed configuration: the
-    realm's `casting_vote` (`governance_update`, an active member) for a realm-wide proposal, the
-    department's `policy.casting_vote` (`department_set_policy`, a seat holder) for its proposals. The
-    proposal copies it at creation; the proposer never sets it.
+    rejects. The casting vote is part of the realm's default rule, set by governed configuration:
+    `Realm.casting_vote` (`governance_update`, an active member). A realm-wide proposal copies it at
+    creation; the proposer never sets it, and a department's proposals have none, since they count over
+    the seats, where no tie arises. If the member later leaves, new proposals still copy them, their
+    vote does not count (I-GOV-2) and ties reject, until `governance_update` names another or clears it.
   - The proposer may state a stricter rule when creating the proposal, never a weaker one
     (`InvalidArgument`): a higher threshold or quorum, or `eligible` where the default is `cast`. Each
     change narrows what the default accepts, so legislation's guards, which may require them, only ever

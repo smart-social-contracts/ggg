@@ -192,9 +192,8 @@ type DelegationRequest = record {
 
 // ---- §3 Departments and organizations
 
-// m of n approvals. `casting_vote` is a seat holder whose yes decides a tie in a proposal of the department
-// counted over the votes cast (I-GOV-3).
-type Policy = record { m : nat; n : nat; quorum : Ratio; veto : vec principal; casting_vote : opt principal };
+// m of n approvals.
+type Policy = record { m : nat; n : nat; quorum : Ratio; veto : vec principal };
 
 type Department = record {
   id : text;
@@ -311,8 +310,8 @@ type Proposal = record {
   threshold : Ratio;
   quorum : Ratio;
   threshold_of : ThresholdBasis;
-  // The scope's casting vote when the proposal was created (the realm's setting, or the department's
-  // policy's): a member whose yes decides a tie under the Cast basis. Never the proposer's choice.
+  // The realm's casting vote when the proposal was created: a member whose yes decides a tie under the
+  // Cast basis, so only a realm-wide proposal has one. Never the proposer's choice.
   casting_vote : opt principal;
   tally : Tally;
   result : opt ProposalResult;

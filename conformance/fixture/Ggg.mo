@@ -1378,15 +1378,8 @@ module {
     category : Text;
     profiles : [Text];
   };
-  /// m of n approvals. `casting_vote` is a seat holder whose yes decides a tie in a proposal of the department
-  /// counted over the votes cast (I-GOV-3).
-  public type Policy = {
-    m : Nat;
-    n : Nat;
-    veto : [Principal];
-    casting_vote : ?Principal;
-    quorum : Ratio;
-  };
+  /// m of n approvals.
+  public type Policy = { m : Nat; n : Nat; veto : [Principal]; quorum : Ratio };
   public type Position = {
     id : Text;
     status : PositionStatus;
@@ -1483,8 +1476,8 @@ module {
     on_behalf_of : ?Principal;
     proposer : Principal;
     matter : ?Text;
-    /// The scope's casting vote when the proposal was created (the realm's setting, or the department's
-    /// policy's): a member whose yes decides a tie under the Cast basis. Never the proposer's choice.
+    /// The realm's casting vote when the proposal was created: a member whose yes decides a tie under the
+    /// Cast basis, so only a realm-wide proposal has one. Never the proposer's choice.
     casting_vote : ?Principal;
     department : ?Text;
     quorum : Ratio;
