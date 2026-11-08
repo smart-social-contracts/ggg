@@ -11,6 +11,7 @@ realms.
 | [`ggg.did`](ggg.did) | **The interface.** The model in Candid: a record for every entity and a method for every operation. |
 | [`domains.json`](domains.json) | **The domain list.** The subjects of legislation (`tax`, `water`, …) that a layered codex has chapters for. |
 | [`facts.json`](facts.json) | **The fact schema.** For every operation, the facts a codex's rules see, each with its kind, range and allowed values. Generated from `ggg.did`. |
+| [`delegation.json`](delegation.json) | **Power of attorney.** Every operation's tier (direct, asks the member each time, the member's own, the founder's, none) and group, and the plain-language groups a grant names. |
 | [`conformance/`](conformance/README.md) | **The conformance suite.** Checks a canister against `ggg.did`, on mainnet or on a local replica. |
 
 A GOS is GGG compliant when it implements `ggg.did`, lists `GGG` in `icrc10_supported_standards`,

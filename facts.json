@@ -178,6 +178,49 @@
       "facts": {},
       "read": true
     },
+    "delegation_groups": {
+      "operation": "ggg_delegation_groups",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "delegation_activity": {
+      "operation": "ggg_delegation_activity",
+      "facts": {
+        "delegation": {
+          "type": "text"
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      },
+      "read": true
+    },
     "me": {
       "operation": "ggg_me",
       "facts": {
@@ -659,6 +702,25 @@
           "kind": "timestamp",
           "min": 0,
           "max": "9223372036854775807",
+          "optional": true
+        }
+      }
+    },
+    "delegation_revoke_all": {
+      "operation": "ggg_delegation_revoke_all",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "on_behalf_of": {
+          "type": "principal",
           "optional": true
         }
       }

@@ -52,6 +52,11 @@ Edges in the graph can represent various relationships:
 - **Permission**: A citizen has rights to perform actions
 - **Delegation**: A citizen delegates authority to another citizen
 
+In the model this is power of attorney ([model §2](../model/README.md#power-of-attorney)): a member
+grants another principal, a person or an AI connection, plain-language groups of operations, and every
+operation has a tier: direct under the grant, asking the member each time, the member's own, or the
+founder's. [`delegation.json`](../delegation.json) lists the groups and every operation's tier.
+
 ### Graph Operations
 
 The Graph supports operations such as:

@@ -1,35 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { IDL } from '@icp-sdk/core/candid';
 import { idlFactory } from '../idl/ggg.js';
 import { PUBLIC_UPDATES, isTimezoneName, looksLikeBasisPoints, updateTable } from '../src/suite.js';
-
-const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
-const model = read('model/README.md');
-const did = read('ggg.did');
-
-/** The rows of the model's tables under a "### <heading>", by their first cell. */
-function rows(heading) {
-  const found = [];
-  let inside = false;
-  for (const line of model.split('\n')) {
-    if (line.startsWith('#')) inside = line === `### ${heading}`;
-    else if (inside && line.startsWith('| `')) found.push(line.split(' | '));
-  }
-  return found;
-}
-
-function withoutParentheses(text) {
-  let previous;
-  do {
-    previous = text;
-    text = text.replace(/\([^()]*\)/g, '');
-  } while (text !== previous);
-  return text;
-}
-
-const names = (cell) => [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+import { did, flagged, names, read, rowOperations, rows, withoutParentheses } from './readme.js';
 
 const entities = new Map(
   rows('Entities').filter(([first]) => /^\| `[A-Z]/.test(first)).map(([first, fields]) => [
@@ -46,7 +20,7 @@ const records = new Map(
   ]),
 );
 
-const operations = new Set(rows('Operations').flatMap(([first]) => names(withoutParentheses(first).replace(/^\| /, ''))));
+const operations = new Set(rows('Operations').flatMap(rowOperations));
 
 const methods = [...did.matchAll(/^\s+(ggg_\w+)\s*:/gm)].map((m) => m[1]);
 
@@ -77,31 +51,32 @@ test('the JavaScript binding has every update method of ggg.did', () => {
 test('the updates the anonymous check skips are the public ones in the model', () => {
   const pub = rows('Operations')
     .filter((r) => r[1].includes('(public)') && !r[2].includes('read'))
-    .flatMap((r) => names(withoutParentheses(r[0].slice(2))))
+    .flatMap(rowOperations)
     .map((op) => `ggg_${op}`)
     .filter((m) => did.includes(`  ${m} :`));
   assert.deepEqual([...PUBLIC_UPDATES].sort(), pub.sort());
 });
-
-/** The bound operations whose Flags cell includes `flag`. */
-function flagged(flag) {
-  return rows('Operations')
-    .filter((r) => r[2]?.split(', ').includes(flag))
-    .flatMap((r) => names(withoutParentheses(r[0].slice(2))))
-    .filter((op) => did.includes(`  ggg_${op} :`));
-}
 
 test('governed operations, and only they, reply Governed', () => {
   const replies = [...did.matchAll(/^  ggg_(\w+) : .* -> \(variant \{ Ok : Governed;/gm)].map((m) => m[1]);
   assert.deepEqual(replies.sort(), [...new Set(flagged('governed'))].sort());
 });
 
-test('delegable operations, and only they, take on_behalf_of', () => {
+test('an operation that takes on_behalf_of is delegable, or the member\'s own and refuses it', () => {
+  const { operations: tiers } = JSON.parse(read('delegation.json'));
   const service = idlFactory({ IDL });
   const taking = service._fields
     .filter(([, fn]) => fn.argTypes.length && fn.argTypes[0] instanceof IDL.RecordClass && fn.argTypes[0]._fields.some(([k]) => k === 'on_behalf_of'))
     .map(([name]) => name.replace(/^ggg_/, ''));
-  assert.deepEqual(taking.sort(), [...new Set(flagged('delegable'))].sort());
+  const delegable = new Set(flagged('delegable'));
+  for (const op of taking) {
+    const { tier } = tiers[op];
+    assert.ok(tier === 'member' || delegable.has(op), `${op} takes on_behalf_of but is ${tier} and not delegable`);
+  }
+  // Every member-only operation carries the field, so that its refusal can be checked over Candid.
+  const memberOnly = Object.entries(tiers).filter(([, op]) => op.tier === 'member').map(([name]) => name);
+  assert.deepEqual(memberOnly.filter((op) => !taking.includes(op)), []);
+  assert.ok(memberOnly.includes('delegation_revoke_all'));
 });
 
 test('a time zone name is Area/Location or UTC', () => {

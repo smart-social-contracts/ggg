@@ -74,9 +74,9 @@ test('every list paginates, rejects a malformed cursor, and lookups of unknown i
   const results = await run({ member });
   assert.deepEqual(failures(results), []);
   const lists = results.filter((r) => /^L\d+$/.test(r.id));
-  assert.equal(lists.length, 33);
+  assert.equal(lists.length, 35);
   const skipped = lists.filter((r) => r.outcome === 'skip').map((r) => r.title);
-  assert.deepEqual(skipped, ['ggg_crypto_access paginates']);
+  assert.deepEqual(skipped, ['ggg_delegation_activity paginates', 'ggg_crypto_access paginates']);
   const events = lists.find((r) => r.title === 'ggg_events paginates');
   assert.match(events.detail, /^[1-9]\d* listed$/);
   const o = outcomes(results);

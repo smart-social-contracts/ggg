@@ -388,6 +388,35 @@ export const idlFactory = ({ IDL }) => {
     'requires_acceptance' : IDL.Bool,
     'expires_at' : Timestamp,
   });
+  const DelegationActivityArgs = IDL.Record({
+    'delegation' : IDL.Text,
+    'cursor' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
+  });
+  const Event = IDL.Record({
+    'at' : Timestamp,
+    'by' : IDL.Opt(IDL.Principal),
+    'id' : IDL.Text,
+    'op' : IDL.Text,
+    'supervisor' : IDL.Opt(IDL.Principal),
+    'result' : Value,
+    'agent' : IDL.Bool,
+    'args' : Value,
+    'origin' : IDL.Text,
+    'user' : IDL.Opt(IDL.Principal),
+    'grant' : IDL.Opt(IDL.Text),
+  });
+  const EventArchive = IDL.Record({
+    'first' : IDL.Text,
+    'last' : IDL.Text,
+    'canister' : IDL.Principal,
+  });
+  const EventPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Event),
+    'archives' : IDL.Vec(EventArchive),
+  });
   const DelegationGrantArgs = IDL.Record({
     'starts_at' : IDL.Opt(Timestamp),
     'delegate' : IDL.Principal,
@@ -395,6 +424,35 @@ export const idlFactory = ({ IDL }) => {
     'label' : IDL.Text,
     'scope' : IDL.Vec(IDL.Text),
     'expires_at' : Timestamp,
+  });
+  const DelegationGroupsArgs = IDL.Record({
+    'cursor' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
+  });
+  const Duration = IDL.Nat64;
+  const DelegationTier = IDL.Variant({
+    'Confirm' : IDL.Null,
+    'Direct' : IDL.Null,
+  });
+  const TieredOperation = IDL.Record({
+    'permission' : IDL.Text,
+    'tier' : DelegationTier,
+    'operation' : IDL.Text,
+    'confirm_if' : IDL.Opt(IDL.Text),
+  });
+  const DelegationGroup = IDL.Record({
+    'id' : IDL.Text,
+    'confirms' : IDL.Bool,
+    'risk' : IDL.Text,
+    'label' : IDL.Text,
+    'summary' : IDL.Text,
+    'longest' : Duration,
+    'operations' : IDL.Vec(TieredOperation),
+  });
+  const DelegationGroupPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(DelegationGroup),
   });
   const DelegationListArgs = IDL.Record({
     'cursor' : IDL.Opt(IDL.Text),
@@ -430,6 +488,15 @@ export const idlFactory = ({ IDL }) => {
     'approve' : IDL.Bool,
     'scope' : IDL.Opt(IDL.Vec(IDL.Text)),
     'expires_at' : IDL.Opt(Timestamp),
+  });
+  const DelegationRevokeAllArgs = IDL.Record({
+    'cursor' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
+  });
+  const DelegationsRevoked = IDL.Record({
+    'revoked' : IDL.Nat,
+    'next' : IDL.Opt(IDL.Text),
   });
   const ChartArgs = IDL.Record({
     'cursor' : IDL.Opt(IDL.Text),
@@ -510,7 +577,6 @@ export const idlFactory = ({ IDL }) => {
     'Closed' : IDL.Null,
     'Frozen' : IDL.Null,
   });
-  const Duration = IDL.Nat64;
   const Position = IDL.Record({
     'id' : IDL.Text,
     'status' : PositionStatus,
@@ -734,28 +800,6 @@ export const idlFactory = ({ IDL }) => {
     'title' : IDL.Opt(IDL.Text),
     'body' : IDL.Opt(IDL.Text),
     'verdict' : IDL.Text,
-  });
-  const Event = IDL.Record({
-    'at' : Timestamp,
-    'by' : IDL.Opt(IDL.Principal),
-    'id' : IDL.Text,
-    'op' : IDL.Text,
-    'supervisor' : IDL.Opt(IDL.Principal),
-    'result' : Value,
-    'agent' : IDL.Bool,
-    'args' : Value,
-    'origin' : IDL.Text,
-    'user' : IDL.Opt(IDL.Principal),
-  });
-  const EventArchive = IDL.Record({
-    'first' : IDL.Text,
-    'last' : IDL.Text,
-    'canister' : IDL.Principal,
-  });
-  const EventPage = IDL.Record({
-    'next' : IDL.Opt(IDL.Text),
-    'items' : IDL.Vec(Event),
-    'archives' : IDL.Vec(EventArchive),
   });
   const EvidenceEvaluateArgs = IDL.Record({
     'admitted' : IDL.Bool,
@@ -2449,10 +2493,20 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Delegation, 'Err' : GggError })],
         [],
       ),
+    'ggg_delegation_activity' : IDL.Func(
+        [DelegationActivityArgs],
+        [IDL.Variant({ 'Ok' : EventPage, 'Err' : GggError })],
+        ['query'],
+      ),
     'ggg_delegation_grant' : IDL.Func(
         [DelegationGrantArgs],
         [IDL.Variant({ 'Ok' : Delegation, 'Err' : GggError })],
         [],
+      ),
+    'ggg_delegation_groups' : IDL.Func(
+        [DelegationGroupsArgs],
+        [IDL.Variant({ 'Ok' : DelegationGroupPage, 'Err' : GggError })],
+        ['query'],
       ),
     'ggg_delegation_list' : IDL.Func(
         [DelegationListArgs],
@@ -2472,6 +2526,11 @@ export const idlFactory = ({ IDL }) => {
     'ggg_delegation_revoke' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Delegation, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_delegation_revoke_all' : IDL.Func(
+        [DelegationRevokeAllArgs],
+        [IDL.Variant({ 'Ok' : DelegationsRevoked, 'Err' : GggError })],
         [],
       ),
     'ggg_department_chart' : IDL.Func(

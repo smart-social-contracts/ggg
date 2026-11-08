@@ -1096,6 +1096,8 @@ type Event = record {
   op : text;
   user : opt principal;
   by : opt principal;
+  // The grant a delegated act ran under.
+  grant : opt text;
   agent : bool;
   supervisor : opt principal;
   origin : text;
@@ -1164,6 +1166,28 @@ type DelegationListArgs = record {
 type DelegationPage = record { items : vec Delegation; requests : vec DelegationRequest; next : opt text };
 
 type DelegableOperation = record { operation : text; permission : text };
+
+// An operation's tier under power of attorney (delegation.json): Direct runs at once under a grant that
+// names its group, Confirm asks the grantor each time. `confirm_if` is the condition under which a Direct
+// operation asks instead.
+type DelegationTier = variant { Direct; Confirm };
+type TieredOperation = record { operation : text; permission : text; tier : DelegationTier; confirm_if : opt text };
+// One group a grant may name, as delegation.json defines it, with the caller's operations in it. `id` is
+// the group's, or `office:<department>` and `orgs:<organization>` for a group with a parameter; `longest`
+// is how long a grant of it may last; `confirms` says whether some of its operations ask each time.
+type DelegationGroup = record {
+  id : text;
+  label : text;
+  summary : text;
+  risk : text;
+  longest : Duration;
+  confirms : bool;
+  operations : vec TieredOperation;
+};
+type DelegationGroupPage = record { items : vec DelegationGroup; next : opt text };
+type DelegationGroupsArgs = record { cursor : opt text; limit : opt nat32; on_behalf_of : opt principal };
+// The events recorded under one grant, newest first, to its grantor or its delegate.
+type DelegationActivityArgs = record { delegation : text; cursor : opt text; limit : opt nat32; on_behalf_of : opt principal };
 
 // The caller, their permissions, and their open delegations. Private data is omitted when delegated.
 type MeArgs = record { on_behalf_of : opt principal };
@@ -1260,6 +1284,10 @@ type DelegationDecideArgs = record {
   scope : opt vec text;
   expires_at : opt Timestamp;
 };
+// Revokes every pending or active grant the caller gave, `limit` at a time: call again with `next` until
+// it is absent. The member's own act: with `on_behalf_of` it is Forbidden.
+type DelegationRevokeAllArgs = record { cursor : opt text; limit : opt nat32; on_behalf_of : opt principal };
+type DelegationsRevoked = record { revoked : nat; next : opt text };
 
 // §3
 
@@ -2073,6 +2101,8 @@ service : {
   // after the last attribute returned, so deciding a page skips none.
   ggg_attribute_pending_list : (ListArgs) -> (variant { Ok : AttributePage; Err : GggError }) query;
   ggg_delegable_operations : () -> (variant { Ok : vec DelegableOperation; Err : GggError }) query;
+  ggg_delegation_groups : (DelegationGroupsArgs) -> (variant { Ok : DelegationGroupPage; Err : GggError }) query;
+  ggg_delegation_activity : (DelegationActivityArgs) -> (variant { Ok : EventPage; Err : GggError }) query;
   ggg_me : (MeArgs) -> (variant { Ok : Me; Err : GggError }) query;
   ggg_realm_join : (JoinArgs) -> (variant { Ok : UserEntry; Err : GggError });
   ggg_profile_update : (ProfileUpdateArgs) -> (variant { Ok : User; Err : GggError });
@@ -2097,6 +2127,7 @@ service : {
   ggg_delegation_revoke : (text) -> (variant { Ok : Delegation; Err : GggError });
   ggg_delegation_request : (DelegationRequestArgs) -> (variant { Ok : DelegationRequest; Err : GggError });
   ggg_delegation_request_decide : (DelegationDecideArgs) -> (variant { Ok : opt Delegation; Err : GggError });
+  ggg_delegation_revoke_all : (DelegationRevokeAllArgs) -> (variant { Ok : DelegationsRevoked; Err : GggError });
 
   // §3
   ggg_department_get : (GetArgs) -> (variant { Ok : opt DepartmentDetail; Err : GggError }) query;

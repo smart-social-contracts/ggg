@@ -60,9 +60,18 @@ result. Several operations may share a permission. Flags:
 | Flag | Meaning |
 |---|---|
 | `read` | Query; changes nothing; not audited. |
-| `delegable` | May be called with `on_behalf_of`: the caller acts for a grantor whose active `Delegation` covers the permission. Both principals are audited. |
+| `delegable` | The direct tier of power of attorney: under a grant that covers the operation's group, a delegate's call runs at once as the grantor, and both principals are audited. |
+| `confirm` | Asks each time: a delegate only prepares the exact call, and it runs when the grantor approves that very call (the mechanism, pending actions, is specified with them). Never done directly under a grant. |
 | `governed` | When the governing department's policy is not direct, calling it files a `Proposal` that replays the exact call once approved. The governing department is the root, unless the operation acts on a department (that department; for `department_create` and `department_delete`, the parent; for a `department_edit` that changes the `parent`, the lowest department that is, or is above, both the old and the new parent) or on a record a department owns, such as a fund, budget, tender or proposal (the owner; a proposal belongs to the department it is scoped to, and a realm-wide one to the root). Identity operations name it in their `department` argument (§2). A proposal carries such a call only within its scope (I-GOV-13). |
 | `signing` | Produces an act its signer is personally accountable for: a decision, a certification, a sanction. The active codex's [signing policy](#signing-policy) says whether agents may hold the permission and whether it may be delegated. By default only non-agents sign, and nobody signs on another's behalf. |
+
+[`delegation.json`](../delegation.json) gives every operation its tier and its group, and defines the
+groups a grant names and the conditions under which an operation asks each time
+([Power of attorney](#power-of-attorney), §2). An operation with such a condition keeps `delegable`
+here, and its example says in plain words when it asks. An operation with neither flag is the member's
+own (`member`: never under a grant and never prepared), the founder's (`founder`: `setup_launch`), or
+needs no power of attorney (`none`: public reads, calls between canisters, the host's steps, a delegate
+acting as itself).
 
 An operation either succeeds with its result or is refused with a `GggError`, and a refused
 operation changes nothing.
@@ -92,7 +101,10 @@ method per operation:
 - **Governed and delegable calls.** A `governed` operation replies `Governed`: `Done` with the id of
   any record it created, or `Proposed` with the id of the proposal it filed. The proposal's action is
   the same call, `Call { method; arg }`, and replaying it applies the change. A `delegable` operation
-  takes `on_behalf_of : opt principal`.
+  whose arguments carry `on_behalf_of : opt principal` is called on the grantor's behalf with it; the
+  other delegable operations are reached on a grantor's behalf through the generic call specified with
+  pending actions. A `member` operation that carries `on_behalf_of` refuses it: it is the member's own
+  act.
 - **Kinds.** `Ratio`, `Rate`, `Money`, `SignedMoney`, `Area`, `Timestamp`, `Duration` and `Period` are
   named aliases, so a field's unit and range can be read off `ggg.did`. [`facts.json`](../facts.json)
   lists them for every operation's facts, with every fact's range
@@ -159,8 +171,8 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 | `UserProfile` | `id` (name), `description`, `allowed_to` (Json list of permissions), `permissions` → `Permission`* | A named role. Defaults: `admin` (`all`), `member`. | `member` → `[self.join, proposal.vote, proposal.create, dispute.create, …]` |
 | `Permission` | `id` (name), `description`, `category`, `scope`, `users` → `User`*, `profiles` → `UserProfile`*, `departments` → `Department`* | A fine-grained grant of one permission to users, profiles or departments. | `transfer.create` on scope `fund:ROADS`, granted to Infrastructure |
 | `Invite` | `id` (code hash), `profile`, `department`, `position`, `max_uses`, `uses`, `redeemed_by` (Json), `expires_at`, `revoked`, `created_by` | The code itself is never stored. | 50-use code for new clerks: profile `member`, Civil Registry, position `clerk`, expires in 30 days |
-| `Delegation` | `id`, `grantor`, `delegate`, `scope` (Json), `status`, `label`, `description`, `requires_acceptance`, `granted_by`, `accepted_at`, `starts_at`, `expires_at`, `revoked_at`, `revoked_by` | Power of attorney. | Alice → `claude-conn`: `[proposal.vote, proposal.create]` for 24 h, `active` |
-| `DelegationRequest` | `id`, `grantor`, `delegate`, `scope`, `label`, `description`, `starts_at`, `expires_at`, `request_expires_at` | A delegate asking a member for a grant. Deleted once decided. | Claude asks Alice for `[proposal.vote]` for 7 days; the link is valid 1 h |
+| `Delegation` | `id`, `grantor`, `delegate`, `scope` (Json), `status`, `label`, `description`, `requires_acceptance`, `granted_by`, `accepted_at`, `starts_at`, `expires_at`, `revoked_at`, `revoked_by` | Power of attorney. `scope` names groups (`group:vote`, `group:office:health`, `group:*` for everything) or, in a grant made before groups, permissions ([Power of attorney](#power-of-attorney)). | Alice → `claude-conn`: `[group:vote, group:propose]` for 30 days, `active` |
+| `DelegationRequest` | `id`, `grantor`, `delegate`, `scope`, `label`, `description`, `starts_at`, `expires_at`, `request_expires_at` | A delegate asking a member for a grant, by group. Deleted once decided. | Claude asks Alice for `[group:vote]` for 30 days; the link is valid 1 h |
 
 ### Lifecycles
 
@@ -173,29 +185,33 @@ organizations: **Clinic B** (health provider) and **BuildCo** (contractor). Agen
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `realm_join` (with optional invite code, language and home zone) | `self.join` | | Bob joins with code `X7K-29Q` → `{user: "bob", status: "active", profiles: ["member"]}` |
-| `user_get`, `user_list` | `user.view` | read | Dana looks up `bob`: nickname, status, profiles |
+| `realm_join` (with optional invite code, language and home zone) | `self.join` | confirm | Bob joins with code `X7K-29Q` → `{user: "bob", status: "active", profiles: ["member"]}` |
+| `user_get`, `user_list` | `user.view` | read, delegable | Dana looks up `bob`: nickname, status, profiles |
 | `me` (own record, profiles, permissions, delegations) | `self.data_view` | read, delegable | Alice's dashboard: her profiles, permissions and the grant to Claude |
 | `profile_update` (nickname, avatar, language) | `self.update_public_profile` | delegable | Claude sets Alice's avatar `{avatar: "…/alice.png", on_behalf_of: "alice"}` |
-| `private_data_update` | `self.update_private_data` | | Alice stores her home address, encrypted |
-| `user_add`, `user_import` (bulk) | `user.add` | governed | Civil Registry imports 1,200 residents from the old register (2-of-3 approval) |
-| `user_edit` | `user.edit` | | Dana fixes a typo in Bob's nickname, and moves him to the district he lives in |
-| `user_set_status` | `user.update_status` | governed | `{user: "mallory", status: "suspended"}` → proposal `P-9` under Civil Registry's policy |
-| `user_remove` | `user.delete` | governed | Remove Bob's duplicate test account |
-| `identity_submit` | `identity.submit` | | Alice submits her passport proof |
-| `identity_review` | `identity.review` | signing | Dana approves Alice's passport proof |
-| `attribute_submit` | `attribute.submit` | | Alice submits her large-family title |
-| `attribute_review` | `attribute.review` | signing | Dana verifies it |
-| `attribute_pending_list` (the attributes awaiting review) | `attribute.review` | read | Dana lists the attributes awaiting her review, kind and value in clear |
+| `private_data_update` | `self.update_private_data` | confirm | Alice stores her home address, encrypted |
+| `user_add`, `user_import` (bulk) | `user.add` | governed, delegable | Civil Registry imports 1,200 residents from the old register (2-of-3 approval) |
+| `user_edit` | `user.edit` | delegable | Dana fixes a typo in Bob's nickname, and moves him to the district he lives in |
+| `user_set_status` | `user.update_status` | governed, delegable | `{user: "mallory", status: "suspended"}` → proposal `P-9` under Civil Registry's policy |
+| `user_remove` | `user.delete` | governed, delegable | Remove Bob's duplicate test account |
+| `identity_submit` | `identity.submit` | confirm | Alice submits her passport proof; prepared by Claude, it waits for her approval |
+| `identity_review` | `identity.review` | signing, confirm | Dana approves Alice's passport proof |
+| `attribute_submit` | `attribute.submit` | confirm | Alice submits her large-family title |
+| `attribute_review` | `attribute.review` | signing, confirm | Dana verifies it |
+| `attribute_pending_list` (the attributes awaiting review) | `attribute.review` | read, confirm | Dana lists the attributes awaiting her review, kind and value in clear. Prepared by a delegate, it waits for Dana's approval: third parties' personal data |
 | `attribute_list` (own) | `self.data_view` | read, delegable | Alice's verified attributes |
-| `invite_create`, `invite_revoke` | `invite.manage` | | Dana creates 50 clerk invites; revokes one sent to the wrong email |
-| `invite_list` | `invite.manage` | read | Dana checks which of her invites have been used |
-| `profile_create`, `profile_edit` | `permission.grant` | governed | New profile `treasurer` → `[treasury.view, transfer.create]` |
-| `role_assign`, `role_revoke` (profile ↔ user) | `role.assign`, `role.revoke` | governed | Give Bob `treasurer` → proposal under the root department's policy |
-| `delegation_grant`, `delegation_revoke`, `delegation_accept` | `self.delegate` | | Alice lets Bob vote for her for 2 weeks while she travels |
+| `invite_create`, `invite_revoke` | `invite.manage` | delegable | Dana creates 50 clerk invites; revokes one sent to the wrong email. `invite_create` asks each time when the invite carries a profile beyond member, or a seat |
+| `invite_list` | `invite.manage` | read, delegable | Dana checks which of her invites have been used |
+| `profile_create`, `profile_edit` | `permission.grant` | governed, delegable | New profile `treasurer` → `[treasury.view, transfer.create]`; during setup each asks each time |
+| `role_assign`, `role_revoke` (profile ↔ user) | `role.assign`, `role.revoke` | governed, delegable | Give Bob `treasurer` → proposal under the root department's policy; during setup `role_assign` asks each time |
+| `delegation_grant`, `delegation_accept` | `self.delegate` | confirm | Alice lets Bob vote for her for 2 weeks while she travels; Bob accepts. Prepared by a delegate, each waits for the member's own approval |
+| `delegation_revoke` | `self.delegate` | delegable | Alice ends Bob's grant when she is back |
+| `delegation_revoke_all` (every open grant the caller gave, a page at a time) | `self.delegate` | | Alice ends every grant she gave with one call; never under a grant |
 | `delegation_request` (by the delegate: any signed-in principal, e.g. an AI connection) | `self.join` | | Claude asks Alice for `[proposal.vote, proposal.create]`, 24 h |
-| `delegation_request_decide` (by the grantor) | `self.delegate` | | Alice approves only voting |
-| `delegation_list`, `delegable_operations` | `self.data_view` | read | Alice's grants; delegable operations: `[proposal.vote, proposal.create, …]` |
+| `delegation_request_decide` (by the grantor) | `self.delegate` | delegable | Alice approves only voting. Approving asks each time; declining is direct |
+| `delegation_list`, `delegable_operations` | `self.data_view` | read, delegable | Alice's grants; the operations a permission-named grant covers: `[proposal.vote, proposal.create, …]` |
+| `delegation_groups` (the groups the caller can grant, each with its operations and their tiers) | `self.data_view` | read, delegable | Alice's Authorize page: "Vote for me", "Propose for me", "See my affairs and the realm", … |
+| `delegation_activity` (the events recorded under one grant, to its grantor or its delegate) | `self.data_view` | read, delegable | What `claude-conn` did under Alice's grant: two votes and a motion |
 
 A holder of `attribute.review` reads the attributes awaiting review with `attribute_pending_list`,
 `kind` and `value` in clear, before deciding with `attribute_review` (I-PRV-1); nobody decides their
@@ -210,6 +226,78 @@ the decision, never its `kind` or `value`.
 Governed identity operations follow the policy of the department named in their `department`
 argument (it must hold that permission through its positions or grants); otherwise the root's.
 
+#### Power of attorney
+
+A member lets another principal act for them with a `Delegation`: a human delegate, who accepts the
+grant, or an AI connection, whose grant is active at once. Every operation has a **tier**, in
+[`delegation.json`](../delegation.json), the same whoever the delegate is: `direct` operations run at
+once under a grant and the grantor is told afterwards; `confirm` operations ask each time, so the
+delegate only prepares the exact call and the grantor approves it; `member` operations are the
+member's own, never done under a grant nor prepared; `setup_launch` is the `founder`'s; `none` needs no
+power of attorney. The flags `delegable` and `confirm` ([§1](#operations)) mark the first two tiers. A
+`direct` operation with a condition asks each time when the condition holds: `proposal_create` with an
+action, `invite_create` with a profile beyond member or a seat, `setup_step` for the trust-policy step,
+`document_store` with keys for others, `organization_edit` when it changes the
+admins, `delegation_request_decide` when it approves, and, while the realm is in setup, where they would
+give someone power without a vote, `appoint`, `appoint_acting`, `role_assign`, `profile_create`,
+`profile_edit`, `authority_grant`, `judge_appoint`, `realm_configure_trust_policy`, `department_edit`
+when it names a head and `department_set_policy` when it names veto holders.
+
+A grant names **groups**: the 17 of `delegation.json`, each a plain-language set of operations: `see`,
+`profile`, `vote`, `propose`, `filings`, `justice`, `money`, `payout`, `identity`, `keys`, `poa`,
+`membership`, `office` (one entry per department where the grantor holds a seat), `sign`, `orgs` (one
+per organization the grantor administers), `admin` and `setup`. An operation of the `setup` group
+belongs to `admin` once the realm is launched. In `scope`, and in the arguments of `delegation_grant`,
+`delegation_request` and `delegation_request_decide`, a group is `group:<id>`, an office group
+`group:office:<department id>`, an organization group `group:orgs:<organization id>`, and everything
+`group:*`. A grant names either groups or permission names, never both.
+
+- **Everything** (`group:*`) covers every group, those the grantor gains later included, and every
+  operation a later release adds. It lasts at most 90 days, each group's own longest duration still
+  applies under it, and it never covers a `member` or `founder` operation.
+- **Longest durations.** A grant of a group lasts at most the group's `longest`: one year, except
+  `money` and `admin` (90 days) and `setup` (30 days, and never past Launch, I-ID-12). A grant naming
+  several groups lasts at most the shortest. Nothing lasts more than one year (I-ID-6).
+- **Limits are checked at use**, not only at grant: a later, stricter limit binds existing grants.
+- **Signing acts** are `confirm`, in the `sign` group: the official's own approval is their signature
+  (I-ALL-7), and the delegate only drafts. So is the one read in that group, `attribute_pending_list`:
+  a read asks each time only when it returns third parties' personal data. The signing policy's `delegable` key
+  ([§11](#signing-policy)) lets a codex make a signing permission direct instead; by default none is.
+- **Setup.** While the realm is in setup, an operation of the `setup` group runs at once under a grant
+  wherever the founder's own call would: most are not governed before launch, and Launch is the
+  founder's review. After launch it is governed, and a delegate's call files a proposal tied to the
+  grant (I-ID-10). Money (`transfer_create`, `payroll_run`) is always a proposal, and giving someone
+  power without a vote asks each time.
+- **Inboxes.** Under `see` a delegate reads the grantor's own inbox only. A department's or an
+  organization's inbox is read only under `office:<department>` or `orgs:<organization>`.
+- **Tasks.** A task scheduled or rescheduled under a grant is tied to that grant. When it runs, its
+  operation must be one the grant covers directly at that moment: never a `confirm`, `member` or
+  `founder` operation, and never one outside the grant's groups. The task fails once the grant is
+  revoked, replaced or expired (I-EXT-5).
+- **Grants made before groups.** A grant whose `scope` names permissions covers only these operations,
+  with the rules that held before groups: `me`, `profile_update`, `zone_set`, `zone_clear`,
+  `proposal_create` (a motion), `proposal_withdraw`, `proposal_vote`, `transfer_create` (always a
+  proposal), `invoice_check`, `my_invoices`, `tax_declare`, `license_apply`, `license_renew`,
+  `request_file`, `request_get`, `dispute_file`, `dispute_withdraw`, `dispute_get`, `evidence_submit`,
+  `appeal_file`, `bid_submit`, `bid_withdraw`, `notification_list` and `notification_read`. Not
+  `attribute_list`, delegable then too: an attribute is I-PRV-1 data, and such a grant was consented
+  to for the member's own card, notifications and invoices; it is read under `see`. Under such a grant
+  a proposal with an action, a payout account, an identity proof, an attribute, a quarter move and a
+  federal vote stay refused: nothing widens an old grant. A new grant may still name permissions, and
+  then it covers these alone.
+- **The vocabulary.** `delegation_groups` returns the groups the caller can grant, each with its
+  label, summary, risk and longest duration, whether some of its operations ask each time, and the
+  caller's operations in it with their tiers, as `delegation.json` states them, so every GOS and
+  every client show the same words. A GOS that has groups answers it; `delegable_operations` keeps
+  its reply, the operations a permission-named grant covers.
+- **The record.** Every delegated act's `Event` names the grant it ran under (`Event.grant`, §11),
+  and `delegation_activity` pages the events of one grant, newest first, to its grantor and its
+  delegate; anyone else is refused, and an unknown grant is `NotFound`. After each direct update the
+  grantor is notified in the realm; reads are queries and are not audited.
+- **Revoking.** `delegation_revoke` ends one grant and is direct under the `poa` group: ending a
+  grant only removes power. `delegation_revoke_all` ends every open grant the caller gave, `limit` at
+  a time, and replies how many it revoked and `next` until none is left; it never runs under a grant.
+
 ### Invariants
 
 - I-ID-1: A user's `id` equals the principal that signs their calls; nobody can act as another user
@@ -219,9 +307,13 @@ argument (it must hold that permission through its positions or grants); otherwi
 - I-ID-3: Nobody can assign a profile containing a permission they do not hold themselves.
 - I-ID-4: A `banned` member can call nothing except read operations on public data.
 - I-ID-5: Private data is readable only by its owner and by principals the owner shared it with.
-- I-ID-6: A delegation never covers a permission the grantor lacks at the time of use, never a
-  `signing` permission the signing policy keeps personal, never `all`, and never lasts more than
-  one year.
+- I-ID-6: A grant by groups covers an operation only if it names the operation's group (or `group:*`),
+  the grantor holds the operation's permission at the time of use (for an office group, through a seat
+  in the named department; for an organization group, as an admin of the named organization), and the
+  group's longest duration since the grant's start has not passed. `group:*` never covers a `member` or
+  `founder` operation and lasts at most 90 days. A grant by permissions covers only the operations
+  listed under [Power of attorney](#power-of-attorney). No grant covers a `signing` permission the
+  signing policy keeps personal or `all`, and none lasts more than one year.
 - I-ID-7: A delegate acts only within `starts_at`…`expires_at` and while the grant is `active`.
 - I-ID-8: Every delegated act records both the grantor and the delegate.
 - I-ID-9: An identity or attribute authorizes nothing once `rejected`, or past its `expires_at`. What a
@@ -229,9 +321,16 @@ argument (it must hold that permission through its positions or grants); otherwi
 - I-ID-10: A delegate's proposal is a motion, with no action. A delegable governed call made under a
   delegation is filed as a proposal, and the GOS records the grant it was filed under. It replays
   unless that grant was revoked or replaced, even if the grant has expired since, and only if the
-  grant could still make that call. A delegate does not vote on a proposal it filed. Power of
-  attorney itself, payout accounts, identity proofs, attributes, moving to another quarter and
-  federal votes are never delegable.
+  grant could still make that call. A delegate never votes on a proposal it filed, whichever grantor
+  it votes for: a delegate that holds grants from two members and filed for one votes on it for
+  neither. Granting or accepting power of attorney, approving a request for it, payout accounts,
+  identity proofs,
+  attributes, moving to another quarter and federal votes are never done directly under a grant: they
+  are `confirm` (outside setup, [§2](#power-of-attorney)).
+- I-ID-12: A setup grant ends at launch: `setup_launch` removes the `setup` group from every grant,
+  and a grant left with no group ends. `setup_launch` itself is never done under a grant nor prepared.
+- I-ID-13: No delegate of a member votes on a proposal that any delegate of the same member filed
+  under a grant, whatever that grant's status now. The member votes on it as usual.
 
 ## 3. Departments and organizations
 
@@ -263,19 +362,20 @@ Two kinds of body:
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `department_create` | `org.create` | governed | Create department Health under the root → proposal `P-12` |
-| `department_edit`, `department_delete` | `org.set_policy` | governed | Move Roads under Infrastructure; make `dana` head of Civil Registry; mark the Council as the `plenary` |
-| `department_set_policy` | `org.set_policy` | governed | Infrastructure goes from 1-of-1 to 2-of-3 with 50% quorum |
-| `department_get`, `department_list`, `department_chart` | `realm.data_view` | read | Civil Registry's chart: 3 positions, 7 of 9 seats filled |
-| `position_create`, `position_edit`, `position_close` | `org.manage_members` | governed | Open 2 `inspector` seats in Infrastructure at 2,400 REALM/month |
-| `appoint`, `appoint_acting`, `appointment_end` | `org.appoint` | governed | Appoint Carla planning officer; Bob acts as head while Dana is on leave |
-| `department_expel` | `org.expel` | governed | Expel a member from Infrastructure after a misconduct verdict |
-| `authority_grant`, `authority_revoke` | `org.grant_authority`, `org.revoke_authority` | governed | Finance grants Infrastructure spending on `ROADS` |
-| `organization_register` | `organization.add` | | Dr. Ana registers Clinic B and becomes its admin |
-| `organization_edit` | `organization.edit` (its admins) | | Clinic B updates its description and adds an admin |
-| `representative_add`, `representative_remove` | `organization.edit` (its admins) | | Clinic B adds `records-bot` as an agent supervised by Dr. Ana |
-| `organization_set_status` | `organization.delete` | governed | Suspend BuildCo while it is investigated for fraud |
-| `organization_get`, `organization_list` | `realm.data_view` | read | Licensed health providers in North |
+| `department_create` | `org.create` | governed, delegable | Create department Health under the root → proposal `P-12` |
+| `department_edit`, `department_delete` | `org.set_policy` | governed, delegable | Move Roads under Infrastructure; make `dana` head of Civil Registry; mark the Council as the `plenary`. During setup `department_edit` asks each time when it names a head |
+| `department_set_policy` | `org.set_policy` | governed, delegable | Infrastructure goes from 1-of-1 to 2-of-3 with 50% quorum. During setup it asks each time when the policy names veto holders |
+| `department_get`, `department_list`, `department_chart` | `realm.data_view` | read, delegable | Civil Registry's chart: 3 positions, 7 of 9 seats filled |
+| `position_create`, `position_edit`, `position_close` | `org.manage_members` | governed, delegable | Open 2 `inspector` seats in Infrastructure at 2,400 REALM/month |
+| `appoint`, `appoint_acting`, `appointment_end` | `org.appoint` | governed, delegable | Appoint Carla planning officer; Bob acts as head while Dana is on leave. During setup an appointment asks each time |
+| `department_expel` | `org.expel` | governed, delegable | Expel a member from Infrastructure after a misconduct verdict |
+| `authority_grant`, `authority_revoke` | `org.grant_authority`, `org.revoke_authority` | governed, delegable | Finance grants Infrastructure spending on `ROADS`; during setup `authority_grant` asks each time |
+| `organization_register` | `organization.add` | delegable | Dr. Ana registers Clinic B and becomes its admin |
+| `organization_edit` | `organization.edit` (its admins) | delegable | Clinic B updates its description and adds an admin; asks each time when it changes the admins |
+| `representative_add` | `organization.edit` (its admins) | confirm | Clinic B adds `records-bot` as an agent supervised by Dr. Ana; prepared by a delegate, it waits for an admin's approval |
+| `representative_remove` | `organization.edit` (its admins) | delegable | Clinic B removes a physician who left |
+| `organization_set_status` | `organization.delete` | governed, delegable | Suspend BuildCo while it is investigated for fraud |
+| `organization_get`, `organization_list` | `realm.data_view` | read, delegable | Licensed health providers in North |
 
 A department is a delegation from its parent, which decides whether it exists: `department_create` and
 `department_delete` are governed by the parent, the root for a top-level department (§1); the root is
@@ -328,18 +428,18 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `proposal_create` | `proposal.create` | delegable | `{title: "Bike lane on Main St", department: "infrastructure", action: {…}}` → `P-7` |
+| `proposal_create` | `proposal.create` | delegable | `{title: "Bike lane on Main St", department: "infrastructure", action: {…}}` → `P-7`. Under a grant a motion is direct; a proposal that carries an action asks each time |
 | `proposal_withdraw` | `proposal.create` (own) | delegable | Bob withdraws his draft `P-8` |
 | `proposal_vote` | `proposal.vote` | delegable | `{proposal: "P-7", choice: "yes", on_behalf_of: "alice"}` → `V-31` |
-| `proposal_open`, `proposal_finalize`, `proposal_execute` | `proposal.manage` | | After the deadline: 412 yes, 120 no, quorum met → `accepted`; execute pays BuildCo |
-| `proposal_stop` | `proposal.manage` | governed | `P-12`, scoped to Infrastructure, is scheduled for 1 Dec; under Infrastructure's policy a vote (`P-15`) calls `proposal_stop` on it and it ends `withdrawn` |
-| `proposal_get`, `proposal_list` | `realm.data_view` | read | Open proposals in quarter North |
-| `proposal_linked_from` | `realm.data_view` | read | The proposals that link to `P-7`: `P-9` replaces it, `P-11` and `P-12` relate to it |
-| `mandate_create`, `mandate_revoke` | `mandate.create` | governed | Grant Infrastructure the road-works mandate (via `P-4`) |
-| `mandate_assign_executor` | `mandate.assign_executor` | governed | Make Infrastructure the mandate's executor |
-| `contract_create` | `contract.create_under_mandate` | | Sign `C-9` with BuildCo under the road-works mandate |
-| `contract_terminate` | `contract.terminate` | signing | End `C-9` after BuildCo misses two milestones (court order) |
-| `governance_update` (the realm's voting window, threshold, quorum and casting vote) | `governance.update` | governed | Voting window from 7 to 5 days; Dana's vote decides ties |
+| `proposal_open`, `proposal_finalize`, `proposal_execute` | `proposal.manage` | delegable | After the deadline: 412 yes, 120 no, quorum met → `accepted`; execute pays BuildCo |
+| `proposal_stop` | `proposal.manage` | governed, delegable | `P-12`, scoped to Infrastructure, is scheduled for 1 Dec; under Infrastructure's policy a vote (`P-15`) calls `proposal_stop` on it and it ends `withdrawn` |
+| `proposal_get`, `proposal_list` | `realm.data_view` | read, delegable | Open proposals in quarter North |
+| `proposal_linked_from` | `realm.data_view` | read, delegable | The proposals that link to `P-7`: `P-9` replaces it, `P-11` and `P-12` relate to it |
+| `mandate_create`, `mandate_revoke` | `mandate.create` | governed, delegable | Grant Infrastructure the road-works mandate (via `P-4`) |
+| `mandate_assign_executor` | `mandate.assign_executor` | governed, delegable | Make Infrastructure the mandate's executor |
+| `contract_create` | `contract.create_under_mandate` | confirm | Sign `C-9` with BuildCo under the road-works mandate. Prepared by a delegate, it waits for the member's approval: it binds the realm to an outside party at once |
+| `contract_terminate` | `contract.terminate` | signing, confirm | End `C-9` after BuildCo misses two milestones (court order) |
+| `governance_update` (the realm's voting window, threshold, quorum and casting vote) | `governance.update` | governed, delegable | Voting window from 7 to 5 days; Dana's vote decides ties |
 
 ### Invariants
 
@@ -494,29 +594,29 @@ There is no balance entity: the ledgers are the source of truth.
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `treasury_view`, `ledger_view`, `report_view` | `treasury.view` | read | Finance sees `ROOT` 1.2M, `ROADS` 180k REALM |
-| `treasury_configure`, `token_register`, `nft_token_register` | `treasury.manage` | governed | Quarterly allocation epochs; register ckUSDC |
+| `treasury_view`, `ledger_view`, `report_view` | `treasury.view` | read, delegable | Finance sees `ROOT` 1.2M, `ROADS` 180k REALM |
+| `treasury_configure`, `token_register`, `nft_token_register` | `treasury.manage` | governed, delegable | Quarterly allocation epochs; register ckUSDC |
 | `transfer_create` (from a fund) | `transfer.create` | delegable, governed | `{fund: "ROADS", to: "buildco", amount: 50000}` → proposal under Infrastructure's policy |
-| `transfer_revert` | `transfer.delete` | governed | Cancel a duplicate pending payment |
-| `invoice_create` | `treasury.manage` | | Registration fee: 10 REALM for new member Bob |
-| `invoice_item_add` | `treasury.manage` | | The sanitation charge joins Alice's pending water invoice as a second line |
+| `transfer_revert` | `transfer.delete` | governed, delegable | Cancel a duplicate pending payment |
+| `invoice_create` | `treasury.manage` | delegable | Registration fee: 10 REALM for new member Bob |
+| `invoice_item_add` | `treasury.manage` | delegable | The sanitation charge joins Alice's pending water invoice as a second line |
 | `invoice_check` (own) | `self.invoice_refresh` | delegable | Alice paid `INV-301` → `paid` |
-| `invoice_refresh` (any) | `invoice.refresh` | | Finance re-checks all pending invoices |
+| `invoice_refresh` (any) | `invoice.refresh` | delegable | Finance re-checks all pending invoices |
 | `my_invoices` | `self.data_view` | read, delegable | Alice: `INV-301`, 120 REALM, due 31 Dec |
-| `fund_create`, `period_open`, `period_close` | `org.manage_budget` | governed | Create fund `WELFARE`; close `FY2025` |
-| `budget_draft`, `budget_propose` (the draft lines of a period together: a fund's, or every fund's), `budget_amend` | `org.manage_budget` | governed | FY2027's lines drafted, then proposed as one budget → proposal |
-| `budget_extend` | `org.manage_budget` | | FY2027 opens: FY2026's adopted lines carry over as `extended`, fund by fund, for the funds with no extended, proposed or adopted line in FY2027 yet; `Conflict` when none is left |
-| `allocation_rule_draft`, `allocation_rule_propose` | `org.manage_budget` | governed | Welfare share from 30% to 35% → proposal |
-| `payroll_run` | `org.manage_budget` | governed | November salaries: 23 seats, 51,200 REALM |
-| `loan_create` | `org.manage_budget` | governed | Borrow 500,000 REALM from Bank A over 10 years → proposal |
-| `loan_repay` | `org.manage_budget` | | Finance records a repayment of 80,000 REALM |
-| `loan_list` | `treasury.view` | read | The realm's loans and what is outstanding |
-| `report_issue` (with the issuer's `adjustments`, for a report in terms the ledger doesn't keep) | `treasury.manage` | signing | Finance issues the FY2025 statements |
-| `tax_policy_draft`, `tax_policy_propose` | `tax.manage` | governed | `TAX-POLICY-4` drafted with `property_tax` at 0.5 %, then proposed → realm-wide vote; legislation checks each entry at the draft and again at the proposal |
-| `tax_assess` | `tax.assess` | | Annual run: 1,180 property-tax invoices |
+| `fund_create`, `period_open`, `period_close` | `org.manage_budget` | governed, delegable | Create fund `WELFARE`; close `FY2025` |
+| `budget_draft`, `budget_propose` (the draft lines of a period together: a fund's, or every fund's), `budget_amend` | `org.manage_budget` | governed, delegable | FY2027's lines drafted, then proposed as one budget → proposal |
+| `budget_extend` | `org.manage_budget` | delegable | FY2027 opens: FY2026's adopted lines carry over as `extended`, fund by fund, for the funds with no extended, proposed or adopted line in FY2027 yet; `Conflict` when none is left |
+| `allocation_rule_draft`, `allocation_rule_propose` | `org.manage_budget` | governed, delegable | Welfare share from 30% to 35% → proposal |
+| `payroll_run` | `org.manage_budget` | governed, delegable | November salaries: 23 seats, 51,200 REALM |
+| `loan_create` | `org.manage_budget` | governed, delegable | Borrow 500,000 REALM from Bank A over 10 years → proposal |
+| `loan_repay` | `org.manage_budget` | delegable | Finance records a repayment of 80,000 REALM |
+| `loan_list` | `treasury.view` | read, delegable | The realm's loans and what is outstanding |
+| `report_issue` (with the issuer's `adjustments`, for a report in terms the ledger doesn't keep) | `treasury.manage` | signing, confirm | Finance issues the FY2025 statements |
+| `tax_policy_draft`, `tax_policy_propose` | `tax.manage` | governed, delegable | `TAX-POLICY-4` drafted with `property_tax` at 0.5 %, then proposed → realm-wide vote; legislation checks each entry at the draft and again at the proposal |
+| `tax_assess` | `tax.assess` | delegable | Annual run: 1,180 property-tax invoices |
 | `tax_declare` | `tax.declare` | delegable | `{organization: "clinic-b", period: "2026-Q3", base: "revenue", amount: 182000}` → `INV-412` |
-| `payment_account_add`, `payment_account_remove` | `self.data_manage` | | Bob adds his ckBTC address |
-| `token_force_transfer`, `token_freeze` | `token.force_transfer`, `token.freeze` | signing, governed | Court-ordered restitution: 500 REALM from Mallory to Alice; freeze Mallory's account meanwhile |
+| `payment_account_add`, `payment_account_remove` | `self.data_manage` | confirm | Bob adds his ckBTC address; prepared by a delegate, it waits for his approval |
+| `token_force_transfer`, `token_freeze` | `token.force_transfer`, `token.freeze` | signing, governed, confirm | Court-ordered restitution: 500 REALM from Mallory to Alice; freeze Mallory's account meanwhile |
 
 A tax policy's `taxes` are typed entries, so legislation can check them one by one: a rule on
 `tax_policy_propose` ranges over the entries of the saved policy the id names, one check per entry with
@@ -625,16 +725,16 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `land_register` | `nft.mint` | governed | Register `L-17` for Alice after the survey |
-| `land_transfer` | `nft.force_transfer` | signing, governed | Court orders `L-17` moved from Mallory to Alice (normal sales use the ledger) |
-| `land_assess` | `land.assess` | signing | The assessor sets `L-17`'s value at 95,000 REALM and its area at 120 m² |
-| `land_list`, `land_map` (a viewport of at most 32×32 cells) | `realm.data_view` | read | Map of quarter North's parcels |
-| `land_mint_nft` | `nft.mint` | | Mint `LAND` #4412 for `L-17` to Alice |
-| `land_freeze`, `land_unfreeze` | `nft.freeze` | signing | Freeze `L-17` during an ownership dispute |
-| `zone_define` | `realm.configure` | governed | Define the district Riverside, which members name as their `home_zone` |
+| `land_register` | `nft.mint` | governed, delegable | Register `L-17` for Alice after the survey |
+| `land_transfer` | `nft.force_transfer` | signing, governed, confirm | Court orders `L-17` moved from Mallory to Alice (normal sales use the ledger) |
+| `land_assess` | `land.assess` | signing, confirm | The assessor sets `L-17`'s value at 95,000 REALM and its area at 120 m² |
+| `land_list`, `land_map` (a viewport of at most 32×32 cells) | `realm.data_view` | read, delegable | Map of quarter North's parcels |
+| `land_mint_nft` | `nft.mint` | delegable | Mint `LAND` #4412 for `L-17` to Alice |
+| `land_freeze`, `land_unfreeze` | `nft.freeze` | signing, confirm | Freeze `L-17` during an ownership dispute |
+| `zone_define` | `realm.configure` | governed, delegable | Define the district Riverside, which members name as their `home_zone` |
 | `zone_set`, `zone_clear` | `self.data_manage` | delegable | Alice sets the cell she lives in as her home cell |
-| `credential_issue` | `credential.sign` | signing | Dr. Ana issues `{schema: "health.prescription/1", holder: "alice", organization: "clinic-b", prepared_by: "records-bot"}` → `CRED` #4412 |
-| `credential_revoke` | `credential.sign` | signing | Revoke a diploma issued in error; the token is frozen as revoked |
+| `credential_issue` | `credential.sign` | signing, confirm | Dr. Ana issues `{schema: "health.prescription/1", holder: "alice", organization: "clinic-b", prepared_by: "records-bot"}` → `CRED` #4412 |
+| `credential_revoke` | `credential.sign` | signing, confirm | Revoke a diploma issued in error; the token is frozen as revoked |
 | `credential_verify` | — (public) | read | A pharmacy checks `CRED` #4412: valid, issuer licensed, not expired |
 
 ### Invariants
@@ -668,15 +768,15 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
 | `license_apply`, `license_renew` | `license.apply` | delegable | Clinic B applies for a health licence with its dossier |
-| `license_decide` | `license.issue` | signing | A Health officer approves → `LIC-12` active for 2 years |
-| `license_suspend`, `license_revoke` | `license.revoke` | signing | Suspend `LIC-12` pending an inspection |
+| `license_decide` | `license.issue` | signing, confirm | A Health officer approves → `LIC-12` active for 2 years |
+| `license_suspend`, `license_revoke` | `license.revoke` | signing, confirm | Suspend `LIC-12` pending an inspection |
 | `license_list`, `license_verify` | — (public) | read | A patient checks Clinic B: licence active |
-| `procedure_define` | `procedure.define` | governed | Health licences: decided within 3 months, silence positive |
-| `procedure_list` | `realm.data_view` | read | The realm's procedures |
+| `procedure_define` | `procedure.define` | governed, delegable | Health licences: decided within 3 months, silence positive |
+| `procedure_list` | `realm.data_view` | read, delegable | The realm's procedures |
 | `request_file` | `request.file` | delegable | Bob files an access-to-information request |
 | `request_get` (own) | `self.data_view` | read, delegable | Bob checks `REQ-14` |
-| `request_list` | `request.decide` | read | The clerk lists the requests due this week |
-| `request_set_due`, `request_decide` | `request.decide` | | The clerk extends `REQ-14` by a month, then grants it with the list |
+| `request_list` | `request.decide` | read, delegable | The clerk lists the requests due this week |
+| `request_set_due`, `request_decide` | `request.decide` | delegable | The clerk extends `REQ-14` by a month, then grants it with the list |
 
 ### Invariants
 
@@ -724,20 +824,20 @@ codex-defined credential NFTs; GGG has no report entity.
 |---|---|---|---|
 | `dispute_file`, `dispute_withdraw` | `dispute.create` | delegable | `{respondent: "Department:infrastructure", title: "Permit refused"}` → `D-14` |
 | `dispute_get` (own) | `dispute.view` | read, delegable | Bob checks `D-14` |
-| `dispute_list_all` | `dispute.view_all` | read | The court clerk lists all open disputes |
-| `dispute_accept`, `dispute_reject` | `dispute.accept`, `dispute.reject` | signing | The court accepts `D-14` → `CASE-12` |
-| `case_assign` | `dispute.assign` | | Assign Judge Elena to `CASE-12` |
+| `dispute_list_all` | `dispute.view_all` | read, delegable | The court clerk lists all open disputes |
+| `dispute_accept`, `dispute_reject` | `dispute.accept`, `dispute.reject` | signing, confirm | The court accepts `D-14` → `CASE-12` |
+| `case_assign` | `dispute.assign` | delegable | Assign Judge Elena to `CASE-12` |
 | `evidence_submit` | `dispute.create` (party) | delegable | Bob uploads his building plans, encrypted |
-| `evidence_evaluate` | `evidence.evaluate` | signing | Elena admits the plans as evidence |
-| `verdict_draft` | `resolution.draft` | | Elena drafts the verdict |
-| `verdict_issue`, `verdict_finalize` | `resolution.issue`, `resolution.finalize` | signing | Elena issues it; it becomes final when the 14-day appeal window passes |
-| `verdict_link_contract`, `verdict_modify_terms` | `resolution.link_contract`, `resolution.modify_terms` | signing | Link the verdict to contract `C-9` it terminates |
+| `evidence_evaluate` | `evidence.evaluate` | signing, confirm | Elena admits the plans as evidence |
+| `verdict_draft` | `resolution.draft` | delegable | Elena drafts the verdict |
+| `verdict_issue`, `verdict_finalize` | `resolution.issue`, `resolution.finalize` | signing, confirm | Elena issues it; it becomes final when the 14-day appeal window passes |
+| `verdict_link_contract`, `verdict_modify_terms` | `resolution.link_contract`, `resolution.modify_terms` | signing, confirm | Link the verdict to contract `C-9` it terminates |
 | `appeal_file` | `dispute.create` (party) | delegable | Infrastructure appeals within 14 days |
-| `appeal_decide` | `appeal.allow` | signing | The appeals court denies the appeal |
-| `penalty_execute` (the permission depends on the kind: fine and restitution `fine.apply`; suspension and revocation `access.revoke`; termination `contract.terminate`; freeze `instrument.lock`; injunction and community service `enforcement.record`) | `fine.apply`, `access.revoke`, `contract.terminate`, `instrument.lock`, `enforcement.record` | signing | Mallory's 500 REALM fine → invoice `INV-520` |
-| `enforcement_record`, `enforcement_escalate`, `enforcement_notify` | `enforcement.record`, `enforcement.escalate`, `notification.send` | | Record that the permit was issued as ordered |
-| `court_create`, `judge_appoint`, `judge_revoke` | `org.create`, `org.appoint` | governed | Create South First Instance Court; appoint Judge Elena |
-| `resolution_query` | `resolution.query` | read | All verdicts about building permits since 2026 |
+| `appeal_decide` | `appeal.allow` | signing, confirm | The appeals court denies the appeal |
+| `penalty_execute` (the permission depends on the kind: fine and restitution `fine.apply`; suspension and revocation `access.revoke`; termination `contract.terminate`; freeze `instrument.lock`; injunction and community service `enforcement.record`) | `fine.apply`, `access.revoke`, `contract.terminate`, `instrument.lock`, `enforcement.record` | signing, confirm | Mallory's 500 REALM fine → invoice `INV-520` |
+| `enforcement_record`, `enforcement_escalate`, `enforcement_notify` | `enforcement.record`, `enforcement.escalate`, `notification.send` | delegable | Record that the permit was issued as ordered |
+| `court_create`, `judge_appoint`, `judge_revoke` | `org.create`, `org.appoint` | governed, delegable | Create South First Instance Court; appoint Judge Elena. During setup `judge_appoint` asks each time |
+| `resolution_query` | `resolution.query` | read, delegable | All verdicts about building permits since 2026 |
 
 ### Invariants
 
@@ -770,13 +870,13 @@ it was awarded.
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `tender_create`, `tender_open`, `tender_close`, `tender_cancel` | `tender.manage` | governed | Infrastructure drafts `T-5`, then opens it |
-| `tender_list`, `tender_get` | `realm.data_view` | read | Open tenders |
-| `tender_notice` (in an `External` of kind `journal`, or `realm` for the realm's own; `at` defaults to now and is never in the future) | `tender.manage` | | Infrastructure records that `T-5`'s notice appeared in the realm's journal |
+| `tender_create`, `tender_open`, `tender_close`, `tender_cancel` | `tender.manage` | governed, delegable | Infrastructure drafts `T-5`, then opens it |
+| `tender_list`, `tender_get` | `realm.data_view` | read, delegable | Open tenders |
+| `tender_notice` (in an `External` of kind `journal`, or `realm` for the realm's own; `at` defaults to now and is never in the future) | `tender.manage` | delegable | Infrastructure records that `T-5`'s notice appeared in the realm's journal |
 | `bid_submit`, `bid_withdraw` | `bid.submit` | delegable | BuildCo's agent submits an encrypted bid on `T-5` |
-| `bids_reveal` | `tender.manage` | governed | After 30 Nov the 4 bids are decrypted |
-| `bid_score` | `bid.evaluate` | signing | Carla and two colleagues score each bid |
-| `tender_award` | `tender.manage` | signing, governed | Award `T-5` to BuildCo (score 86) → contract `C-9` |
+| `bids_reveal` | `tender.manage` | governed, delegable | After 30 Nov the 4 bids are decrypted |
+| `bid_score` | `bid.evaluate` | signing, confirm | Carla and two colleagues score each bid |
+| `tender_award` | `tender.manage` | signing, governed, confirm | Award `T-5` to BuildCo (score 86) → contract `C-9` |
 
 ### Invariants
 
@@ -826,21 +926,21 @@ whole federation.
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `quarter_register`, `quarter_deregister`, `quarter_configure` | `quarter.register`, `quarter.deregister`, `quarter.configure` | governed | Register quarter South |
-| `quarter_secede` | `quarter.secede` | governed | South leaves the federation after its own vote |
-| `quarter_join_federation` | `quarter.join_federation` | governed | The independent realm Harbor joins Agora as a quarter |
+| `quarter_register`, `quarter_deregister`, `quarter_configure` | `quarter.register`, `quarter.deregister`, `quarter.configure` | governed, delegable | Register quarter South |
+| `quarter_secede` | `quarter.secede` | governed, delegable | South leaves the federation after its own vote |
+| `quarter_join_federation` | `quarter.join_federation` | governed, delegable | The independent realm Harbor joins Agora as a quarter |
 | `quarter_directory`, `join_targets` | — (public) | read | Quarters and their populations; the least-populated active quarter a new member joins |
-| `self_change_quarter` | `self.change_quarter` | | Bob moves to South |
+| `self_change_quarter` | `self.change_quarter` | confirm | Bob moves to South; prepared by a delegate, it waits for his approval |
 | `quarter_sync`, `quarter_report` (quarter → capital) | `quarter.sync` | | North reports population 1,240 and codex 1.4.2 to the capital |
-| `federal_vote_propose` | `federal_vote.propose` | | Propose `FV-3` |
-| `federal_vote_cancel` | `federal_vote.manage` | governed | Withdraw `FV-3` before its deadline |
+| `federal_vote_propose` | `federal_vote.propose` | confirm | Propose `FV-3`; prepared by a delegate, it waits for the member's approval |
+| `federal_vote_cancel` | `federal_vote.manage` | governed, delegable | Withdraw `FV-3` before its deadline |
 | `federal_vote_finalize` | — (public) | | After 15 Nov: 3 of 4 quarters in favour → `passed` |
 | `federation_message` | `quarter.sync` | | The capital announces codex 1.5.0 to its quarters |
-| `sync_source_add`, `sync_source_remove` | `sync_source.manage` | governed | València votes to take legislation from CV; later it stops taking EMSHI's |
-| `follower_accept`, `follower_remove` | `follower.manage` | governed | CV votes to accept València as a follower |
+| `sync_source_add`, `sync_source_remove` | `sync_source.manage` | governed, delegable | València votes to take legislation from CV; later it stops taking EMSHI's |
+| `follower_accept`, `follower_remove` | `follower.manage` | governed, delegable | CV votes to accept València as a follower |
 | `link_notify` (from the capital at the other side of a link) | `link.sync` (held only by the capitals of the realm's links) | | CV tells València their link is `active`; later, València tells CV it `ended` |
 | `follower_report` (from a follower's capital, over an active link) | `link.sync` | | València reports to CV the layers it runs, that it is compliant, and its population |
-| `follower_list` | `realm.data_view` | read | CV's followers, with what each runs |
+| `follower_list` | `realm.data_view` | read, delegable | CV's followers, with what each runs |
 
 ### Time zones
 
@@ -943,7 +1043,7 @@ installed whole; and the paths from several sync sources must form one chain in 
 | `External` | `id`, `name`, `kind` (authority, journal, lender, …), `channel` | A body outside the realm and outside the Internet Computer. `channel` is how a dispatch reaches it: `manual`, an operator delivers it, or an https URL, a bridge does. A second `external_add` of the same id redefines it. | The statistics office: kind `authority`, channel `manual`; the provincial gazette: kind `journal` |
 | `Dispatch` | `id`, `to` → `External`, `topic`, `title`, `body` (Json), `document` → `Document`, `codex`, `queued_at`, `status` | One notice to an outside body, queued by the realm and confirmed by whoever delivered it, with the receipt that proves it. `document` is the document it carries and `codex` the codex it concerns, when either applies. A `body` that holds personal data is an encrypted `Document` reference (I-PRV-1). | To the gazette: the new ordinance's full text, `confirmed` on 12 Nov, bulletin 214 |
 | `Task` | `id`, `op`, `args` (Json), `at`, `reason`, `status`, `scheduled_by` (`Entity:id`), `event` → `Event` | One operation scheduled for a time. `event` is the operation's own `Event` once it ran. | `user_set_status` of Bob to `inactive` on 10 Mar 2028, scheduled by the codex: the registration lapses |
-| `Event` | `id`, `op`, `user`, `by` (the delegate, when delegated), `agent` (the caller acted as an agent), `supervisor` (that agent's supervisor), `origin`, `args` (Json, secrets stripped), `result` (Json), `at` | The audit log. Append-only. | `proposal_vote` by `claude-conn` for `alice` at 09:31 → ok |
+| `Event` | `id`, `op`, `user`, `by` (the delegate, when delegated), `grant` (the grant a delegated act ran under), `agent` (the caller acted as an agent), `supervisor` (that agent's supervisor), `origin`, `args` (Json, secrets stripped), `result` (Json), `at` | The audit log. Append-only. | `proposal_vote` by `claude-conn` for `alice` under grant `DEL-4` at 09:31 → ok |
 
 Services are not entities: they are provided by licensed organizations. Courts stand on their own,
 without a justice-system entity above them.
@@ -982,23 +1082,23 @@ supervisor, and the grantor when delegated (I-ALL-7).
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `codex_install`, `codex_uninstall` | `codex.install`, `codex.uninstall` | governed | Install agora 1.5.0 → realm-wide vote |
-| `codex_revert` (the codex the active one replaced, or any earlier one by its checksum) | `codex.revert` | governed | Revert to 1.4.2 when 1.5.0 misbehaves; to 1.3.0, by its checksum, when 1.4.2 does too |
-| `codex_activate` (the pending codex, by checksum) | `codex.install` | governed | Activate the pending 1.5.0 on 1 Jan |
-| `codex_status` (the active checksum, health and the signing policy; earlier checksums a page at a time) | `realm.data_view` | read | `sha256:4be1…`, healthy; agents may hold `bid.evaluate` |
-| `legislation_release_publish` | `legislation.publish` | governed | CV publishes 1.1.0: its chapters' checksums, its calendar's, the commit, in force from 1 Jan 2027 |
+| `codex_install`, `codex_uninstall` | `codex.install`, `codex.uninstall` | governed, delegable | Install agora 1.5.0 → realm-wide vote |
+| `codex_revert` (the codex the active one replaced, or any earlier one by its checksum) | `codex.revert` | governed, delegable | Revert to 1.4.2 when 1.5.0 misbehaves; to 1.3.0, by its checksum, when 1.4.2 does too |
+| `codex_activate` (the pending codex, by checksum) | `codex.install` | governed, delegable | Activate the pending 1.5.0 on 1 Jan |
+| `codex_status` (the active checksum, health and the signing policy; earlier checksums a page at a time) | `realm.data_view` | read, delegable | `sha256:4be1…`, healthy; agents may hold `bid.evaluate` |
+| `legislation_release_publish` | `legislation.publish` | governed, delegable | CV publishes 1.1.0: its chapters' checksums, its calendar's, the commit, in force from 1 Jan 2027 |
 | `legislation_releases` (the published record, a page at a time), `legislation_chapter` (the bytes of a chapter, by checksum) | — (public) | read | CV's record: Spain's 2.4.0 as CV installed it, then CV's own 1.0.0 and 1.1.0 |
-| `notification_list` (one recipient a page at a time) | `self.data_view` | read, delegable | Alice's notifications, then Civil Registry's |
+| `notification_list` (one recipient a page at a time) | `self.data_view` | read, delegable | Alice's notifications, then Civil Registry's. Under a grant, the grantor's own; an office's only under that office's group |
 | `notification_read` (mark as read) | `self.data_manage` | delegable | Alice marks "P-7 passed" as read |
-| `notification_send` (to a user, department or organization a `Notification`; to an `External` a `Dispatch`; with `translations`, each reader gets their language) | `notification.send` | | Justice notifies Mallory of her fine; Civil Registry tells the statistics office of Bob's registration |
-| `external_add` | `external.manage` | governed | Register the statistics office and the provincial gazette |
-| `external_list` | `realm.data_view` | read | The outside bodies the realm deals with |
-| `external_report` | `external.report` | | A clerk enters the statistics office's report of a duplicate registration, with the file as evidence |
-| `dispatch_confirm` (one outcome: confirmed, with when and the receipt, or failed, with the reason; a second is `Conflict`) | `dispatch.confirm` | | The clerk confirms the gazette published the ordinance, bulletin 214 |
-| `dispatch_list` | `dispatch.confirm` | read | The outbox: what is queued for delivery |
-| `task_schedule`, `task_reschedule`, `task_cancel` | `task.schedule` | | Schedule Bob's lapse for 10 Mar 2028; cancel it when he leaves |
-| `task_list` | `realm.monitor` | read | What is scheduled for next month |
-| `events` (newest first, and where archived events are kept) | `realm.monitor` | read | The last 100 audited calls |
+| `notification_send` (to a user, department or organization a `Notification`; to an `External` a `Dispatch`; with `translations`, each reader gets their language) | `notification.send` | delegable | Justice notifies Mallory of her fine; Civil Registry tells the statistics office of Bob's registration |
+| `external_add` | `external.manage` | governed, delegable | Register the statistics office and the provincial gazette |
+| `external_list` | `realm.data_view` | read, delegable | The outside bodies the realm deals with |
+| `external_report` | `external.report` | delegable | A clerk enters the statistics office's report of a duplicate registration, with the file as evidence |
+| `dispatch_confirm` (one outcome: confirmed, with when and the receipt, or failed, with the reason; a second is `Conflict`) | `dispatch.confirm` | delegable | The clerk confirms the gazette published the ordinance, bulletin 214 |
+| `dispatch_list` | `dispatch.confirm` | read, delegable | The outbox: what is queued for delivery |
+| `task_schedule`, `task_reschedule`, `task_cancel` | `task.schedule` | delegable | Schedule Bob's lapse for 10 Mar 2028; cancel it when he leaves. A task scheduled under a grant runs only what the grant covers directly, and fails once the grant ends |
+| `task_list` | `realm.monitor` | read, delegable | What is scheduled for next month |
+| `events` (newest first, and where archived events are kept) | `realm.monitor` | read, delegable | The last 100 audited calls |
 
 A codex may be installed before it is in force: `pending`, installed and checked, until `codex_activate`
 names its checksum and makes it active at `at`, or its adopting proposal's `effective_at` does. At most
@@ -1048,7 +1148,8 @@ the realm only through `external_report`, entered by whoever received it, with t
 received is legislation's.
 
 A `Task` runs one operation at `at`, with the authority of whoever scheduled it (`scheduled_by`: a
-user, a department, the codex), never as the realm's controller. Every guard and rule runs again when
+user, a department, the codex), never as the realm's controller, and within the grant it was scheduled
+under, if any ([§2](#power-of-attorney)). Every guard and rule runs again when
 it does, so a task scheduled under old legislation obeys the legislation in force on its date, and one
 that is then refused ends `failed`. The run writes the operation's own `Event`, with origin `task`, which
 the task's `event` names; a hook on the operation sees it and reads the origin. There is no `task_run`
@@ -1062,7 +1163,8 @@ operation, and no hook of that name.
 - I-EXT-4: The `Event` log is append-only: no event is edited or deleted. A GOS may move old events
   to archive canisters, as ICRC-3 ledgers do; `events` names them, and each answers `ggg_events` for
   the events it holds.
-- I-EXT-5: A task runs with its scheduler's authority and under the legislation in force when it runs;
+- I-EXT-5: A task runs with its scheduler's authority (under a grant, [§2](#power-of-attorney)) and
+  under the legislation in force when it runs;
   a refused one ends `failed` and changes nothing.
 - I-EXT-6: A dispatch is confirmed only by a holder of `dispatch.confirm`, and a report from outside
   enters only through `external_report`: the realm never takes an outside body's word without a
@@ -1087,14 +1189,15 @@ trusted approver.
 | `realm_info` | — (public) | read | Agora: `beta`, installed version 0.9.0 |
 | `host_install` | `realm.host` (the host only) | | The installer names Alice founder, network `ic`, the registry that lists Agora |
 | `host_infrastructure` | `realm.host` (the host only) | | The installer gives Agora its frontend and file registry canisters |
-| `setup_state`, `setup_step`, `setup_launch` | `realm.configure` (founder during `setup`) | | The founder picks codex, token and branding, then launches |
-| `realm_configure` | `realm.configure` | governed | Turn on open registration; set the realm's languages |
-| `realm_configure_branding` | `realm.configure.branding` | governed | Logo and primary colour `#1E6B52` |
-| `realm_configure_tokens` | `realm.configure.tokens` | governed | Accounting currency ckUSDC |
-| `realm_configure_trust_policy` | `realm.configure.trust_policy` | governed | Require marketplace approval for new code |
-| `realm_register` | `realm.register` | governed | List Agora in the realm registry |
-| `realm_upgrade` | `realm.upgrade` | governed | Upgrade to release 0.9.1 |
-| `realm_monitor` | `realm.monitor` | read | Cycles 4.2T, memory 310 MB |
+| `setup_state`, `setup_step` | `realm.configure` (founder during `setup`) | delegable | The founder picks codex, token and branding; `setup_step` asks each time for the trust-policy step |
+| `setup_launch` | `realm.configure` (founder during `setup`) | | The founder launches: never under a grant, never prepared (I-ID-12) |
+| `realm_configure` | `realm.configure` | governed, delegable | Turn on open registration; set the realm's languages |
+| `realm_configure_branding` | `realm.configure.branding` | governed, delegable | Logo and primary colour `#1E6B52` |
+| `realm_configure_tokens` | `realm.configure.tokens` | governed, delegable | Accounting currency ckUSDC |
+| `realm_configure_trust_policy` | `realm.configure.trust_policy` | governed, delegable | Require marketplace approval for new code; during setup it asks each time |
+| `realm_register` | `realm.register` | governed, delegable | List Agora in the realm registry |
+| `realm_upgrade` | `realm.upgrade` | governed, delegable | Upgrade to release 0.9.1 |
+| `realm_monitor` | `realm.monitor` | read, delegable | Cycles 4.2T, memory 310 MB |
 
 A realm is installed by its **host**: the platform that creates its canisters, such as an installer
 or a registry. The host is a controller of the canister, or the principal the canister was installed
@@ -1150,16 +1253,17 @@ for that principal. No canister ever sees a data key or the content.
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `crypto_public_key` (the realm's vetKeys public key) | `self.data_manage` | | Alice's client fetches it to wrap her address key for Dr. Ana |
-| `crypto_derive_key` (the caller's vetKey, encrypted to a transport key) | `self.data_manage` | | Dr. Ana's client derives the key that opens what was wrapped for her |
-| `crypto_grant`, `crypto_revoke` (a scope's managers only) | `self.data_manage` | | Alice shares `user:alice:address` with Dr. Ana; revokes it after the visit |
-| `crypto_envelope` (the caller's own envelope) | `self.data_manage` | read | Dr. Ana fetches her envelope for `user:alice:address` |
-| `crypto_scopes` (the scopes the caller holds keys for) | `self.data_manage` | read | Dr. Ana's shared records |
-| `crypto_access` (who holds keys for a scope; its managers only) | `self.data_manage` | read | Alice checks who can read her address |
-| `document_store`, `document_share` (with a `recipient`, on a `basis`, with `facts`), `document_revoke`, `document_delete` | `document.manage` | | Health stores the encrypted inspection report and shares it with Clinic B, basis a public health duty |
-| `document_publish` (with the clear content's `ref` and `hash`) | `document.manage` | | Health publishes the annual report to everyone; Civil Registry sends the ordinance to the provincial gazette |
-| `document_list` (a department's documents, for its staff) | `document.manage` | read | Health's documents this year |
-| `document_get` (the department's staff and key holders; for a published document anyone, signed in or not) | `self.data_view`; — (public) for a published document | read | Dr. Ana fetches the report's reference and her wrapped key |
+| `crypto_public_key` (the realm's vetKeys public key) | `self.data_manage` | delegable | Alice's client fetches it to wrap her address key for Dr. Ana |
+| `crypto_derive_key` (the caller's vetKey, encrypted to a transport key) | `self.data_manage` | confirm | Dr. Ana's client derives the key that opens what was wrapped for her. Prepared by a delegate, it hands over a copy of the key for good, so it waits for her approval |
+| `crypto_grant`, `crypto_revoke` (a scope's managers only) | `self.data_manage` | confirm | Alice shares `user:alice:address` with Dr. Ana; revokes it after the visit |
+| `crypto_envelope` (the caller's own envelope) | `self.data_manage` | read, delegable | Dr. Ana fetches her envelope for `user:alice:address` |
+| `crypto_scopes` (the scopes the caller holds keys for) | `self.data_manage` | read, delegable | Dr. Ana's shared records |
+| `crypto_access` (who holds keys for a scope; its managers only) | `self.data_manage` | read, delegable | Alice checks who can read her address |
+| `document_store` | `document.manage` | delegable | Health stores the encrypted inspection report; asks each time when it is stored with keys for others |
+| `document_share` (with a `recipient`, on a `basis`, with `facts`), `document_revoke`, `document_delete` | `document.manage` | confirm | Health shares the report with Clinic B, basis a public health duty; prepared by a delegate, each waits for the officer's approval |
+| `document_publish` (with the clear content's `ref` and `hash`) | `document.manage` | confirm | Health publishes the annual report to everyone; Civil Registry sends the ordinance to the provincial gazette |
+| `document_list` (a department's documents, for its staff) | `document.manage` | read, delegable | Health's documents this year |
+| `document_get` (the department's staff and key holders; for a published document anyone, signed in or not) | `self.data_view`; — (public) for a published document | read, delegable | Dr. Ana fetches the report's reference and her wrapped key |
 
 A share names its `recipient`, the `User`, `Organization` or `External` the keys are for, and may state
 its `basis`: the legal basis and purpose in the realm's own words, the legislation that sets the duty or
@@ -1274,6 +1378,8 @@ There is no permission for raw database writes: everything is an operation.
 | D18 | Which vote may carry a governed call on another department's record | Decided 8 Nov 2026: a realm-wide proposal carries any call; a department's only a governed call whose governing department is that department or one below it, checked at creation and again when the action executes (I-GOV-13) |
 | D19 | Which department governs a change of parent, `department_delete`, `fund_create` and `budget_propose` | Decided 8 Nov 2026: a change of `parent` is governed by the lowest department that is, or is above, both the old and the new parent (an unknown new parent is `NotFound`), and every other edit by the department itself; `department_delete` by the parent, the root for a top-level department, never the root (`InvalidArgument`) nor a department that owns a fund (`Conflict`); creating an owned record, `fund_create`, by the owner named; `budget_propose` by the owner of the `fund` it names, or by the root when it names none and proposes every fund's lines; its lines are fixed when it files (`proposed`, with the proposal), a later one takes only `draft` lines, its totals are the sums over the lines it proposes, and `budget_extend` and the replacement of extended lines are per fund (§1, §3, §5) |
 | D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3) |
+| D21 | Power of attorney by groups | Decided 8 Nov 2026: a grant names plain-language groups of operations ([`delegation.json`](../delegation.json)), not permissions, so a member reads what they hand over and every GOS and client show the same words; every operation has a tier, and an operation asks each time only if acting without the member would decide where their money or identity points, hand lasting power or keys to someone with no vote to follow, be their personal consent or signature, or take effect at once and be hard to undo; a grant made before groups keeps covering exactly what it did; limits are checked at use ([§2](#power-of-attorney)) |
+| D22 | How a delegate proposes a codex install | Decided 8 Nov 2026: as a `proposal_create` whose action is the `codex_install` call, which carries an action and so asks each time: the member approves the exact release before the realm votes. A member who holds `codex.install` may also let a delegate call `codex_install` itself: under `setup` during setup, direct; under `admin` after launch, a governed call filed as a proposal tied to the grant (I-ID-10). No new rule: the tiers decide |
 | D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the nearest cent (a multiple of 10^(decimals − 2) smallest units); never bracket by bracket (§5) |
 | D24 | What replaces a fund's extended lines, and what an adopted budget allows | Decided 9 Nov 2026: an adopted budget that replaces a fund's extended lines makes them `amended`, so a category it dropped does not come back at the next extension (`closed` keeps meaning closed with its period); `budget_extend` carries what stood at the previous period's end, adopted, extended or closed with it, leaving out a category the new period holds as the other kind; once a fund has an adopted budget for a period, a transfer from it in a category with no adopted expense line is refused (`Conflict`), a transfer with no category counting as `transfer`, while a fund with only extended lines, or none, spends as before, and the ledger's fee for a payment is exempt; within a fund and period a category is either revenue or expense, a draft of the other kind `InvalidArgument` (§5) |
 | D25 | What `codex_revert` restores | Decided 8 Nov 2026: any earlier codex in the history, named by its checksum, or the one the active codex replaced when none is named (`opt CodexRevertArgs`, so existing callers keep working); a revert filed as a proposal names the codex it restores; the active or a pending codex is not an earlier one (`Conflict`); never `on_codex_activate`; which rule decides the vote is the GOS's (§11) |
