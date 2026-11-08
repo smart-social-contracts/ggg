@@ -2,9 +2,10 @@
 // The fixture decides a vote after its deadline (7 days), or earlier once both members have voted, so
 // the tests move the clock forward.
 //
-// A GOS may run an accepted action in the same step as the finalize, or leave it for proposal_execute
-// (I-GOV-12). The tests go through finalizeAndRun and runScheduled, which accept either; this fixture
-// leaves the action for proposal_execute.
+// A GOS may settle a proposal as its vote ends, or run an accepted action in the same step as the
+// finalize, or leave it for proposal_execute (I-GOV-12). The tests go through finalize, finalizeAndRun
+// and runScheduled, which accept all three; this fixture finalizes, and leaves the action for
+// proposal_execute.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, before, test } from 'node:test';
@@ -81,20 +82,32 @@ async function file({ action = motion, days = null, everyone = false, department
 
 const get = async (id) => ok(await as(alice).ggg_proposal_get({ id, cursor: [], limit: [] }))[0].proposal;
 const status = async (id) => tag((await get(id)).status);
-const finalizeProposal = async (id) => ok(await as(bob).ggg_proposal_finalize(id));
-const finalize = async (id) => tag((await finalizeProposal(id)).status);
 const execute = (id) => as(bob).ggg_proposal_execute(id);
 const RAN = ['Executed', 'Failed'];
 
 /**
+ * Returns the proposal once its vote is closed. A GOS that settles a proposal as its vote ends refuses
+ * the finalize with Conflict (I-GOV-12), and then the proposal already shows how it ended.
+ */
+async function finalizeProposal(id) {
+  const finalized = await as(bob).ggg_proposal_finalize(id);
+  if ('Ok' in finalized) return finalized.Ok;
+  refusedWith(finalized, 'Conflict');
+  const settled = await get(id);
+  assert.notEqual(tag(settled.status), 'Voting', `${id} was refused a finalize, but its vote is open`);
+  return settled;
+}
+const finalize = async (id) => tag((await finalizeProposal(id)).status);
+
+/**
  * Finalizes a proposal whose action is not waiting for an effective_at, and returns the proposal once the
- * action has run. Either finalize replies Accepted and proposal_execute runs the action, or finalize
- * runs it (Executed or Failed) and a later proposal_execute is a Conflict.
+ * action has run. Either it is Accepted and proposal_execute runs the action, or it is already Executed
+ * or Failed, and a later proposal_execute is a Conflict.
  */
 async function finalizeAndRun(id) {
   const finalized = await finalizeProposal(id);
   if (tag(finalized.status) === 'Accepted') return ok(await execute(id));
-  assert.ok(RAN.includes(tag(finalized.status)), `finalize replied ${tag(finalized.status)}`);
+  assert.ok(RAN.includes(tag(finalized.status)), `${id} is ${tag(finalized.status)}`);
   refusedWith(await execute(id), 'Conflict');
   return finalized;
 }
@@ -218,7 +231,6 @@ test('once every eligible member has voted the vote has ended: no vote is accept
     refusedWith(await as(voter).ggg_proposal_vote({ proposal: id, choice: { No: null }, on_behalf_of: [] }), 'Conflict');
   }
   assert.deepEqual((await get(id)).tally, { yes: 2n, no: 0n, abstain: 0n, eligible: [2n] });
-  assert.equal(await status(id), 'Voting');
   assert.equal(await finalize(id), 'Accepted');
 });
 
@@ -227,6 +239,14 @@ test('a proposal is finalized once', async () => {
   assert.equal(await finalize(id), 'Accepted');
   refusedWith(await as(bob).ggg_proposal_finalize(id), 'Conflict');
   assert.equal(await status(id), 'Accepted');
+});
+
+test('in a department vote a no can be replaced, though two approvals are out of reach', async () => {
+  const id = await file({ department: 'council' }); // the council decides 2 of 3; Alice votes yes
+  ok(await as(alice).ggg_proposal_vote({ proposal: id, choice: { No: null }, on_behalf_of: [] })); // only Bob's yes is left
+  assert.equal(await status(id), 'Voting');
+  await approve(id);
+  assert.equal(await finalize(id), 'Accepted');
 });
 
 test('a vote can be finalized early once every eligible member has voted, and is then scheduled', async () => {

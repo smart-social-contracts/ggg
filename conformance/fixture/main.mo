@@ -7,9 +7,10 @@
 /// The council has no seats: its proposals are counted like any other here, by every member, and its
 /// policy only makes a stop file a proposal instead of applying at once. So the fixture never ends a
 /// department vote early (I-GOV-7 allows it, it does not require it): that needs seats to count and
-/// veto holders, who must hold a seat (I-ORG-5). Nor does it run an accepted action as it finalizes
-/// (I-GOV-12): proposal_execute does. Nobody has granted a delegation, so nobody acts on another's
-/// behalf. Every other domain is empty, which the model allows.
+/// veto holders, who must hold a seat (I-ORG-5). Nor does it settle a proposal as its vote ends or run
+/// an accepted action as it finalizes (I-GOV-12): proposal_finalize records the outcome of a vote that
+/// has ended, and proposal_execute runs the action. Nobody has granted a delegation, so nobody acts on
+/// another's behalf. Every other domain is empty, which the model allows.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";

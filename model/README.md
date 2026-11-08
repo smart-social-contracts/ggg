@@ -277,7 +277,8 @@ Two kinds of body:
   `executed` | `failed`; `draft` | `voting` → `withdrawn`. A proposal with an action that is accepted
   with an `effective_at` still ahead goes straight on to `execution_scheduled`, then `executed` |
   `failed` | `withdrawn`. A motion has nothing to execute, so it stays `accepted`. A GOS that runs
-  the action as it finalizes shows no `accepted` for such a proposal (I-GOV-12).
+  the action itself takes a proposal with an action from `voting` straight to `executed` or `failed`
+  (I-GOV-12).
 - `Mandate.status`: `active` → `completed` | `revoked` | `expired`.
 - `Contract.status`: `draft` → `active` → `fulfilled` | `terminated` | `disputed`; `disputed` →
   `active` | `terminated`.
@@ -319,9 +320,10 @@ Two kinds of body:
   the moment every eligible member has voted. The vote of a department under an m-of-n policy may
   also end as soon as it can only be accepted: it has `m` approvals, every veto holder has voted and
   none of them against (a veto holder's `no` rejects the proposal), and its quorum is met (I-GOV-3).
-  A vote never ends early with a rejection, so until it ends a `no` can still be replaced, even when
-  `m` approvals are no longer possible; a vote with a veto holder yet to vote stays open. A realm-wide
-  vote has no such early end. When it is finalized doesn't matter: `proposal_finalize` only records
+  Only an acceptance ends a department vote this early: until its deadline, or until every eligible
+  member has voted, a `no` can still be replaced, even when `m` approvals are out of reach, and a veto
+  holder yet to vote keeps it open. The end at which every eligible member has voted can still reject.
+  Realm-wide votes are unchanged. When it is finalized doesn't matter: `proposal_finalize` only records
   the outcome, and may run once the vote has ended. After the vote ends no vote is accepted or
   replaced (`Conflict`). A vote that ended before `effective_at` does not expire: finalized before
   `effective_at` the proposal is scheduled, even if its `deadline` is later, and finalized after it
@@ -349,13 +351,16 @@ Two kinds of body:
   replaces this one (`replaced_by`), and `proposal_linked_from` lists, a page at a time and oldest
   first, every proposal that links to it. A `replaces` there means "replaced by", and `relates to` is a
   reference both ways.
-- I-GOV-12: A GOS may run an accepted action in the same step as `proposal_finalize`, or leave the
-  proposal `accepted` for `proposal_execute`; both are allowed. In the first, `proposal_finalize`
-  replies `executed` or `failed` (`execution_scheduled` while `effective_at` is ahead) and a later
-  `proposal_execute` is refused with `Conflict`. In the second, it replies `accepted` and
-  `proposal_execute` replies `executed` or `failed`. The same holds at `effective_at`: a GOS that
-  runs the action by itself then refuses `proposal_execute` with `Conflict`, one that does not waits
-  for it. The action runs once either way (I-GOV-1).
+- I-GOV-12: A GOS may settle a proposal in any of these ways, and all are allowed: (1)
+  `proposal_finalize` records the outcome and leaves an accepted action `accepted` for
+  `proposal_execute`; (2) `proposal_finalize` also runs the accepted action; (3) the GOS settles the
+  proposal itself when its vote ends, at the deciding vote or at the deadline, and a later
+  `proposal_finalize` is refused with `Conflict`. After (2) and (3) a proposal with an action is
+  `executed` or `failed`, and `proposal_execute` is refused with `Conflict`; after (1) it is
+  `accepted`, and `proposal_execute` replies `executed` or `failed`. In every way the proposal is
+  `execution_scheduled` while `effective_at` is ahead, and at `effective_at` a GOS that runs the
+  action by itself refuses `proposal_execute` with `Conflict`, one that does not waits for it. The
+  action runs once (I-GOV-1).
 
 ## 5. Finance
 
