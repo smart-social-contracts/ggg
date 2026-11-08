@@ -44,7 +44,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   var votingQuorum : T.Ratio = 0;
   var castingVote : ?Principal = null;
   /// The rule that decides a proposal (I-GOV-3). The scope's, over the votes cast, unless the proposer
-  /// states a stricter threshold, quorum or basis; the casting vote is the scope's.
+  /// states a stricter threshold, quorum or basis; the casting vote is the realm's, for a realm-wide
+  /// proposal only.
   type Rule = { threshold : T.Ratio; quorum : T.Ratio; threshold_of : T.ThresholdBasis; casting_vote : ?Principal };
   func defaultRule() : Rule = { threshold = votingThreshold; quorum = votingQuorum; threshold_of = #Cast; casting_vote = castingVote };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
@@ -58,7 +59,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     parent = null;
     is_root = true;
     head = null;
-    policy = { m = 1; n = 1; quorum = 0; veto = []; casting_vote = null };
+    policy = { m = 1; n = 1; quorum = 0; veto = [] };
     target_policy = null;
     fund = null;
   };
@@ -72,7 +73,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     parent = ?ROOT.id;
     is_root = false;
     head = null;
-    policy = { m = 2; n = 3; quorum = 0; veto = []; casting_vote = null };
+    policy = { m = 2; n = 3; quorum = 0; veto = [] };
     target_policy = null;
     fund = null;
   };
@@ -221,8 +222,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   };
 
   /// The rule a proposer states, checked against the scope's default: stricter is allowed, weaker is
-  /// refused (I-GOV-3). The casting vote is the scope's: the realm's for a realm-wide proposal, the
-  /// department's policy's for one of its proposals.
+  /// refused (I-GOV-3). The casting vote is the realm's, for a realm-wide proposal only.
   func statedRule(args : T.ProposalCreateArgs) : Result<Rule> {
     let scope = defaultRule();
     let threshold = switch (args.threshold) { case (?t) t; case null scope.threshold };
@@ -233,7 +233,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
     if (threshold > WHOLE or quorum > WHOLE) return #Err(#InvalidArgument("a ratio is at most 100 000 000 (100 %)"));
     let casting_vote = switch (args.department) {
-      case (?d) { switch (findDepartment(d)) { case (?found) { if (found.is_root) scope.casting_vote else found.policy.casting_vote }; case null null } };
+      case (?d) { switch (findDepartment(d)) { case (?found) { if (found.is_root) scope.casting_vote else null }; case null null } };
       case null scope.casting_vote;
     };
     #Ok({ threshold; quorum; threshold_of; casting_vote });
@@ -752,7 +752,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       };
     } else {
       let call = #Call({ method = "ggg_proposal_stop"; arg = to_candid (id) });
-      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, null, null, call, { defaultRule() with casting_vote = owner.policy.casting_vote }, null, []);
+      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, null, null, call, { defaultRule() with casting_vote = if (owner.is_root) castingVote else null }, null, []);
       audit("proposal_stop", caller, #Map([("proposal", #Text(id))]), #Text(filed.id));
       #Ok(#Proposed(filed.id));
     };

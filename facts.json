@@ -844,10 +844,6 @@
               "element": {
                 "type": "principal"
               }
-            },
-            "casting_vote": {
-              "type": "principal",
-              "optional": true
             }
           }
         }

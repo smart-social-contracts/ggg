@@ -438,7 +438,6 @@ export const idlFactory = ({ IDL }) => {
     'm' : IDL.Nat,
     'n' : IDL.Nat,
     'veto' : IDL.Vec(IDL.Principal),
-    'casting_vote' : IDL.Opt(IDL.Principal),
     'quorum' : Ratio,
   });
   const Department = IDL.Record({
