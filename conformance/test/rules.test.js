@@ -30,7 +30,9 @@ before(async () => {
   await pic.installCode({ canisterId, wasm, arg });
   as = (identity) => pic.createActor({ idlFactory, canisterId, sender: identity.getPrincipal() });
   const soloId = await pic.createCanister();
-  await pic.installCode({ canisterId: soloId, wasm, arg: IDL.encode([IDL.Vec(IDL.Principal), IDL.Vec(IDL.Tuple(IDL.Text, IDL.Vec(IDL.Nat8)))], [[alice.getPrincipal()], []]) });
+  const initTypes = [IDL.Vec(IDL.Principal), IDL.Vec(IDL.Tuple(IDL.Text, IDL.Vec(IDL.Nat8)))];
+  const soloArg = IDL.encode(initTypes, [[alice.getPrincipal()], []]);
+  await pic.installCode({ canisterId: soloId, wasm, arg: soloArg });
   solo = (identity) => pic.createActor({ idlFactory, canisterId: soloId, sender: identity.getPrincipal() });
 });
 
@@ -146,7 +148,7 @@ test('a tie over the votes cast rejects without a casting vote, and passes only 
 
 test("a department's threshold is m of its policy's n, whatever seats are filled", async () => {
   // The council decides 2 of 3, and all four members may vote: two yes votes carry it, as m, though
-  // they are half of the votes; one does not, though it is a third of the four seated.
+  // they are half of the votes; one does not: it is less than m, though a third of the four seated.
   const council = { department: ['council'] };
   const carried = await file(council);
   await everyone(carried, ['Yes', 'Yes', 'No', 'No']);
@@ -169,7 +171,24 @@ test("a department's threshold is m of its policy's n, whatever seats are filled
 
   // Weaker than the policy is refused: a lower threshold, or counting over the votes cast.
   refusedWith(await as(alice).ggg_proposal_create(motion({ ...council, threshold: [50_000_000n] })), 'InvalidArgument');
-  refusedWith(await as(alice).ggg_proposal_create(motion({ ...council, threshold_of: [{ Cast: null }] })), 'InvalidArgument');
+  const overTheVotesCast = motion({ ...council, threshold_of: [{ Cast: null }] });
+  refusedWith(await as(alice).ggg_proposal_create(overTheVotesCast), 'InvalidArgument');
+});
+
+test("a department's quorum counts over its seated members, however many seats its policy has", async () => {
+  // The council's 75 % quorum is of the four seated, three votes, not of its policy's three seats: two
+  // yes votes reach m but, with two absent, the quorum is not met.
+  const quiet = await file({ department: ['council'] });
+  await vote(alice, quiet, 'Yes');
+  await vote(bob, quiet, 'Yes');
+  await pastTheDeadline();
+  assert.equal(await finalize(quiet), 'Rejected');
+  const heard = await file({ department: ['council'] });
+  await vote(alice, heard, 'Yes');
+  await vote(bob, heard, 'Yes');
+  await vote(carol, heard, 'No');
+  await pastTheDeadline();
+  assert.equal(await finalize(heard), 'Accepted');
 });
 
 test('a vacancy never makes a vote easier: with one member seated, a 2-of-3 council carries nothing', async () => {

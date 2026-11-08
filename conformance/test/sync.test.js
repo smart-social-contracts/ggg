@@ -338,7 +338,9 @@ test('a stop while the action runs is a Conflict, and the action runs once', asy
       links: [],
       on_behalf_of: [],
     }));
-    for (const voter of [alice, bob]) ok(await on(c, voter).ggg_proposal_vote({ proposal: id, choice: { Yes: null }, on_behalf_of: [] }));
+    for (const voter of [alice, bob]) {
+      ok(await on(c, voter).ggg_proposal_vote({ proposal: id, choice: { Yes: null }, on_behalf_of: [] }));
+    }
     assert.equal(tag(ok(await on(c, bob).ggg_proposal_finalize(id)).status), 'ExecutionScheduled');
     await wait(2);
     const [executed, stopped] = await together([

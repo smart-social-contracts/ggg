@@ -1512,8 +1512,8 @@ module {
     tally : Tally;
     title : Text;
     action : ProposalAction;
-    /// The rule that decides it (I-GOV-3): the yes votes exceed (realm-wide) or reach (a department) the
-    /// threshold of the basis, with the quorum met.
+    /// The rule that decides it (I-GOV-3), fixed when the vote opens: the yes votes exceed (realm-wide)
+    /// or reach (a department, of `tally.seats`) the threshold of the basis, with the quorum met.
     threshold : Ratio;
     /// When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
     effective_at : ?Timestamp;
@@ -2049,7 +2049,8 @@ module {
     #Cancelled;
     #Contracted;
   };
-  /// What a threshold is measured against: the yes and no votes cast, or every eligible voter.
+  /// What a threshold is measured against: the yes and no votes cast, or the eligible voters; for a
+  /// department, Eligible means its policy's n (`tally.seats`), and Cast is weaker and refused.
   public type ThresholdBasis = { #Cast; #Eligible };
   /// Nanoseconds since 1970-01-01 UTC, as returned by ic0.time.
   public type Timestamp = Nat64;
