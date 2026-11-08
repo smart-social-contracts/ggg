@@ -388,6 +388,13 @@ module {
     requires_acceptance : Bool;
     expires_at : Timestamp;
   };
+  /// The events recorded under one grant, newest first, to its grantor or its delegate.
+  public type DelegationActivityArgs = {
+    delegation : Text;
+    cursor : ?Text;
+    limit : ?Nat32;
+    on_behalf_of : ?Principal;
+  };
   /// Approving may narrow the scope or end the grant earlier.
   public type DelegationDecideArgs = {
     request : Text;
@@ -402,6 +409,24 @@ module {
     label_ : Text;
     scope : [Text];
     expires_at : Timestamp;
+  };
+  /// One group a grant may name, as delegation.json defines it, with the caller's operations in it. `id` is
+  /// the group's, or `office:<department>` and `orgs:<organization>` for a group with a parameter; `longest`
+  /// is how long a grant of it may last; `confirms` says whether some of its operations ask each time.
+  public type DelegationGroup = {
+    id : Text;
+    confirms : Bool;
+    risk : Text;
+    label_ : Text;
+    summary : Text;
+    longest : Duration;
+    operations : [TieredOperation];
+  };
+  public type DelegationGroupPage = { next : ?Text; items : [DelegationGroup] };
+  public type DelegationGroupsArgs = {
+    cursor : ?Text;
+    limit : ?Nat32;
+    on_behalf_of : ?Principal;
   };
   public type DelegationListArgs = {
     cursor : ?Text;
@@ -433,6 +458,13 @@ module {
     scope : [Text];
     expires_at : Timestamp;
   };
+  /// Revokes every pending or active grant the caller gave, `limit` at a time: call again with `next` until
+  /// it is absent. The member's own act: with `on_behalf_of` it is Forbidden.
+  public type DelegationRevokeAllArgs = {
+    cursor : ?Text;
+    limit : ?Nat32;
+    on_behalf_of : ?Principal;
+  };
   public type DelegationStatus = {
     #Active;
     #Declined;
@@ -440,6 +472,11 @@ module {
     #Expired;
     #Pending;
   };
+  /// An operation's tier under power of attorney (delegation.json): Direct runs at once under a grant that
+  /// names its group, Confirm asks the grantor each time. `confirm_if` is the condition under which a Direct
+  /// operation asks instead.
+  public type DelegationTier = { #Confirm; #Direct };
+  public type DelegationsRevoked = { revoked : Nat; next : ?Text };
   public type Delivery = { #Notification : Notification; #Dispatch : Dispatch };
   public type Department = {
     id : Text;
@@ -632,6 +669,8 @@ module {
     args : Value;
     origin : Text;
     user : ?Principal;
+    /// The grant a delegated act ran under.
+    grant : ?Text;
   };
   /// Newest first. An archive holds the events from `first` to `last`, and answers ggg_events for them.
   public type EventArchive = {
@@ -1950,6 +1989,12 @@ module {
   };
   /// What a threshold is measured against: the yes and no votes cast, or every eligible voter.
   public type ThresholdBasis = { #Cast; #Eligible };
+  public type TieredOperation = {
+    permission : Text;
+    tier : DelegationTier;
+    operation : Text;
+    confirm_if : ?Text;
+  };
   /// Nanoseconds since 1970-01-01 UTC, as returned by ic0.time.
   public type Timestamp = Nat64;
   public type Token = {
@@ -2304,8 +2349,16 @@ module {
         #Ok : Delegation;
         #Err : GggError;
       };
+    ggg_delegation_activity : shared query DelegationActivityArgs -> async {
+        #Ok : EventPage;
+        #Err : GggError;
+      };
     ggg_delegation_grant : shared DelegationGrantArgs -> async {
         #Ok : Delegation;
+        #Err : GggError;
+      };
+    ggg_delegation_groups : shared query DelegationGroupsArgs -> async {
+        #Ok : DelegationGroupPage;
         #Err : GggError;
       };
     ggg_delegation_list : shared query DelegationListArgs -> async {
@@ -2322,6 +2375,10 @@ module {
       };
     ggg_delegation_revoke : shared Text -> async {
         #Ok : Delegation;
+        #Err : GggError;
+      };
+    ggg_delegation_revoke_all : shared DelegationRevokeAllArgs -> async {
+        #Ok : DelegationsRevoked;
         #Err : GggError;
       };
     ggg_department_chart : shared query ChartArgs -> async {

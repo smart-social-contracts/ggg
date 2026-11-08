@@ -222,6 +222,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       op;
       user = ?user;
       by = null;
+      grant = null;
       agent = false;
       supervisor = null;
       origin = "user";
@@ -372,6 +373,20 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     #Ok([]);
   };
 
+  /// No member holds self.delegate, so there is no group anyone here can grant.
+  public query ({ caller }) func ggg_delegation_groups(args : T.DelegationGroupsArgs) : async Result<T.DelegationGroupPage> {
+    switch (requireMember(caller, "self.data_view")) { case (?e) return #Err(e); case null {} };
+    if (args.on_behalf_of != null) return #Err(noDelegation("self.data_view"));
+    none(args.cursor, args.limit);
+  };
+
+  /// Nobody has granted a delegation, so no grant has the id asked for.
+  public query ({ caller }) func ggg_delegation_activity(args : T.DelegationActivityArgs) : async Result<T.EventPage> {
+    switch (requireMember(caller, "self.data_view")) { case (?e) return #Err(e); case null {} };
+    if (args.on_behalf_of != null) return #Err(noDelegation("self.data_view"));
+    #Err(#NotFound);
+  };
+
   public query ({ caller }) func ggg_me(args : T.MeArgs) : async Result<T.Me> {
     let entry = switch (self(caller, "self.data_view", args.on_behalf_of)) {
       case (#Err(e)) return #Err(e);
@@ -485,6 +500,14 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     #Err(#Forbidden({ permission = ?"self.delegate"; message = "No member of this realm can grant a delegation." }));
   };
   public shared ({ caller }) func ggg_delegation_request_decide(_ : T.DelegationDecideArgs) : async Result<?T.Delegation> {
+    nobody(caller, "self.delegate");
+  };
+  /// Revoking every grant is the member's own act, refused under any grant before anything else.
+  public shared ({ caller }) func ggg_delegation_revoke_all(args : T.DelegationRevokeAllArgs) : async Result<T.DelegationsRevoked> {
+    switch (requireMember(caller, "self.delegate")) { case (?e) return #Err(e); case null {} };
+    if (args.on_behalf_of != null) {
+      return #Err(#Forbidden({ permission = ?"self.delegate"; message = "Revoking every grant is the member's own act: never under a grant." }));
+    };
     nobody(caller, "self.delegate");
   };
 

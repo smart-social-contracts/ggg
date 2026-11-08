@@ -52,6 +52,12 @@ This document outlines the API specification for the Generalized Global Governan
 - Delegating authority
 - Managing owned tokens and resources
 
+Delegating authority is power of attorney in the model ([§2](../model/README.md#power-of-attorney)):
+`ggg_delegation_grant` names groups of operations; `ggg_delegation_groups` lists the groups a member can
+grant, each with its operations and their tiers; `ggg_delegation_activity` pages what a delegate did
+under one grant; `ggg_delegation_revoke_all` ends every grant the member gave. The tiers and groups are
+in [`delegation.json`](../delegation.json).
+
 ### State
 
 **Description:** Represents a governance unit with jurisdiction over citizens.

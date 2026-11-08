@@ -198,6 +198,7 @@ const none = { cursor: [], limit: [] };
 function listTable(actor) {
   let department = null;
   let proposal = null;
+  let delegation = null;
   let scope = null;
   const list = (what, call, field = 'items', seen) => ({
     what,
@@ -220,6 +221,13 @@ function listTable(actor) {
     if (!scope) throw new Skip('the caller can open no key scope');
     return scope;
   };
+  const needDelegation = () => {
+    if (!delegation) throw new Skip('the caller has no grant, given or received');
+    return delegation;
+  };
+  const firstDelegation = (items) => {
+    delegation ??= items[0]?.id ?? null;
+  };
   return [
     list('ggg_proposal_list', () => (a) => actor.ggg_proposal_list({ ...a, status: [] }), 'items', (items) => {
       proposal = items[0]?.id ?? null;
@@ -229,8 +237,13 @@ function listTable(actor) {
       return (a) => actor.ggg_proposal_linked_from({ ...a, id });
     }),
     list('ggg_invite_list', () => (a) => actor.ggg_invite_list(a)),
-    list('ggg_delegation_list (as grantor)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Grantor: null } })),
-    list('ggg_delegation_list (as delegate)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Delegate: null } })),
+    list('ggg_delegation_list (as grantor)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Grantor: null } }), 'items', firstDelegation),
+    list('ggg_delegation_list (as delegate)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Delegate: null } }), 'items', firstDelegation),
+    list('ggg_delegation_groups', () => (a) => actor.ggg_delegation_groups({ ...a, on_behalf_of: [] })),
+    list('ggg_delegation_activity', () => {
+      const id = needDelegation();
+      return (a) => actor.ggg_delegation_activity({ ...a, delegation: id, on_behalf_of: [] });
+    }),
     list('ggg_attribute_list', () => (a) => actor.ggg_attribute_list({ ...a, kind: [], on_behalf_of: [] })),
     list('ggg_department_list', () => (a) => actor.ggg_department_list(a), 'items', (items) => {
       department = items[0]?.id ?? null;
@@ -686,6 +699,8 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     const real = [
       ['ggg_proposal_create', motion('no delegation', { on_behalf_of: forStranger })],
       ['ggg_profile_update', { nickname: ['GGG conformance'], avatar: [], language: [], on_behalf_of: forStranger }],
+      // The member's own act: refused under any grant, so under a stranger's too.
+      ['ggg_delegation_revoke_all', { cursor: [], limit: [], on_behalf_of: forStranger }],
     ];
     if (created) {
       real.push(['ggg_proposal_vote', { ...vote(created.id, 'Yes'), on_behalf_of: forStranger }]);
