@@ -572,3 +572,24 @@ test("a budget is governed by its fund's owner, or by the root for every fund's 
   assert.deepEqual(ok(await as(bob).ggg_fund_create(fundArgs('ROADS', 'roads'))), { Done: ['ROADS'] });
   refusedWith(await as(bob).ggg_department_delete('roads'), 'Conflict');
 });
+
+test('budget lines return to draft when their proposal ends without adopting them, and any proposal carrying budget_propose marks them', async () => {
+  const draft = ok(await as(bob).ggg_budget_draft(lineArgs('COUNCIL', 'FY2028'))).Proposed;
+  await approve(draft);
+  assert.equal(tag((await finalizeAndRun(draft)).status), 'Executed');
+
+  // Rejected: the lines go back to draft, and the fund's budget can be proposed again.
+  const rejected = ok(await as(bob).ggg_budget_propose(budget('FY2028', 'COUNCIL'))).Proposed;
+  refusedWith(await as(bob).ggg_budget_propose(budget('FY2028', 'COUNCIL')), 'Conflict');
+  for (const voter of [alice, bob]) ok(await as(voter).ggg_proposal_vote({ proposal: rejected, choice: { No: null }, on_behalf_of: [] }));
+  assert.equal(await finalize(rejected), 'Rejected');
+  // Withdrawn: the same.
+  const withdrawn = ok(await as(bob).ggg_budget_propose(budget('FY2028', 'COUNCIL'))).Proposed;
+  ok(await as(bob).ggg_proposal_withdraw({ proposal: withdrawn, on_behalf_of: [] }));
+
+  // A realm-wide proposal carrying the council fund's budget_propose marks the lines too, and adopts them.
+  const carried = await file({ action: calling('ggg_budget_propose', budget('FY2028', 'COUNCIL')), everyone: true });
+  refusedWith(await create({ action: calling('ggg_budget_propose', budget('FY2028', 'COUNCIL')) }), 'Conflict');
+  assert.equal(tag((await finalizeAndRun(carried)).status), 'Executed');
+  refusedWith(await as(bob).ggg_budget_propose(budget('FY2028', 'COUNCIL')), 'Conflict');
+});

@@ -756,18 +756,41 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     switch (requireMember(caller, "org.manage_budget")) { case (?e) return #Err(e); case null {} };
     let arg = to_candid (args);
     let governing = switch (governingDepartment("ggg_budget_propose", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
-    let lines = drafts(args);
-    if (lines.size() == 0) return #Err(#Conflict("no draft line of " # args.period # " to propose"));
+    let lines = switch (linesToFile("ggg_budget_propose", arg)) { case (#Err(e)) return #Err(e); case (#Ok(l)) l };
     let reply = govern(caller, "budget_propose", governing, arg, "Budget " # args.period, "Proposes the draft budget lines of " # args.period # ".", func() {
       adoptBudget(caller, args, null);
     });
-    // The lines are fixed at the filing: proposed, with the proposal, so a later budget_propose takes
-    // only the draft lines left, and the execution adopts exactly these (model §5).
-    switch (reply) {
-      case (#Ok(#Proposed(id))) { for ((n, b) in lines.vals()) Map.add(budgets, Nat.compare, n, { b with status = #Proposed; proposal = ?id }) };
+    switch (reply) { case (#Ok(#Proposed(id))) markProposed(lines, id); case _ {} };
+    reply;
+  };
+
+  /// The draft lines a call carries into a proposal: for budget_propose, the lines it names, which the
+  /// filing marks proposed (model §5), with none left a Conflict; any other call carries none.
+  func linesToFile(method : Text, arg : Blob) : Result<[(Nat, T.Budget)]> {
+    if (method != "ggg_budget_propose") return #Ok([]);
+    let ?args : ?T.BudgetProposeArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+    let lines = drafts(args);
+    if (lines.size() == 0) return #Err(#Conflict("no draft line of " # args.period # " to propose"));
+    #Ok(lines);
+  };
+
+  /// The lines are fixed at the filing: proposed, with the proposal, so a later budget_propose takes only
+  /// the draft lines left, and the execution adopts exactly these (model §5).
+  func markProposed(lines : [(Nat, T.Budget)], proposal : Text) {
+    for ((n, b) in lines.vals()) Map.add(budgets, Nat.compare, n, { b with status = #Proposed; proposal = ?proposal });
+  };
+
+  /// A proposal that ends without adopting its lines returns them to draft, with no proposal, so the
+  /// fund's budget can be proposed again (model §5).
+  func settled(p : T.Proposal) {
+    switch (p.status) {
+      case (#Rejected or #Expired or #Withdrawn or #Failed) {
+        for ((n, b) in Iter.toArray(Map.entries(budgets)).vals()) {
+          if (b.status == #Proposed and b.proposal == ?p.id) Map.add(budgets, Nat.compare, n, { b with status = #Draft; proposal = null });
+        };
+      };
       case _ {};
     };
-    reply;
   };
 
   /// Adopts the lines of `proposal`, or, applied at once, the draft lines the call names.
@@ -869,6 +892,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         switch (checkScope(scopeOf(args.department), method, arg)) { case (?e) return #Err(e); case null {} };
       };
     };
+    let lines = switch (args.action) {
+      case (#Call { method; arg }) { switch (linesToFile(method, arg)) { case (#Err(e)) return #Err(e); case (#Ok(l)) l } };
+      case _ [];
+    };
     let links = switch (args.links) { case (?l) l; case null [] };
     switch (checkLinks(caller, links)) { case (?e) return #Err(e); case null {} };
     switch (args.effective_at) {
@@ -877,6 +904,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
     let rule = switch (statedRule(args)) { case (#Err(e)) return #Err(e); case (#Ok(r)) r };
     let p = fileProposal(caller, args.title, args.description, args.department, args.kind, args.matter, args.action, rule, args.effective_at, links);
+    markProposed(lines, p.id);
     audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
     #Ok(p.id);
   };
@@ -971,6 +999,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     if (p.status != #Draft and p.status != #Voting) return #Err(#Conflict("only a draft or a proposal being voted on can be withdrawn"));
     let withdrawn = { p with status = #Withdrawn };
     Map.add(proposals, Nat.compare, n, withdrawn);
+    settled(withdrawn);
     audit("proposal_withdraw", caller, #Map([("proposal", #Text(p.id))]), #Text(p.id));
     #Ok(withdrawn);
   };
@@ -1041,6 +1070,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
     let finalized = { p with status = outcome(n, p, ended, t) };
     Map.add(proposals, Nat.compare, n, finalized);
+    settled(finalized);
     audit("proposal_finalize", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (finalized.status)));
     #Ok(finalized);
   };
@@ -1052,6 +1082,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     if (Set.contains(executing, Nat.compare, n)) return #Err(#Conflict("its action is running"));
     let stopped = { p with status = #Withdrawn };
     Map.add(proposals, Nat.compare, n, stopped);
+    settled(stopped);
     audit("proposal_stop", caller, #Map([("proposal", #Text(p.id))]), #Text(p.id));
     #Ok(stopped);
   };
@@ -1133,6 +1164,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
     let executed = { p with status; result };
     Map.add(proposals, Nat.compare, n, executed);
+    settled(executed);
     audit("proposal_execute", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (status)));
     #Ok(executed);
   };

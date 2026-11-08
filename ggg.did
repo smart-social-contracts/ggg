@@ -1505,7 +1505,8 @@ type PeriodOpenArgs = record { period : text; name : opt text; starts_at : Times
 type BudgetDraftArgs = record { fund : text; period : text; category : text; kind : BudgetKind; planned : Money };
 type BudgetAmendArgs = record { budget : text; planned : Money };
 // Proposes the draft lines of the period together: those of `fund`, under its owner's policy, or every
-// fund's, under the root's; they are `proposed` from the filing, and the execution adopts exactly them.
+// fund's, under the root's; they are `proposed` from the filing, by this call or by any proposal that
+// carries it, the execution adopts exactly them, and a proposal that ends otherwise returns them to Draft.
 // `years` is how many periods the plan covers, when more than one. Legislation reads the totals of the
 // lines it proposes, `revenue` and `expense` (the sums of `planned` over their Revenue and Expense lines;
 // `fund` tells the two forms apart), as facts of the call; a total out of Money's range is

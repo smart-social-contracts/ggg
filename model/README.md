@@ -513,9 +513,12 @@ legislation tells the two forms apart by `fund`. With a `fund`, it proposes that
 the period, and the fund's owner governs it, under its own policy; without one, every fund's, and the
 root governs it, as it governs `loan_create`: the realm's budget as a whole and its borrowing are the
 realm's. Creating an owned record is governed by its owner: `fund_create` by the department named, the
-root when none is. The lines are fixed when the proposal is filed: they are `proposed`, with the
-proposal, a later `budget_propose` takes only the `draft` lines left (`Conflict` when there are none),
-and the execution adopts exactly that proposal's lines. When a period opens, `budget_extend` copies,
+root when none is. The lines are fixed when the proposal is filed, by the governed call or by any
+proposal that carries it: they are `proposed`, with the proposal, a later `budget_propose` takes only
+the `draft` lines left (`Conflict` when there are none), and the execution adopts exactly that
+proposal's lines. A proposal that ends without adopting them (`rejected`, `expired`, `withdrawn`,
+stopped, or `failed`) returns them to `draft`, with no proposal, so the fund's budget can be proposed
+again. When a period opens, `budget_extend` copies,
 for each fund with no `extended`, `proposed` or `adopted` line in it yet, the previous period's adopted
 lines of that fund into it as `extended`, without a vote; they hold until an adopted budget of that
 fund replaces them, and adopting one fund's lines neither blocks nor replaces another fund's
