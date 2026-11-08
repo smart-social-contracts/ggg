@@ -1498,7 +1498,8 @@ module {
     title : Text;
     action : ProposalAction;
     /// Stricter than the realm's or the department's rule, never weaker (InvalidArgument): a higher threshold
-    /// or quorum, or Eligible where the default is Cast. The casting vote is the scope's, not the proposer's.
+    /// or quorum, or Eligible where the default is Cast. The casting vote is the realm's, for a realm-wide
+    /// proposal only, not the proposer's.
     threshold : ?Ratio;
     /// Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
     effective_at : ?Timestamp;

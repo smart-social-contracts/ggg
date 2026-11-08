@@ -44,7 +44,8 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   var votingQuorum : T.Ratio = 0;
   var castingVote : ?Principal = null;
   /// The rule that decides a proposal (I-GOV-3). The scope's, over the votes cast, unless the proposer
-  /// states a stricter threshold, quorum or basis; the casting vote is the scope's.
+  /// states a stricter threshold, quorum or basis; the casting vote is the realm's, for a realm-wide
+  /// proposal only.
   type Rule = { threshold : T.Ratio; quorum : T.Ratio; threshold_of : T.ThresholdBasis; casting_vote : ?Principal };
   func defaultRule() : Rule = { threshold = votingThreshold; quorum = votingQuorum; threshold_of = #Cast; casting_vote = castingVote };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";

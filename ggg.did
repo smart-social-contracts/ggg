@@ -1322,7 +1322,8 @@ type ProposalCreateArgs = record {
   kind : opt text;
   matter : opt text;
   // Stricter than the realm's or the department's rule, never weaker (InvalidArgument): a higher threshold
-  // or quorum, or Eligible where the default is Cast. The casting vote is the scope's, not the proposer's.
+  // or quorum, or Eligible where the default is Cast. The casting vote is the realm's, for a realm-wide
+  // proposal only, not the proposer's.
   threshold : opt Ratio;
   quorum : opt Ratio;
   threshold_of : opt ThresholdBasis;
