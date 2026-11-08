@@ -1266,6 +1266,8 @@ module {
   };
   public type QuarterConfigureArgs = {
     status : ?QuarterStatus;
+    /// An IANA name, for the `quarter` named; any other text, or a `timezone` with no `quarter`, is InvalidArgument.
+    timezone : ?Text;
     quarter : ?Text;
     name : ?Text;
     rule : ?Value;

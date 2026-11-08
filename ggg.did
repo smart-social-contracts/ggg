@@ -1416,6 +1416,8 @@ type QuarterConfigureArgs = record {
   quarter_join_mode : opt text;
   federation_codex : opt text;
   rule : opt Value;
+  // An IANA name, for the `quarter` named; any other text, or a `timezone` with no `quarter`, is InvalidArgument.
+  timezone : opt text;
 };
 type JoinFederationArgs = record { capital : principal; name : opt text };
 type ChangeQuarterArgs = record { quarter : text; on_behalf_of : opt principal };

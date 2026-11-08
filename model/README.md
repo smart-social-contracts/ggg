@@ -39,7 +39,7 @@ These rules apply to the model's data as `ggg.did` exposes it.
 | Identity | Every entity has a text `id`. Human-facing codes (`CASE-12`, `LIC-7`) are ids, not extra fields. |
 | References | Relations name both ends. A reference to "any entity" names the entity type and its id: `Organization:clinic-b` in text, `record { kind; id }` in Candid. |
 | Principals | Candid `principal`. A user's `id` is their principal. |
-| Time | `nat64` nanoseconds since 1970-01-01 UTC, as returned by `ic0.time`. Durations are `nat64` nanoseconds too. An unset time is absent (`opt`), never `0`. People see times in the realm's own `timezone` (§10); the stored value never changes. |
+| Time | `nat64` nanoseconds since 1970-01-01 UTC, as returned by `ic0.time`. Durations are `nat64` nanoseconds too. An unset time is absent (`opt`), never `0`. People see times in the realm's own `timezone`, and local times of a quarter in the quarter's own (§10); the stored value never changes. |
 | Money | `nat` amounts in the token's smallest unit, with the token's `symbol`. No floats. |
 | Ratios | One scale for every ratio (quorum, threshold, share, weight, tax rate): `nat` hundred-millionths, so 100 % = 100 000 000, 1 % = 1 000 000 and 0.123456 % = 123 456. Values are stored and compared as integers, which have one form; people and chapters read and write decimals (`0.1 %`). |
 | Status | One of the values listed in the entity's lifecycle. Terminal states are final. In Candid a status is a variant, and a value `in_progress` is the tag `InProgress`. |
@@ -639,6 +639,18 @@ whole federation.
 | `federal_vote_finalize` | — (public) | | After 15 Nov: 3 of 4 quarters in favour → `passed` |
 | `federation_message` | `quarter.sync` | | The capital announces codex 1.5.0 to its quarters |
 
+### Time zones
+
+Each quarter is a realm canister with its own `Realm.timezone` (I-ADM-4, §12). It starts on its
+capital's zone, copied once when it joins the federation, and after that the zone is the quarter's
+own. The quarter may change it with `realm_configure`. The realm may also set it by a realm-wide vote:
+`quarter_configure` takes a `timezone` for the `quarter` it names, which the capital sends to the
+quarter (`quarter.sync`) and the quarter applies. A name that is not an IANA name of I-ADM-4's shape is
+refused with `InvalidArgument` before any vote, and so is a `timezone` with no `quarter`; the
+capital's own zone is set with `realm_configure`. If the quarter cannot apply the zone, the call fails
+and nothing changes. In a federation, the capital's zone is the realm's official time and a quarter's
+zone its local time.
+
 ### Invariants
 
 - I-FED-1: A user is a member of exactly one home quarter; elsewhere they are a guest.
@@ -751,7 +763,10 @@ with the founder, the network, the registry and whether test features are allowe
   `Europe/Madrid` or `America/Argentina/Buenos_Aires`) or `UTC`. A realm sets its own with
   `realm_configure` and is `UTC` until it does, so `UTC` is the value of a realm that has not yet
   chosen. A realm's setup should ask for a zone. A name of any other shape is refused with
-  `InvalidArgument`. It is never taken from a layer of legislation or a sync source.
+  `InvalidArgument`. It is never taken from another realm, from legislation or from a sync source.
+  A quarter of a federation is a realm of its own, and starts from its capital's zone, copied once
+  when it joins (`quarter_join_federation`); after that the zone is the quarter's own (§10).
+  Legislation never sets a zone, though its guards may constrain who may change one.
 
 ## 13. Private content
 
