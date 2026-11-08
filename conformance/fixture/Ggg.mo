@@ -236,6 +236,8 @@ module {
     #Assigned;
   };
   public type ChangeQuarterArgs = { quarter : Text };
+  /// A chapter of a release: the domain it writes and the checksum of its bytes.
+  public type ChapterRef = { domain : Text; checksum : Text };
   /// One level of the chart: the department's totals, and its sub-departments a page at a time.
   public type Chart = {
     next : ?Text;
@@ -266,6 +268,8 @@ module {
   public type CodexActivateArgs = { at : ?Timestamp; codex : Text };
   public type CodexSource = {
     #Package : { source : Text; manifest : Value };
+    /// A release of a layer, found in the record of one of the realm's active sync sources.
+    #Release : { source : Text; version : Text };
     #Registry : { codex : Text; version : Text };
   };
   /// Pending: installed and checked, waiting for codex_activate or its proposal's effective_at.
@@ -280,6 +284,14 @@ module {
     history : [Text];
     healthy : Bool;
     checksum : ?Text;
+  };
+  /// Compliant: every layer the realm runs is at least the latest release in effect in the source's
+  /// record. NonCompliant since the date of the earliest release it misses, naming the `stale` layers by
+  /// source id. Unknown: the record could not be read.
+  public type Compliance = {
+    #NonCompliant : { since : Timestamp; stale : [Text] };
+    #Unknown;
+    #Compliant;
   };
   public type Contract = {
     id : Text;
@@ -747,6 +759,26 @@ module {
     statements : Value;
   };
   public type FiscalPeriodStatus = { #Open; #Closed; #Archived };
+  /// On a sync source: a realm that syncs from it, `id` its capital as text, with its link status and
+  /// its last report.
+  public type Follower = {
+    id : Text;
+    status : LinkStatus;
+    compliance : Compliance;
+    layers : [ReportedLayer];
+    capital : Principal;
+    reported_at : ?Timestamp;
+    population : Nat;
+  };
+  public type FollowerArgs = { follower : Principal };
+  public type FollowerPage = { next : ?Text; items : [Follower] };
+  /// What a follower's capital reports to a sync source, its own claims: the layers it runs, its
+  /// compliance against that source and its population. The source matches a layer by its checksum.
+  public type FollowerReportArgs = {
+    compliance : Compliance;
+    layers : [ReportedLayer];
+    population : Nat;
+  };
   /// By court order.
   public type ForceTransferArgs = {
     to : Principal;
@@ -1052,6 +1084,16 @@ module {
   };
   public type LedgerKind = { #Asset; #Liability; #Revenue; #Expense; #Equity };
   public type LedgerPage = { next : ?Text; items : [LedgerEntry] };
+  /// A release of the realm's own layer. `published` is set by the realm when the publish applies.
+  public type LegislationReleasePublishArgs = {
+    source : Text;
+    version : Text;
+    calendar : ?Text;
+    effective_from : Timestamp;
+    chapters : [ChapterRef];
+    notes : Value;
+    commit : Text;
+  };
   public type License = {
     id : Text;
     status : LicenseStatus;
@@ -1108,6 +1150,16 @@ module {
   public type LicenseSuspendArgs = { resume : Bool; license : Text };
   /// A licence by id, or the one of `kind` that `holder` holds.
   public type LicenseVerifyArgs = { id : ?Text; kind : ?Text; holder : ?Ref };
+  /// From the capital at the other side of a link: the link's new status after the caller's vote.
+  public type LinkNotifyArgs = { status : LinkStatus; side : LinkSide };
+  /// What the caller is to the receiver: its sync source, or its follower.
+  public type LinkSide = { #SyncSource; #Follower };
+  /// Requested: one side has voted. Active: both have. Ended: a side ended the link, `by` its capital.
+  public type LinkStatus = {
+    #Ended : { at : Timestamp; by : Principal };
+    #Active;
+    #Requested;
+  };
   public type ListArgs = { cursor : ?Text; limit : ?Nat32 };
   /// Money the realm owes an outside lender, in the accounting currency (`symbol`), so that the treasury's
   /// `debt_outstanding` is one sum. The money itself moves outside the realm; GGG records the debt and its
@@ -1571,6 +1623,9 @@ module {
   public type Quarter = {
     id : Text;
     status : QuarterStatus;
+    /// The same flag as a follower's: a quarter not ready when its realm's codex switches is NonCompliant
+    /// until it installs.
+    compliance : Compliance;
     codex_version : ?Text;
     name : Text;
     last_activity_at : ?Timestamp;
@@ -1636,6 +1691,8 @@ module {
     logo_url : ?Text;
     open_registration : Bool;
     trusted_principals : [Principal];
+    /// The realms this one syncs legislation from, each with its link status (I-NEST-1).
+    sync_sources : [SyncSource];
     federation_realm_id : ?Text;
     accounting_currency_decimals : ?Nat8;
     welcome_message : Text;
@@ -1685,6 +1742,21 @@ module {
     description : Text;
     principal_id : Principal;
   };
+  /// One release of one layer, as a published record lists it: every chapter of the source, changed or
+  /// not, its calendar's checksum, the commit it was built from, when it was published and from when it
+  /// is in force. `source` is the layer's source id, opaque text to GGG; `notes` are the publisher's, by
+  /// language.
+  public type Release = {
+    source : Text;
+    published : Timestamp;
+    version : Text;
+    calendar : ?Text;
+    effective_from : Timestamp;
+    chapters : [ChapterRef];
+    notes : Value;
+    commit : Text;
+  };
+  public type ReleasePage = { next : ?Text; items : [Release] };
   /// One report by id, or a page of reports.
   public type ReportArgs = { id : ?Text; cursor : ?Text; limit : ?Nat32 };
   /// `adjustments` are figures the issuer adds to the ledger's, for a report in terms the ledger doesn't keep.
@@ -1694,6 +1766,9 @@ module {
     adjustments : ?Value;
   };
   public type ReportPage = { next : ?Text; items : [FinancialReport] };
+  /// One layer a follower runs. It names no source: the sync source finds the layer by its checksum in
+  /// its own record.
+  public type ReportedLayer = { version : Text; checksum : Text };
   /// Seats the user in the organization's position, creating the position if it is new.
   public type RepresentativeAddArgs = {
     supervisor : ?Principal;
@@ -1798,6 +1873,20 @@ module {
   };
   /// What the realm's silence past a deadline means: Positive grants, Negative refuses.
   public type Silence = { #Negative; #Positive };
+  public type SyncSource = {
+    status : LinkStatus;
+    source : SyncSourceRef;
+    name : Text;
+  };
+  public type SyncSourceAddArgs = { source : SyncSourceRef; name : Text };
+  /// A realm, by its capital, or a stand-in record at a public https URL for a source that runs no
+  /// realm, pinned by the checksum of its content.
+  public type SyncSourceRef = {
+    #Record : { url : Text; checksum : Text };
+    #Realm : Principal;
+  };
+  /// A Record is the same source when its url is the same, whatever the checksum.
+  public type SyncSourceRemoveArgs = { source : SyncSourceRef };
   public type Tally = { no : Nat; yes : Nat; abstain : Nat; eligible : ?Nat };
   /// One operation scheduled for a time. It runs with the authority of whoever scheduled it, never as the
   /// realm's controller, and every guard and rule runs again when it does, so a task scheduled under old
@@ -2473,6 +2562,22 @@ module {
         #Ok : ?Value;
         #Err : GggError;
       };
+    ggg_follower_accept : shared FollowerArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_follower_list : shared query ListArgs -> async {
+        #Ok : FollowerPage;
+        #Err : GggError;
+      };
+    ggg_follower_remove : shared FollowerArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_follower_report : shared FollowerReportArgs -> async {
+        #Ok : Follower;
+        #Err : GggError;
+      };
     ggg_fund_create : shared FundCreateArgs -> async {
         #Ok : Governed;
         #Err : GggError;
@@ -2565,6 +2670,18 @@ module {
         #Ok : LedgerPage;
         #Err : GggError;
       };
+    ggg_legislation_chapter : shared query Text -> async {
+        #Ok : ?Blob;
+        #Err : GggError;
+      };
+    ggg_legislation_release_publish : shared LegislationReleasePublishArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_legislation_releases : shared query ListArgs -> async {
+        #Ok : ReleasePage;
+        #Err : GggError;
+      };
     ggg_license_apply : shared LicenseApplyArgs -> async {
         #Ok : License;
         #Err : GggError;
@@ -2592,6 +2709,10 @@ module {
       };
     ggg_license_verify : shared query LicenseVerifyArgs -> async {
         #Ok : LicenseCheck;
+        #Err : GggError;
+      };
+    ggg_link_notify : shared LinkNotifyArgs -> async {
+        #Ok : LinkStatus;
         #Err : GggError;
       };
     ggg_loan_create : shared LoanCreateArgs -> async {
@@ -2879,6 +3000,14 @@ module {
     ggg_setup_state : shared () -> async { #Ok : SetupState; #Err : GggError };
     ggg_setup_step : shared SetupStep -> async {
         #Ok : SetupState;
+        #Err : GggError;
+      };
+    ggg_sync_source_add : shared SyncSourceAddArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_sync_source_remove : shared SyncSourceRemoveArgs -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     ggg_task_cancel : shared Text -> async { #Ok : Task; #Err : GggError };

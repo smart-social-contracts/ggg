@@ -875,6 +875,8 @@ type Realm = record {
   federation_realm_id : opt text;
   federation_codex : opt text;
   quarter_join_mode : opt text;
+  // The realms this one syncs legislation from, each with its link status (I-NEST-1).
+  sync_sources : vec SyncSource;
   trusted_principals : vec principal;
   require_marketplace_approval : bool;
   trusted_approvers : vec text;
@@ -923,6 +925,9 @@ type Quarter = record {
   population : nat;
   codex_id : opt text;
   codex_version : opt text;
+  // The same flag as a follower's: a quarter not ready when its realm's codex switches is NonCompliant
+  // until it installs.
+  compliance : Compliance;
   last_sync : opt Timestamp;
   last_activity_at : opt Timestamp;
 };
@@ -973,6 +978,34 @@ type FederationMessage = record {
   source : text;
   body : Value;
   response : opt Value;
+};
+
+// Links between realms: a realm takes legislation from the sync sources it chose by vote, each of
+// which accepted it by vote (I-NEST-1).
+
+// Requested: one side has voted. Active: both have. Ended: a side ended the link, `by` its capital.
+type LinkStatus = variant { Requested; Active; Ended : record { by : principal; at : Timestamp } };
+// A realm, by its capital, or a stand-in record at a public https URL for a source that runs no
+// realm, pinned by the checksum of its content.
+type SyncSourceRef = variant { Realm : principal; Record : record { url : text; checksum : text } };
+type SyncSource = record { source : SyncSourceRef; name : text; status : LinkStatus };
+// Compliant: every layer the realm runs is at least the latest release in effect in the source's
+// record. NonCompliant since the date of the earliest release it misses, naming the `stale` layers by
+// source id. Unknown: the record could not be read.
+type Compliance = variant { Compliant; NonCompliant : record { since : Timestamp; stale : vec text }; Unknown };
+// One layer a follower runs. It names no source: the sync source finds the layer by its checksum in
+// its own record.
+type ReportedLayer = record { version : text; checksum : text };
+// On a sync source: a realm that syncs from it, `id` its capital as text, with its link status and
+// its last report.
+type Follower = record {
+  id : text;
+  capital : principal;
+  status : LinkStatus;
+  layers : vec ReportedLayer;
+  compliance : Compliance;
+  population : nat;
+  reported_at : opt Timestamp;
 };
 
 // ---- §11 Codex, notifications and audit
@@ -1782,6 +1815,19 @@ type FederalVoteProposeArgs = record { title : text; action : ProposalAction };
 // To quarter `to`, or by default every active quarter.
 type FederationMessageArgs = record { topic : text; body : Value; to : opt text };
 
+type SyncSourceAddArgs = record { source : SyncSourceRef; name : text };
+// A Record is the same source when its url is the same, whatever the checksum.
+type SyncSourceRemoveArgs = record { source : SyncSourceRef };
+type FollowerArgs = record { follower : principal };
+// What a follower's capital reports to a sync source, its own claims: the layers it runs, its
+// compliance against that source and its population. The source matches a layer by its checksum.
+type FollowerReportArgs = record { layers : vec ReportedLayer; compliance : Compliance; population : nat };
+type FollowerPage = record { items : vec Follower; next : opt text };
+// What the caller is to the receiver: its sync source, or its follower.
+type LinkSide = variant { SyncSource; Follower };
+// From the capital at the other side of a link: the link's new status after the caller's vote.
+type LinkNotifyArgs = record { side : LinkSide; status : LinkStatus };
+
 // §11
 
 type SigningPolicy = record {
@@ -1818,6 +1864,25 @@ type EventPage = record { items : vec Event; next : opt text; archives : vec Eve
 type CodexSource = variant {
   Package : record { manifest : Value; source : text };
   Registry : record { codex : text; version : text };
+  // A release of a layer, found in the record of one of the realm's active sync sources.
+  Release : record { source : text; version : text };
+};
+
+// A chapter of a release: the domain it writes and the checksum of its bytes.
+type ChapterRef = record { domain : text; checksum : text };
+// One release of one layer, as a published record lists it: every chapter of the source, changed or
+// not, its calendar's checksum, the commit it was built from, when it was published and from when it
+// is in force. `source` is the layer's source id, opaque text to GGG; `notes` are the publisher's, by
+// language.
+type Release = record {
+  source : text;
+  version : text;
+  published : Timestamp;
+  effective_from : Timestamp;
+  commit : text;
+  chapters : vec ChapterRef;
+  calendar : opt text;
+  notes : Value;
 };
 // One notification, or with `recipient` a page of that recipient's.
 type NotificationReadArgs = record {
@@ -1859,6 +1924,17 @@ type DispatchPage = record { items : vec Dispatch; next : opt text };
 // `codex` is the pending codex's checksum (at most one codex is pending at a time). `at` defaults to now;
 // a time ahead schedules the activation.
 type CodexActivateArgs = record { codex : text; at : opt Timestamp };
+// A release of the realm's own layer. `published` is set by the realm when the publish applies.
+type LegislationReleasePublishArgs = record {
+  source : text;
+  version : text;
+  effective_from : Timestamp;
+  commit : text;
+  chapters : vec ChapterRef;
+  calendar : opt text;
+  notes : Value;
+};
+type ReleasePage = record { items : vec Release; next : opt text };
 
 // `op` is an operation name (`user_set_status`), `args` its arguments as the Event records them.
 type TaskScheduleArgs = record { op : text; args : Value; at : Timestamp; reason : opt text };
@@ -2181,9 +2257,18 @@ service : {
   ggg_federal_vote_cancel : (text) -> (variant { Ok : Governed; Err : GggError });
   ggg_federal_vote_finalize : (text) -> (variant { Ok : FederalVote; Err : GggError });
   ggg_federation_message : (FederationMessageArgs) -> (variant { Ok : opt Value; Err : GggError });
+  ggg_follower_list : (ListArgs) -> (variant { Ok : FollowerPage; Err : GggError }) query;
+  ggg_sync_source_add : (SyncSourceAddArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_sync_source_remove : (SyncSourceRemoveArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_follower_accept : (FollowerArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_follower_remove : (FollowerArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_follower_report : (FollowerReportArgs) -> (variant { Ok : Follower; Err : GggError });
+  ggg_link_notify : (LinkNotifyArgs) -> (variant { Ok : LinkStatus; Err : GggError });
 
   // §11
   ggg_codex_status : (ListArgs) -> (variant { Ok : CodexView; Err : GggError }) query;
+  ggg_legislation_releases : (ListArgs) -> (variant { Ok : ReleasePage; Err : GggError }) query;
+  ggg_legislation_chapter : (text) -> (variant { Ok : opt blob; Err : GggError }) query;
   ggg_notification_list : (NotificationListArgs) -> (variant { Ok : NotificationPage; Err : GggError }) query;
   ggg_events : (ListArgs) -> (variant { Ok : EventPage; Err : GggError }) query;
   ggg_external_list : (ListArgs) -> (variant { Ok : ExternalPage; Err : GggError }) query;
@@ -2193,6 +2278,7 @@ service : {
   ggg_codex_uninstall : () -> (variant { Ok : Governed; Err : GggError });
   ggg_codex_revert : () -> (variant { Ok : Governed; Err : GggError });
   ggg_codex_activate : (CodexActivateArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_legislation_release_publish : (LegislationReleasePublishArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_notification_read : (NotificationReadArgs) -> (variant { Ok : NotificationsRead; Err : GggError });
   ggg_notification_send : (NotificationSendArgs) -> (variant { Ok : Delivery; Err : GggError });
   ggg_external_add : (ExternalAddArgs) -> (variant { Ok : Governed; Err : GggError });

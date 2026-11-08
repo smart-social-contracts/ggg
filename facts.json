@@ -1787,6 +1787,34 @@
         "on_behalf_of": {
           "type": "principal",
           "optional": true
+        },
+        "follower_compliance": {
+          "type": "Compliance",
+          "values": [
+            "Compliant",
+            "NonCompliant",
+            "Unknown"
+          ],
+          "cases": {
+            "NonCompliant": {
+              "type": "record",
+              "fields": {
+                "since": {
+                  "type": "nat64",
+                  "kind": "timestamp",
+                  "min": 0,
+                  "max": "9223372036854775807"
+                },
+                "stale": {
+                  "type": "vec",
+                  "element": {
+                    "type": "text"
+                  }
+                }
+              }
+            }
+          },
+          "derived": "the compliance last reported by the follower that `to` names ({kind: \"Follower\", id: its capital}) over an active link; Unknown for any other recipient or a link not active"
         }
       }
     },
@@ -4337,6 +4365,34 @@
             }
           },
           "optional": true
+        },
+        "follower_compliance": {
+          "type": "Compliance",
+          "values": [
+            "Compliant",
+            "NonCompliant",
+            "Unknown"
+          ],
+          "cases": {
+            "NonCompliant": {
+              "type": "record",
+              "fields": {
+                "since": {
+                  "type": "nat64",
+                  "kind": "timestamp",
+                  "min": 0,
+                  "max": "9223372036854775807"
+                },
+                "stale": {
+                  "type": "vec",
+                  "element": {
+                    "type": "text"
+                  }
+                }
+              }
+            }
+          },
+          "derived": "the reporting quarter's compliance"
         }
       }
     },
@@ -4499,6 +4555,203 @@
         }
       }
     },
+    "follower_list": {
+      "operation": "ggg_follower_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "sync_source_add": {
+      "operation": "ggg_sync_source_add",
+      "facts": {
+        "source": {
+          "type": "SyncSourceRef",
+          "values": [
+            "Realm",
+            "Record"
+          ],
+          "cases": {
+            "Realm": {
+              "type": "principal"
+            },
+            "Record": {
+              "type": "record",
+              "fields": {
+                "url": {
+                  "type": "text"
+                },
+                "checksum": {
+                  "type": "text"
+                }
+              }
+            }
+          }
+        },
+        "name": {
+          "type": "text"
+        }
+      }
+    },
+    "sync_source_remove": {
+      "operation": "ggg_sync_source_remove",
+      "facts": {
+        "source": {
+          "type": "SyncSourceRef",
+          "values": [
+            "Realm",
+            "Record"
+          ],
+          "cases": {
+            "Realm": {
+              "type": "principal"
+            },
+            "Record": {
+              "type": "record",
+              "fields": {
+                "url": {
+                  "type": "text"
+                },
+                "checksum": {
+                  "type": "text"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "follower_accept": {
+      "operation": "ggg_follower_accept",
+      "facts": {
+        "follower": {
+          "type": "principal"
+        }
+      }
+    },
+    "follower_remove": {
+      "operation": "ggg_follower_remove",
+      "facts": {
+        "follower": {
+          "type": "principal"
+        }
+      }
+    },
+    "follower_report": {
+      "operation": "ggg_follower_report",
+      "facts": {
+        "layers": {
+          "type": "vec",
+          "element": {
+            "type": "ReportedLayer",
+            "fields": {
+              "version": {
+                "type": "text"
+              },
+              "checksum": {
+                "type": "text"
+              }
+            }
+          }
+        },
+        "compliance": {
+          "type": "Compliance",
+          "values": [
+            "Compliant",
+            "NonCompliant",
+            "Unknown"
+          ],
+          "cases": {
+            "NonCompliant": {
+              "type": "record",
+              "fields": {
+                "since": {
+                  "type": "nat64",
+                  "kind": "timestamp",
+                  "min": 0,
+                  "max": "9223372036854775807"
+                },
+                "stale": {
+                  "type": "vec",
+                  "element": {
+                    "type": "text"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "population": {
+          "type": "nat",
+          "min": 0,
+          "max": "9223372036854775807"
+        }
+      },
+      "lists": {
+        "layers": "follower_report.layers"
+      }
+    },
+    "follower_report.layers": {
+      "operation": "ggg_follower_report",
+      "list": {
+        "field": "layers",
+        "of": "the argument",
+        "element": "ReportedLayer"
+      },
+      "facts": {
+        "version": {
+          "type": "text"
+        },
+        "checksum": {
+          "type": "text"
+        }
+      }
+    },
+    "link_notify": {
+      "operation": "ggg_link_notify",
+      "facts": {
+        "side": {
+          "type": "LinkSide",
+          "values": [
+            "SyncSource",
+            "Follower"
+          ]
+        },
+        "status": {
+          "type": "LinkStatus",
+          "values": [
+            "Requested",
+            "Active",
+            "Ended"
+          ],
+          "cases": {
+            "Ended": {
+              "type": "record",
+              "fields": {
+                "by": {
+                  "type": "principal"
+                },
+                "at": {
+                  "type": "nat64",
+                  "kind": "timestamp",
+                  "min": 0,
+                  "max": "9223372036854775807"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "codex_status": {
       "operation": "ggg_codex_status",
       "facts": {
@@ -4511,6 +4764,31 @@
           "min": 0,
           "max": 4294967295,
           "optional": true
+        }
+      },
+      "read": true
+    },
+    "legislation_releases": {
+      "operation": "ggg_legislation_releases",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
+    },
+    "legislation_chapter": {
+      "operation": "ggg_legislation_chapter",
+      "facts": {
+        "id": {
+          "type": "text"
         }
       },
       "read": true
@@ -4649,7 +4927,8 @@
           "type": "CodexSource",
           "values": [
             "Package",
-            "Registry"
+            "Registry",
+            "Release"
           ],
           "cases": {
             "Package": {
@@ -4667,6 +4946,17 @@
               "type": "record",
               "fields": {
                 "codex": {
+                  "type": "text"
+                },
+                "version": {
+                  "type": "text"
+                }
+              }
+            },
+            "Release": {
+              "type": "record",
+              "fields": {
+                "source": {
                   "type": "text"
                 },
                 "version": {
@@ -4698,6 +4988,66 @@
           "min": 0,
           "max": "9223372036854775807",
           "optional": true
+        }
+      }
+    },
+    "legislation_release_publish": {
+      "operation": "ggg_legislation_release_publish",
+      "facts": {
+        "source": {
+          "type": "text"
+        },
+        "version": {
+          "type": "text"
+        },
+        "effective_from": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "max": "9223372036854775807"
+        },
+        "commit": {
+          "type": "text"
+        },
+        "chapters": {
+          "type": "vec",
+          "element": {
+            "type": "ChapterRef",
+            "fields": {
+              "domain": {
+                "type": "text"
+              },
+              "checksum": {
+                "type": "text"
+              }
+            }
+          }
+        },
+        "calendar": {
+          "type": "text",
+          "optional": true
+        },
+        "notes": {
+          "type": "Value"
+        }
+      },
+      "lists": {
+        "chapters": "legislation_release_publish.chapters"
+      }
+    },
+    "legislation_release_publish.chapters": {
+      "operation": "ggg_legislation_release_publish",
+      "list": {
+        "field": "chapters",
+        "of": "the argument",
+        "element": "ChapterRef"
+      },
+      "facts": {
+        "domain": {
+          "type": "text"
+        },
+        "checksum": {
+          "type": "text"
         }
       }
     },
