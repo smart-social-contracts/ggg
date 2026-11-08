@@ -267,6 +267,9 @@ module {
   /// `codex` is the pending codex's checksum (at most one codex is pending at a time). `at` defaults to now;
   /// a time ahead schedules the activation.
   public type CodexActivateArgs = { at : ?Timestamp; codex : Text };
+  /// The checksum of a codex in the realm's history to restore; absent means the one the active codex
+  /// replaced.
+  public type CodexRevertArgs = { codex : ?Text };
   public type CodexSource = {
     #Package : { source : Text; manifest : Value };
     /// A release of a layer, found in the record of one of the realm's active sync sources.
@@ -2338,7 +2341,10 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
-    ggg_codex_revert : shared () -> async { #Ok : Governed; #Err : GggError };
+    ggg_codex_revert : shared ?CodexRevertArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
     /// §11
     ggg_codex_status : shared query ListArgs -> async {
         #Ok : CodexView;

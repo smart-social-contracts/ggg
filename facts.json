@@ -4974,7 +4974,12 @@
     },
     "codex_revert": {
       "operation": "ggg_codex_revert",
-      "facts": {}
+      "facts": {
+        "codex": {
+          "type": "text",
+          "optional": true
+        }
+      }
     },
     "codex_activate": {
       "operation": "ggg_codex_activate",

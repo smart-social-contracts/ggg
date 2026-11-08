@@ -953,7 +953,8 @@ supervisor, and the grantor when delegated (I-ALL-7).
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `codex_install`, `codex_uninstall`, `codex_revert` | `codex.install`, `codex.uninstall`, `codex.revert` | governed | Install agora 1.5.0 → realm-wide vote; revert to 1.4.2 if it misbehaves |
+| `codex_install`, `codex_uninstall` | `codex.install`, `codex.uninstall` | governed | Install agora 1.5.0 → realm-wide vote |
+| `codex_revert` (the codex the active one replaced, or any earlier one by its checksum) | `codex.revert` | governed | Revert to 1.4.2 when 1.5.0 misbehaves; to 1.3.0, by its checksum, when 1.4.2 does too |
 | `codex_activate` (the pending codex, by checksum) | `codex.install` | governed | Activate the pending 1.5.0 on 1 Jan |
 | `codex_status` (the active checksum, health and the signing policy; earlier checksums a page at a time) | `realm.data_view` | read | `sha256:4be1…`, healthy; agents may hold `bid.evaluate` |
 | `legislation_release_publish` | `legislation.publish` | governed | CV publishes 1.1.0: its chapters' checksums, its calendar's, the commit, in force from 1 Jan 2027 |
@@ -974,6 +975,17 @@ A codex may be installed before it is in force: `pending`, installed and checked
 names its checksum and makes it active at `at`, or its adopting proposal's `effective_at` does. At most
 one codex is `pending` at a time: a second install while one waits is `Conflict`. A hook on
 `codex_activate` is the realm's own entry point ([layered codex §3.2](../docs/layered-codex.md#32-four-mechanisms)).
+
+A **revert** restores any earlier codex in the realm's history: `codex_revert` names its checksum, or
+none for the one the active codex replaced. A checksum not in the history is `NotFound`; a revert with
+nothing to restore is `Conflict`, and so is naming the active codex or a pending one, which are not
+earlier codices: a pending codex is activated only by `codex_activate`. A revert filed as a proposal
+names the codex it restores, resolved when it is filed, so what is voted on is what runs. The restored
+codex is `active` again and the one it displaces `reverted`, and a revert never runs
+`on_codex_activate`. A GOS reserves its revert operations, so no
+legislation can refuse or delay one ([layered codex §1](../docs/layered-codex.md#1-chapters-use-gggs-operations-directly)),
+and which rule decides a revert vote is the GOS's: Realms GOS applies the rule recorded with the codex
+being restored.
 
 A codex may also be installed as a **release** of a layer: `codex_install` with `Release { source;
 version }` installs that release whole, found in the record of one of the realm's active sync sources
@@ -1232,3 +1244,4 @@ There is no permission for raw database writes: everything is an operation.
 | D19 | Which department governs a change of parent, `department_delete`, `fund_create` and `budget_propose` | Decided 8 Nov 2026: a change of `parent` is governed by the lowest department that is, or is above, both the old and the new parent (an unknown new parent is `NotFound`), and every other edit by the department itself; `department_delete` by the parent, the root for a top-level department, never the root (`InvalidArgument`) nor a department that owns a fund (`Conflict`); creating an owned record, `fund_create`, by the owner named; `budget_propose` by the owner of the `fund` it names, or by the root when it names none and proposes every fund's lines; its lines are fixed when it files (`proposed`, with the proposal), a later one takes only `draft` lines, its totals are the sums over the lines it proposes, and `budget_extend` and the replacement of extended lines are per fund (§1, §3, §5) |
 | D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3) |
 | D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the nearest cent (a multiple of 10^(decimals − 2) smallest units); never bracket by bracket (§5) |
+| D25 | What `codex_revert` restores | Decided 8 Nov 2026: any earlier codex in the history, named by its checksum, or the one the active codex replaced when none is named (`opt CodexRevertArgs`, so existing callers keep working); a revert filed as a proposal names the codex it restores; the active or a pending codex is not an earlier one (`Conflict`); never `on_codex_activate`; which rule decides the vote is the GOS's (§11) |
