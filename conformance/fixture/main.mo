@@ -535,6 +535,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     if (Principal.isAnonymous(caller)) return #Err(#Unauthenticated);
     #Err(#NotFound);
   };
+  public shared ({ caller }) func ggg_action_collect(_ : Text) : async Result<Blob> {
+    if (Principal.isAnonymous(caller)) return #Err(#Unauthenticated);
+    #Err(#NotFound);
+  };
 
   /// Why a generic call on a grantor's behalf is refused here: it must carry a method of ggg.did other than
   /// the generic calls themselves, for someone other than the caller; and nobody has granted a delegation.

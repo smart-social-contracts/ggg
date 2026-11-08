@@ -9,6 +9,7 @@ export const idlFactory = ({ IDL }) => {
     'Failed' : IDL.Null,
     'Done' : IDL.Null,
     'Void' : IDL.Null,
+    'Approved' : IDL.Null,
     'Withdrawn' : IDL.Null,
     'Approving' : IDL.Null,
     'Declined' : IDL.Null,
@@ -2263,6 +2264,11 @@ export const idlFactory = ({ IDL }) => {
     'ggg_action_approve' : IDL.Func(
         [ActionApproveArgs],
         [IDL.Variant({ 'Ok' : PendingAction, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_action_collect' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : GggError })],
         [],
       ),
     'ggg_action_decline' : IDL.Func(

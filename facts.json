@@ -228,6 +228,7 @@
           "type": "PendingActionStatus",
           "values": [
             "Pending",
+            "Approved",
             "Approving",
             "Done",
             "Failed",
@@ -799,6 +800,14 @@
     },
     "action_withdraw": {
       "operation": "ggg_action_withdraw",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "action_collect": {
+      "operation": "ggg_action_collect",
       "facts": {
         "id": {
           "type": "text"
