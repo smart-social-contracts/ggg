@@ -117,7 +117,6 @@ export const idlFactory = ({ IDL }) => {
     'value' : IDL.Text,
     'kind' : IDL.Text,
     'issuer' : IDL.Opt(IDL.Text),
-    'on_behalf_of' : IDL.Opt(IDL.Principal),
     'expires_at' : IDL.Opt(Timestamp),
   });
   const AuthorityGrantArgs = IDL.Record({
@@ -813,7 +812,6 @@ export const idlFactory = ({ IDL }) => {
   const FederalVoteProposeArgs = IDL.Record({
     'title' : IDL.Text,
     'action' : ProposalAction,
-    'on_behalf_of' : IDL.Opt(IDL.Principal),
   });
   const FederationMessageArgs = IDL.Record({
     'to' : IDL.Opt(IDL.Text),

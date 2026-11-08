@@ -1173,7 +1173,6 @@ type AttributeSubmitArgs = record {
   issuer : opt text;
   ref : text;
   expires_at : opt Timestamp;
-  on_behalf_of : opt principal;
 };
 type AttributeReviewArgs = record { attribute : text; status : variant { Verified; Rejected } };
 // The caller's own attributes, of one kind or all.
@@ -1776,7 +1775,7 @@ type QuarterConfigureArgs = record {
 };
 type JoinFederationArgs = record { capital : principal; name : opt text };
 type ChangeQuarterArgs = record { quarter : text };
-type FederalVoteProposeArgs = record { title : text; action : ProposalAction; on_behalf_of : opt principal };
+type FederalVoteProposeArgs = record { title : text; action : ProposalAction };
 // To quarter `to`, or by default every active quarter.
 type FederationMessageArgs = record { topic : text; body : Value; to : opt text };
 

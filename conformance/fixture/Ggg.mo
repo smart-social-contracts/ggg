@@ -110,7 +110,6 @@ module {
     value : Text;
     kind : Text;
     issuer : ?Text;
-    on_behalf_of : ?Principal;
     expires_at : ?Timestamp;
   };
   public type Authority = {
@@ -710,7 +709,6 @@ module {
   public type FederalVoteProposeArgs = {
     title : Text;
     action : ProposalAction;
-    on_behalf_of : ?Principal;
   };
   public type FederalVoteStatus = { #Failed; #Passed; #Open; #Cancelled };
   public type FederationMessage = {
