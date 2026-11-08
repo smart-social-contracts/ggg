@@ -1295,6 +1295,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const QuarterConfigureArgs = IDL.Record({
     'status' : IDL.Opt(QuarterStatus),
+    'timezone' : IDL.Opt(IDL.Text),
     'quarter' : IDL.Opt(IDL.Text),
     'name' : IDL.Opt(IDL.Text),
     'rule' : IDL.Opt(Value),

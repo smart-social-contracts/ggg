@@ -244,11 +244,28 @@ working. A `ProposalLink` is a `kind` (`Replaces` or `RelatesTo`) and a proposal
 ## 6. `Realm.timezone` ([ggg#5](https://github.com/smart-social-contracts/ggg/issues/5)) and `effective_at` ([ggg#6](https://github.com/smart-social-contracts/ggg/issues/6))
 
 **`Realm.timezone`** is an IANA time zone name such as `Europe/Madrid`. Each realm sets its own; it
-is never inherited from a layer or a sync source. Timestamps stay UTC nanoseconds everywhere; the UI
-shows the realm's official time. The name has the shape `Area/Location` (up to three parts), or is
-`UTC`, which is also the value until the realm sets one, so a realm's setup should ask for a zone. GGG
-holds the name only. Converting to the realm's local day (for a daily journal issue or a working-day
-count) is the GOS's job.
+is never taken from another realm, from legislation or from a sync source. Timestamps stay UTC
+nanoseconds everywhere; the UI shows the realm's official time. The name has the shape
+`Area/Location` (up to three parts), or is `UTC`, which is also the value until the realm sets one,
+so a realm's setup should ask for a zone. GGG holds the name only. Converting to the realm's local
+day (for a daily journal issue or a working-day count) is the GOS's job.
+
+**A quarter of a federation** is a realm canister with its own zone, and is the one case where a
+starting value comes from elsewhere, and only from inside its own realm:
+
+- A new quarter starts on its capital's zone, copied once when it joins the federation
+  (`quarter_join_federation`). Only a realm still on `UTC` takes it; a realm that already chose a
+  zone keeps it when it joins as a quarter. After that the zone is the quarter's own.
+- The quarter may change it with `realm_configure`.
+- The realm may set it by a realm-wide vote: `quarter_configure` on the capital takes a `timezone`
+  for the `quarter` it names, which the capital sends to the quarter (`quarter.sync`) and the quarter
+  applies. A malformed name is refused with `InvalidArgument` before any vote.
+- In a federation, the capital's zone is the realm's official time, and a quarter's zone is its
+  local time. Realm-wide counts are made on the capital: a federal vote has one `deadline`, set there
+  once as an instant, and every quarter's leg keeps it. Effective times (below) are exact UTC
+  instants, so they are the same moment in every quarter.
+- Legislation never sets a zone. Its guards (`check_<op>`) may constrain who may change one, like
+  those of any governed operation.
 
 **`effective_at`** is an optional UTC timestamp on `ProposalCreateArgs` and `Proposal`: the exact
 time the proposal takes effect. It must lie after the time of the call that creates the proposal,
@@ -290,7 +307,8 @@ or the call is refused with `InvalidArgument`. The rules:
 `PeriodUnit = variant { Day; WorkingDay; Month; Year }`.
 
 A **working day** is a day that is neither a weekend day nor a holiday in **the realm's calendar**,
-taken in **the realm's time zone** (§6). Much legislation counts deadlines in working days, and Spain's
+taken in **the realm's time zone** (§6; for a matter of one quarter alone, the quarter's). Much
+legislation counts deadlines in working days, and Spain's
 does so by default (Ley 39/2015 Art. 30.2): at least thirty working days of public comment on a new
 ordinance before the final vote (Ley 7/1985 Art. 49), or an ordinance that takes effect fifteen
 working days after the higher authorities receive it (Ley 7/1985 Art. 65.2).
