@@ -888,7 +888,7 @@ type UserEditArgs = record { user : principal; nickname : opt text; avatar : opt
 type UserSetStatusArgs = record { user : principal; status : MemberStatus; department : opt text };
 type UserRemoveArgs = record { user : principal; department : opt text };
 
-type IdentitySubmitArgs = record { kind : text; issuer : opt text; ref : text; on_behalf_of : opt principal };
+type IdentitySubmitArgs = record { kind : text; issuer : opt text; ref : text };
 type IdentityReviewArgs = record { identity : text; status : variant { Verified; Rejected } };
 
 type InviteCreateArgs = record {
@@ -1177,9 +1177,8 @@ type PaymentAccountAddArgs = record {
   symbol : opt text;
   label : opt text;
   organization : opt text;
-  on_behalf_of : opt principal;
 };
-type PaymentAccountRemoveArgs = record { account : text; organization : opt text; on_behalf_of : opt principal };
+type PaymentAccountRemoveArgs = record { account : text; organization : opt text };
 
 // By court order.
 type ForceTransferArgs = record { symbol : text; from : principal; to : principal; amount : nat; reason : opt text };
@@ -1392,7 +1391,7 @@ type QuarterConfigureArgs = record {
   rule : opt Value;
 };
 type JoinFederationArgs = record { capital : principal; name : opt text };
-type ChangeQuarterArgs = record { quarter : text; on_behalf_of : opt principal };
+type ChangeQuarterArgs = record { quarter : text };
 type FederalVoteProposeArgs = record { title : text; action : ProposalAction; on_behalf_of : opt principal };
 // To quarter `to`, or by default every active quarter.
 type FederationMessageArgs = record { topic : text; body : Value; to : opt text };
