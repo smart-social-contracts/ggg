@@ -225,8 +225,8 @@ delegate only prepares the exact call and the grantor approves it; `member` oper
 member's own, never done under a grant nor prepared; `setup_launch` is the `founder`'s; `none` needs no
 power of attorney. The flags `delegable` and `confirm` ([§1](#operations)) mark the first two tiers. A
 `direct` operation with a condition asks each time when the condition holds: `proposal_create` with an
-action, `invite_create` with a profile beyond member or a seat, `setup_step` for the infrastructure and
-trust-policy steps, `document_store` with keys for others, `organization_edit` when it changes the
+action, `invite_create` with a profile beyond member or a seat, `setup_step` for the trust-policy step,
+`document_store` with keys for others, `organization_edit` when it changes the
 admins, `delegation_request_decide` when it approves, and, while the realm is in setup, where they would
 give someone power without a vote, `appoint`, `appoint_acting`, `role_assign`, `profile_create`,
 `profile_edit`, `authority_grant`, `judge_appoint`, `realm_configure_trust_policy`, `department_edit`
@@ -310,7 +310,7 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
   grant could still make that call. A delegate does not vote on a proposal it filed. Granting or
   accepting power of attorney, approving a request for it, payout accounts, identity proofs,
   attributes, moving to another quarter and federal votes are never done directly under a grant: they
-  are `confirm`.
+  are `confirm` (outside setup, [§2](#power-of-attorney)).
 - I-ID-12: A setup grant ends at launch: `setup_launch` removes the `setup` group from every grant,
   and a grant left with no group ends. `setup_launch` itself is never done under a grant nor prepared.
 - I-ID-13: No delegate of a member votes on a proposal that any delegate of the same member filed
@@ -1014,7 +1014,7 @@ trusted approver.
 | `realm_info` | — (public) | read | Agora: `beta`, installed version 0.9.0 |
 | `host_install` | `realm.host` (the host only) | | The installer names Alice founder, network `ic`, the registry that lists Agora |
 | `host_infrastructure` | `realm.host` (the host only) | | The installer gives Agora its frontend and file registry canisters |
-| `setup_state`, `setup_step` | `realm.configure` (founder during `setup`) | delegable | The founder picks codex, token and branding; `setup_step` asks each time for the infrastructure and trust-policy steps |
+| `setup_state`, `setup_step` | `realm.configure` (founder during `setup`) | delegable | The founder picks codex, token and branding; `setup_step` asks each time for the trust-policy step |
 | `setup_launch` | `realm.configure` (founder during `setup`) | | The founder launches: never under a grant, never prepared (I-ID-12) |
 | `realm_configure` | `realm.configure` | governed, delegable | Turn on open registration; set the realm's languages |
 | `realm_configure_branding` | `realm.configure.branding` | governed, delegable | Logo and primary colour `#1E6B52` |
