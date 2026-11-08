@@ -274,15 +274,17 @@ belongs to `admin` once the realm is launched. In `scope`, and in the arguments 
   operation must be one the grant covers directly at that moment: never a `confirm`, `member` or
   `founder` operation, and never one outside the grant's groups. The task fails once the grant is
   revoked, replaced or expired (I-EXT-5).
-- **Grants made before groups.** A grant whose `scope` names permissions covers only the operations
-  that were delegable before groups, with the rules that held then: `me`, `profile_update`,
-  `attribute_list`, `zone_set`, `zone_clear`, `proposal_create` (a motion), `proposal_withdraw`,
-  `proposal_vote`, `transfer_create` (always a proposal), `invoice_check`, `my_invoices`,
-  `tax_declare`, `license_apply`, `license_renew`, `request_file`, `request_get`, `dispute_file`,
-  `dispute_withdraw`, `dispute_get`, `evidence_submit`, `appeal_file`, `bid_submit`, `bid_withdraw`,
-  `notification_list` and `notification_read`. Under such a grant a proposal with an action, a payout
-  account, an identity proof, an attribute, a quarter move and a federal vote stay refused: nothing
-  widens an old grant. A new grant may still name permissions, and then it covers these alone.
+- **Grants made before groups.** A grant whose `scope` names permissions covers only these operations,
+  with the rules that held before groups: `me`, `profile_update`, `zone_set`, `zone_clear`,
+  `proposal_create` (a motion), `proposal_withdraw`, `proposal_vote`, `transfer_create` (always a
+  proposal), `invoice_check`, `my_invoices`, `tax_declare`, `license_apply`, `license_renew`,
+  `request_file`, `request_get`, `dispute_file`, `dispute_withdraw`, `dispute_get`, `evidence_submit`,
+  `appeal_file`, `bid_submit`, `bid_withdraw`, `notification_list` and `notification_read`. Not
+  `attribute_list`, delegable then too: an attribute is I-PRV-1 data, and such a grant was consented
+  to for the member's own card, notifications and invoices; it is read under `see`. Under such a grant
+  a proposal with an action, a payout account, an identity proof, an attribute, a quarter move and a
+  federal vote stay refused: nothing widens an old grant. A new grant may still name permissions, and
+  then it covers these alone.
 - **The vocabulary.** `delegation_groups` returns the groups the caller can grant, each with its
   label, summary, risk and longest duration, whether some of its operations ask each time, and the
   caller's operations in it with their tiers, as `delegation.json` states them, so every GOS and
@@ -326,8 +328,11 @@ approval runs it:
    decoded at filing, as the grantor, with every check the grantor's own call would meet now
    (permission, guardrails, parties, banned status), and stores the reply as `result`, without what the
    event log strips (a secret the operation returns, such as an invite code, is in the approval's own
-   reply alone): `done`, or `failed`. A governed call goes as the grantor's own call would: at once
-   where the governing department decides directly, else as the grantor's own proposal, with
+   reply alone): `done`, or `failed`. A `confirm` read that returns third parties' personal data keeps
+   no `result` at all: the approved action gives the reply once to the delegate that prepared it, at
+   its first `action_get`, and `result` is then cleared (I-PRV-1). A governed call goes as the
+   grantor's own call would: at once where the governing department decides directly, else as the
+   grantor's own proposal, with
    `Proposal.prepared_by` the delegate. An action left `approving` after a trap ends `failed` and is
    never retried.
 4. **Ending otherwise.** `expired` once `expires_at` passes; `void` once its grant is revoked,
@@ -1180,8 +1185,9 @@ is its proposal's `effective_at` (I-GOV-5).
 
 - I-PRV-1: The realm never holds private content or an unwrapped data key, only ciphertext
   references, hashes and wrapped keys. One exception: an attribute's `kind` and `value` (§2) are in
-  clear, and readable only by the person they belong to, by the holders of `attribute.review` and by the
-  codex. A request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
+  clear, and readable only by the person they belong to, by the holders of `attribute.review`, by the
+  codex and, once, by the delegate whose approved action read them ([§2](#pending-actions)). A
+  request's `body` or `reply` and a dispatch's `body` that hold personal data carry a
   `Document` reference, encrypted, never text in clear, and a published copy (`Document.public`) holds
   no personal data.
 - I-PRV-2: Only a scope's managers grant or revoke its keys, or see who holds them.
