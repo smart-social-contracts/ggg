@@ -337,8 +337,9 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 - I-GOV-3: A proposal is accepted only if its quorum and threshold are met when its vote ends. Its rule,
   `threshold`, `quorum`, `threshold_of` and `casting_vote`, states the one that decides it, and that rule
   is applied; it is fixed when the vote opens, together with `tally.eligible` and `tally.seats`: at
-  creation for a proposal filed open, at `proposal_open` for a draft, and after that it never moves,
-  like the action. One comparison per scope:
+  creation for a proposal filed open, at `proposal_open` for a draft, which then takes the stricter of
+  the rule it stated and the scope's default of that moment, never a weaker one; after that it never
+  moves, like the action. One comparison per scope:
   - A **realm-wide** proposal takes the realm's `voting_threshold` and `voting_quorum`, over the votes
     `cast`: it is accepted when the votes cast reach the quorum of the eligible voters and the yes votes
     *exceed* `threshold` of the yes and no votes. Over the `eligible` voters, the yes votes must exceed
@@ -355,11 +356,11 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   - Under `cast`, when the yes votes stand exactly at `threshold` of the yes and no votes (a tie at 50 %),
     the `casting_vote` member's yes accepts; without one, or if that member did not vote yes, the tie
     rejects. The casting vote is part of the realm's default rule, set by governed configuration:
-    `Realm.casting_vote` (`governance_update`, an active member). A realm-wide proposal copies it at
-    creation; the proposer never sets it, and a department's proposals have none, since they count over
-    the seats, where no tie arises. If the member later leaves, new proposals still copy them, their
-    vote does not count on those (I-GOV-2) and ties reject, until `governance_update` names another or
-    clears it.
+    `Realm.casting_vote` (`governance_update`, an active member). A realm-wide proposal copies it
+    when its vote opens; the proposer never sets it, and a department's proposals have none, since
+    they count over the seats, where no tie arises. If the member later leaves, new proposals still
+    copy them, their vote does not count on those (I-GOV-2) and ties reject, until
+    `governance_update` names another or clears it.
   - The proposer may state a stricter rule when creating the proposal, never a weaker one
     (`InvalidArgument`): a higher threshold or quorum, or `eligible` where the default is `cast`. Each
     change narrows what the default accepts, so legislation's guards, which may require them, only ever
