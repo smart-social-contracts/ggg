@@ -215,10 +215,10 @@ argument (it must hold that permission through its positions or grants); otherwi
 - I-ID-9: An identity or attribute authorizes nothing once `rejected`, or past its `expires_at`. What a
   verified one means is legislation's to say, never GGG's.
 - I-ID-10: A delegate's proposal is a motion, with no action. A delegable governed call made under a delegation
-  is filed as a proposal, and the GOS records the grant it was filed under; it replays only if that grant is
-  still in force and could make that call directly. A delegate does not vote on a proposal it filed. Power of
-  attorney itself, payout accounts, identity proofs, attributes, moving to another quarter and federal votes
-  are never delegable.
+  is filed as a proposal, and the GOS records the grant it was filed under. It replays unless that grant was
+  revoked or replaced, even if the grant has expired since, and only if the grant could still make that call.
+  A delegate does not vote on a proposal it filed. Power of attorney itself, payout accounts, identity proofs, attributes, moving to another quarter
+  and federal votes are never delegable.
 
 ## 3. Departments and organizations
 
