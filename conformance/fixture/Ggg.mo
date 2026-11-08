@@ -181,11 +181,11 @@ module {
   };
   /// Whether a line plans money coming in or going out; `category` is the realm's word for what.
   public type BudgetKind = { #Revenue; #Expense };
-  /// Proposes every draft line of the period together, under the root department's policy. `years` is how
-  /// many periods the plan covers, when more than one. Legislation reads the period's totals, `revenue` and
-  /// `expense` (the sums of `planned` over its Revenue and Expense lines), as facts of the call; a total out
-  /// of Money's range is InvalidArgument, like any other fact.
-  public type BudgetProposeArgs = { period : Text; years : ?Nat };
+  /// Proposes the draft lines of the period together: those of `fund`, under its owner's policy, or every
+  /// fund's, under the root's. `years` is how many periods the plan covers, when more than one. Legislation
+  /// reads the period's totals, `revenue` and `expense` (the sums of `planned` over its Revenue and Expense
+  /// lines), as facts of the call; a total out of Money's range is InvalidArgument, like any other fact.
+  public type BudgetProposeArgs = { period : Text; fund : ?Text; years : ?Nat };
   /// Extended: copied from the previous period's adopted budget by budget_extend, in force until an adopted
   /// budget replaces it.
   public type BudgetStatus = {

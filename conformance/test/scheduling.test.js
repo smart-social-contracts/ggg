@@ -1,5 +1,6 @@
-// The life of a proposal with an effective_at, driven on PocketIC with its own clock, and which
-// proposal may carry a call on another's records (I-GOV-13).
+// The life of a proposal with an effective_at, driven on PocketIC with its own clock; which proposal
+// may carry a call on another's records (I-GOV-13); and which department governs a change to a
+// department or a budget (model §1, D19).
 // The fixture decides a vote after its deadline (7 days), or earlier once both members have voted, so
 // the tests move the clock forward.
 //
@@ -107,6 +108,12 @@ const ownStop = async (department) => stopping(await file({ department }));
 const move = (department, parent) => ({ department, parent: [parent], description: [], kind: [], head: [] });
 const describe = (department, description) => ({ department, parent: [], description: [description], kind: [], head: [] });
 const department = async (id) => ok(await as(alice).ggg_department_get({ id, cursor: [], limit: [] }))[0].department;
+const argType = (method) => idlFactory({ IDL })._fields.find(([name]) => name === method)[1].argTypes[0];
+const calling = (method, args) => ({ Call: { method, arg: new Uint8Array(IDL.encode([argType(method)], [args])) } });
+const editing = (args) => calling('ggg_department_edit', args);
+const budget = (period, fund = null) => ({ period, years: [], fund: fund ? [fund] : [] });
+const fundArgs = (fund, department = null) => ({ fund, name: [], kind: [], department: department ? [department] : [] });
+const lineArgs = (fund, period) => ({ fund, period, category: 'works', kind: { Expense: null }, planned: 1_000n });
 
 const get = async (id) => ok(await as(alice).ggg_proposal_get({ id, cursor: [], limit: [] }))[0].proposal;
 const status = async (id) => tag((await get(id)).status);
@@ -454,4 +461,78 @@ test('a department edits itself under its own policy: alone at once, 2 of 3 thro
   await approve(filedId);
   assert.equal(tag((await finalizeAndRun(filedId)).status), 'Executed');
   assert.equal((await department('council')).description, 'The town council.');
+});
+
+test('a change of parent is governed by the lowest department above the old and the new parent', async () => {
+  // Roads moves under its sibling parks: the council is above both, and decides 2 of 3.
+  refusedWith(await create({ action: editing(move('roads', 'parks')), department: 'parks' }), 'Forbidden');
+  const filedId = ok(await as(bob).ggg_department_edit(move('roads', 'parks'))).Proposed;
+  const filed = await get(filedId);
+  assert.deepEqual(filed.department, ['council']);
+  assert.deepEqual((await department('roads')).parent, ['council']);
+  await approve(filedId);
+  assert.equal(tag((await finalizeAndRun(filedId)).status), 'Executed');
+  assert.deepEqual((await department('roads')).parent, ['parks']);
+
+  // Back under the council: the council is above parks and is the council, so it decides again.
+  const back = ok(await as(bob).ggg_department_edit(move('roads', 'council'))).Proposed;
+  await approve(back);
+  assert.equal(tag((await finalizeAndRun(back)).status), 'Executed');
+  assert.deepEqual((await department('roads')).parent, ['council']);
+});
+
+test('department_delete is governed by the parent, and a proposal of a deleted department carries nothing', async () => {
+  refusedWith(await as(bob).ggg_department_delete('root'), 'Conflict');
+  refusedWith(await as(bob).ggg_department_delete('no-such-department'), 'NotFound');
+  // This fixture deletes no department with departments below it.
+  refusedWith(await as(bob).ggg_department_delete('council'), 'Conflict');
+
+  const target = await file({ action: await ownStop('parks'), days: 40, everyone: true, department: 'parks' });
+  await wait(1);
+  assert.equal(await finalize(target), 'ExecutionScheduled');
+
+  // Parks is under the council, which decides 2 of 3: the delete files a council proposal.
+  const filedId = ok(await as(bob).ggg_department_delete('parks')).Proposed;
+  assert.deepEqual((await get(filedId)).department, ['council']);
+  await approve(filedId);
+  assert.equal(tag((await finalizeAndRun(filedId)).status), 'Executed');
+  assert.deepEqual(ok(await as(alice).ggg_department_get({ id: 'parks', cursor: [], limit: [] })), []);
+
+  // The scheduled proposal of parks carries nothing now: nobody can stop it, and it fails when it runs.
+  refusedWith(await as(bob).ggg_proposal_stop(target), 'NotFound');
+  await wait(40);
+  const ran = await runScheduled(target);
+  assert.equal(tag(ran.status), 'Failed');
+  assert.deepEqual(ran.result.map(tag), ['Error']);
+});
+
+test("a budget is governed by its fund's owner, or by the root for every fund's lines", async () => {
+  // A fund of the root, created at once, and one of the council, whose 2 of 3 files a council proposal.
+  assert.deepEqual(ok(await as(bob).ggg_fund_create(fundArgs('GENERAL'))), { Done: ['GENERAL'] });
+  refusedWith(await as(bob).ggg_fund_create(fundArgs('GENERAL')), 'Conflict');
+  const fund = ok(await as(bob).ggg_fund_create(fundArgs('COUNCIL', 'council'))).Proposed;
+  assert.deepEqual((await get(fund)).department, ['council']);
+  await approve(fund);
+  assert.equal(tag((await finalizeAndRun(fund)).status), 'Executed');
+  assert.deepEqual(ok(await as(alice).ggg_treasury_view({ cursor: [], limit: [] })).funds.map((f) => f.id).sort(), ['COUNCIL', 'GENERAL']);
+
+  // Draft lines follow the fund's owner too.
+  assert.equal(tag(ok(await as(bob).ggg_budget_draft(lineArgs('GENERAL', 'FY2027')))), 'Done');
+  const line = ok(await as(bob).ggg_budget_draft(lineArgs('COUNCIL', 'FY2027'))).Proposed;
+  await approve(line);
+  assert.equal(tag((await finalizeAndRun(line)).status), 'Executed');
+  refusedWith(await as(bob).ggg_budget_draft(lineArgs('NO-SUCH-FUND', 'FY2027')), 'NotFound');
+
+  // The council adopts its own fund's budget under its policy; a committee below it cannot carry that.
+  refusedWith(await create({ action: calling('ggg_budget_propose', budget('FY2027', 'COUNCIL')), department: 'roads' }), 'Forbidden');
+  const adopt = ok(await as(bob).ggg_budget_propose(budget('FY2027', 'COUNCIL'))).Proposed;
+  assert.deepEqual((await get(adopt)).department, ['council']);
+  await approve(adopt);
+  assert.equal(tag((await finalizeAndRun(adopt)).status), 'Executed');
+  refusedWith(await as(bob).ggg_budget_propose(budget('FY2027', 'COUNCIL')), 'Conflict');
+  refusedWith(await as(bob).ggg_budget_propose(budget('FY2027', 'NO-SUCH-FUND')), 'NotFound');
+
+  // The whole-period budget is the root's: it adopts every fund's draft lines left, at once.
+  assert.deepEqual(ok(await as(bob).ggg_budget_propose(budget('FY2027'))), { Done: [] });
+  refusedWith(await as(bob).ggg_budget_propose(budget('FY2027')), 'Conflict');
 });

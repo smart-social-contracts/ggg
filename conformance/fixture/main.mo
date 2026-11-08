@@ -7,9 +7,14 @@
 /// it, deciding 2 of 3, so a governed call on one of its proposals files a proposal instead; and two
 /// committees under the council, each deciding alone, so that a proposal of the council can carry a
 /// call on a committee's records where a committee's cannot carry one on its sibling's (I-GOV-13).
-/// Members may also edit a department (department_edit, governed by that department), so a committee
-/// can be moved while a proposal that acts on it waits; they hold org.set_policy for that alone, and
-/// department_delete and department_set_policy are refused. No department has seats: their proposals are
+/// Members may also edit a department (department_edit, governed by that department, or by the lowest
+/// department above both the old and the new parent when it moves) and delete one that has none below
+/// it (department_delete, governed by its parent), so a committee can be moved or removed while a
+/// proposal that acts on it waits; they hold org.set_policy for that, and department_set_policy is
+/// refused. They also create funds and draft and propose budget lines (fund_create, budget_draft,
+/// budget_propose, each governed by the fund's owner, or by the root for every fund's lines), with
+/// org.manage_budget; this fixture has no fiscal periods, a period is a name, and a line goes from draft
+/// to adopted when the call applies. No department has seats: their proposals are
 /// counted like any other here, by every member, and a policy only decides whether a governed call on
 /// the department's records applies at once or files a proposal. So the fixture never ends a
 /// department vote early (I-GOV-7 allows it, it does not require it): that needs seats to count and
@@ -57,6 +62,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   /// for a realm-wide one only.
   func scopeRule(department : T.Department) : Rule = { defaultRule() with casting_vote = if (department.is_root) castingVote else null };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
+  let NO_MORE_BUDGETING = "keeps no fiscal periods, allocation rules, payroll or loans";
   let OUT_OF_SCOPE = "a department's proposal carries only the calls that department, or one below it, governs";
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
@@ -92,6 +98,18 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
   };
 
+  /// The lowest department that is `a` or above it and `b` or above it: the root, if no other.
+  func lowestAbove(a : Text, b : Text) : Text {
+    var at = ?a;
+    loop {
+      let ?d = at else return ROOT_ID;
+      if (within(b, d)) return d;
+      at := switch (findDepartment(d)) { case (?found) found.parent; case null null };
+    };
+  };
+
+  func parentOf(department : T.Department) : Text = switch (department.parent) { case (?p) p; case null ROOT_ID };
+
   let createdAt = now();
   let members = Map.empty<Principal, T.UserEntry>();
   for (p in initMembers.vals()) {
@@ -114,6 +132,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   let everyoneVotedAt = Map.empty<Nat, T.Timestamp>();
   let events = Map.empty<Nat, T.Event>();
   var nextProposal = 1;
+  // Funds and budget lines (model §5): enough to govern a budget by its fund's owner (D19).
+  let funds = Map.empty<Text, T.Fund>();
+  let budgets = Map.empty<Nat, T.Budget>();
+  var nextBudget = 1;
 
   func pageSize(limit : ?Nat32) : Nat {
     switch (limit) {
@@ -178,6 +200,10 @@ persistent actor class GggFixture(initMembers : [Principal]) {
       case "ggg_proposal_withdraw" { let a : ?T.ProposalWithdrawArgs = from_candid (arg); a != null };
       case "ggg_proposal_stop" { let a : ?Text = from_candid (arg); a != null };
       case "ggg_department_edit" { let a : ?T.DepartmentEditArgs = from_candid (arg); a != null };
+      case "ggg_department_delete" { let a : ?Text = from_candid (arg); a != null };
+      case "ggg_fund_create" { let a : ?T.FundCreateArgs = from_candid (arg); a != null };
+      case "ggg_budget_draft" { let a : ?T.BudgetDraftArgs = from_candid (arg); a != null };
+      case "ggg_budget_propose" { let a : ?T.BudgetProposeArgs = from_candid (arg); a != null };
       case "ggg_profile_update" { let a : ?T.ProfileUpdateArgs = from_candid (arg); a != null };
       case _ return ?#InvalidArgument(method # " is not an update method of this canister");
     };
@@ -187,22 +213,69 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   /// The department a proposal belongs to: the one it is scoped to, the root for a realm-wide one.
   func ownerId(p : T.Proposal) : Text = switch (p.department) { case (?d) d; case null ROOT_ID };
 
-  /// The department that governs a call (model §1): the owner of the proposal a stop ends, the
-  /// department an edit changes, and the root for a call no department governs, which only a
-  /// realm-wide proposal carries.
+  /// The department that owns `fund`: the root when it names none.
+  func fundOwner(fund : Text) : Result<Text> {
+    let ?f = Map.get(funds, Text.compare, fund) else return #Err(#NotFound);
+    #Ok(switch (f.department) { case (?d) d; case null ROOT_ID });
+  };
+
+  /// The department that governs a call (model §1): the owner of the proposal a stop ends; the
+  /// department an edit changes, or the lowest department above both the old and the new parent when
+  /// the edit moves it; the parent of the department a delete removes; the owner of a fund, or of the
+  /// fund a budget names, and the root for a whole-period budget; and the root for a call no department
+  /// governs, which only a realm-wide proposal carries.
   func governingDepartment(method : Text, arg : Blob) : Result<T.Department> {
     let id = switch (method) {
+      case "ggg_fund_create" {
+        let ?args : ?T.FundCreateArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        switch (args.department) { case (?d) d; case null ROOT_ID };
+      };
+      case "ggg_budget_draft" {
+        let ?args : ?T.BudgetDraftArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        switch (fundOwner(args.fund)) { case (#Err(e)) return #Err(e); case (#Ok(d)) d };
+      };
+      case "ggg_budget_propose" {
+        let ?args : ?T.BudgetProposeArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        switch (args.fund) {
+          case (?f) { switch (fundOwner(f)) { case (#Err(e)) return #Err(e); case (#Ok(d)) d } };
+          case null ROOT_ID;
+        };
+      };
       case "ggg_proposal_stop" {
         let ?target : ?Text = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
         switch (findProposal(target)) { case null return #Err(#NotFound); case (?(_, p)) ownerId(p) };
       };
       case "ggg_department_edit" {
         let ?edit : ?T.DepartmentEditArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
-        edit.department;
+        let ?department = findDepartment(edit.department) else return #Err(#NotFound);
+        switch (edit.parent) {
+          case (?parent) { if (parent != parentOf(department)) lowestAbove(parentOf(department), parent) else department.id };
+          case null department.id;
+        };
+      };
+      case "ggg_department_delete" {
+        let ?id : ?Text = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        let ?department = findDepartment(id) else return #Err(#NotFound);
+        if (department.is_root) return #Err(#Conflict("the root department cannot be deleted"));
+        parentOf(department);
       };
       case _ ROOT_ID;
     };
     switch (findDepartment(id)) { case null #Err(#NotFound); case (?found) #Ok(found) };
+  };
+
+  /// A governed call: applied at once under the governing department's direct policy, replying Done
+  /// with the id of the record it created, or filed as a proposal of that department that replays it
+  /// (model §1).
+  func govern(caller : Principal, op : Text, governing : T.Department, arg : Blob, title : Text, description : Text, apply : () -> Result<?Text>) : Result<T.Governed> {
+    if (direct(governing.policy)) {
+      switch (apply()) { case (#Err(e)) #Err(e); case (#Ok(id)) #Ok(#Done(id)) };
+    } else {
+      let call = #Call({ method = "ggg_" # op; arg });
+      let filed = fileProposal(caller, title, description, ?governing.id, null, null, call, scopeRule(governing), null, []);
+      audit(op, caller, #Map([("filed", #Text(filed.id))]), #Text(filed.id));
+      #Ok(#Proposed(filed.id));
+    };
   };
 
   /// A department's proposal carries only the calls that department or one below it governs; a
@@ -388,6 +461,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
         "proposal.vote",
         "governance.update",
         "org.set_policy",
+        "org.manage_budget",
         "realm.data_view",
         "realm.monitor",
       ];
@@ -512,20 +586,139 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     };
   };
 
-  /// Edits a department: its description, kind, head and parent. Governed by that department (model
-  /// §1): a direct policy applies the edit at once, any other files a proposal of that department.
+  /// Edits a department: its description, kind, head and parent. Governed by that department, or by
+  /// the lowest department above both the old and the new parent when the edit moves it (model §1).
   public shared ({ caller }) func ggg_department_edit(args : T.DepartmentEditArgs) : async Result<T.Governed> {
     switch (requireMember(caller, "org.set_policy")) { case (?e) return #Err(e); case null {} };
     let department = switch (findDepartment(args.department)) { case null return #Err(#NotFound); case (?found) found };
-    if (direct(department.policy)) {
-      switch (editDepartment(caller, args)) { case (#Err(e)) #Err(e); case (#Ok(_)) #Ok(#Done(null)) };
-    } else {
-      switch (checkEdit(department, args)) { case (?e) return #Err(e); case null {} };
-      let call = #Call({ method = "ggg_department_edit"; arg = to_candid (args) });
-      let filed = fileProposal(caller, "Edit department " # department.id, "Edits the department " # department.id # ".", ?department.id, null, null, call, scopeRule(department), null, []);
-      audit("department_edit", caller, #Map([("department", #Text(department.id))]), #Text(filed.id));
-      #Ok(#Proposed(filed.id));
+    switch (checkEdit(department, args)) { case (?e) return #Err(e); case null {} };
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_department_edit", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    govern(caller, "department_edit", governing, arg, "Edit department " # department.id, "Edits the department " # department.id # ".", func() {
+      switch (editDepartment(caller, args)) { case (#Err(e)) #Err(e); case (#Ok(_)) #Ok(null) };
+    });
+  };
+
+  /// Deletes a department with none below it. Governed by its parent (model §1).
+  public shared ({ caller }) func ggg_department_delete(id : Text) : async Result<T.Governed> {
+    switch (requireMember(caller, "org.set_policy")) { case (?e) return #Err(e); case null {} };
+    let arg = to_candid (id);
+    let governing = switch (governingDepartment("ggg_department_delete", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    switch (checkDelete(id)) { case (?e) return #Err(e); case null {} };
+    govern(caller, "department_delete", governing, arg, "Delete department " # id, "Deletes the department " # id # ".", func() {
+      deleteDepartment(caller, id);
+    });
+  };
+
+  /// The root stays (I-ORG-6), and this fixture deletes no department with departments below it.
+  func checkDelete(id : Text) : ?T.GggError {
+    let ?department = findDepartment(id) else return ?#NotFound;
+    if (department.is_root) return ?#Conflict("the root department cannot be deleted");
+    for (d in Map.values(departments)) {
+      if (d.parent == ?id) return ?#Conflict("a department with departments below it is not deleted here");
     };
+    null;
+  };
+
+  /// Deletes, checked against the departments as they stand now.
+  func deleteDepartment(caller : Principal, id : Text) : Result<?Text> {
+    switch (checkDelete(id)) { case (?e) return #Err(e); case null {} };
+    Map.remove(departments, Text.compare, id);
+    audit("department_delete", caller, #Map([("department", #Text(id))]), #Text(id));
+    #Ok(null);
+  };
+
+  // ---- Funds and budgets (model §5)
+
+  /// A fund's owner is the department named, the root when none is. Governed by that owner (model §1).
+  public shared ({ caller }) func ggg_fund_create(args : T.FundCreateArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "org.manage_budget")) { case (?e) return #Err(e); case null {} };
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_fund_create", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    switch (checkFund(args)) { case (?e) return #Err(e); case null {} };
+    govern(caller, "fund_create", governing, arg, "Create fund " # args.fund, "Creates the fund " # args.fund # ".", func() {
+      createFund(caller, args);
+    });
+  };
+
+  func checkFund(args : T.FundCreateArgs) : ?T.GggError {
+    if (Text.size(args.fund) == 0) return ?#InvalidArgument("fund is empty");
+    if (Map.containsKey(funds, Text.compare, args.fund)) return ?#Conflict("fund " # args.fund # " exists");
+    null;
+  };
+
+  func createFund(caller : Principal, args : T.FundCreateArgs) : Result<?Text> {
+    switch (checkFund(args)) { case (?e) return #Err(e); case null {} };
+    let fund : T.Fund = {
+      id = args.fund;
+      name = switch (args.name) { case (?n) n; case null args.fund };
+      kind = switch (args.kind) { case (?k) k; case null "general" };
+      department = args.department;
+      balances = [];
+      allocation_rule = null;
+    };
+    Map.add(funds, Text.compare, fund.id, fund);
+    audit("fund_create", caller, #Map([("fund", #Text(fund.id))]), #Text(fund.id));
+    #Ok(?fund.id);
+  };
+
+  /// Drafts one line of a fund's budget for a period. Governed by the fund's owner (model §1).
+  public shared ({ caller }) func ggg_budget_draft(args : T.BudgetDraftArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "org.manage_budget")) { case (?e) return #Err(e); case null {} };
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_budget_draft", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    if (Text.size(args.period) == 0 or Text.size(args.category) == 0) return #Err(#InvalidArgument("period and category are not empty"));
+    govern(caller, "budget_draft", governing, arg, "Draft a budget line", "Drafts a line of " # args.fund # "'s budget for " # args.period # ".", func() {
+      draftBudget(caller, args);
+    });
+  };
+
+  func draftBudget(caller : Principal, args : T.BudgetDraftArgs) : Result<?Text> {
+    if (not Map.containsKey(funds, Text.compare, args.fund)) return #Err(#NotFound);
+    let n = nextBudget;
+    nextBudget += 1;
+    let line : T.Budget = {
+      id = "B-" # Nat.toText(n);
+      fund = args.fund;
+      period = args.period;
+      category = args.category;
+      kind = args.kind;
+      planned = args.planned;
+      actual = 0;
+      status = #Draft;
+      proposal = null;
+    };
+    Map.add(budgets, Nat.compare, n, line);
+    audit("budget_draft", caller, #Map([("budget", #Text(line.id))]), #Text(line.id));
+    #Ok(?line.id);
+  };
+
+  /// The draft lines of a period: a fund's, or every fund's.
+  func drafts(args : T.BudgetProposeArgs) : [(Nat, T.Budget)] {
+    Iter.toArray(Iter.filter<(Nat, T.Budget)>(Map.entries(budgets), func((_, b)) {
+      b.status == #Draft and b.period == args.period and (switch (args.fund) { case (?f) b.fund == f; case null true });
+    }));
+  };
+
+  /// Proposes the draft lines of a period together. Governed by the owner of `fund`, or by the root for
+  /// every fund's lines (model §5, D19).
+  public shared ({ caller }) func ggg_budget_propose(args : T.BudgetProposeArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "org.manage_budget")) { case (?e) return #Err(e); case null {} };
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_budget_propose", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    if (drafts(args).size() == 0) return #Err(#Conflict("no draft line of " # args.period # " to propose"));
+    govern(caller, "budget_propose", governing, arg, "Budget " # args.period, "Proposes the draft budget lines of " # args.period # ".", func() {
+      proposeBudget(caller, args);
+    });
+  };
+
+  /// Adopts the lines: this fixture settles a budget when the call applies.
+  func proposeBudget(caller : Principal, args : T.BudgetProposeArgs) : Result<?Text> {
+    let lines = drafts(args);
+    if (lines.size() == 0) return #Err(#Conflict("no draft line of " # args.period # " to propose"));
+    for ((n, b) in lines.vals()) Map.add(budgets, Nat.compare, n, { b with status = #Adopted });
+    audit("budget_propose", caller, #Map([("period", #Text(args.period)), ("lines", #Nat(lines.size()))]), #Text("ok"));
+    #Ok(null);
   };
 
   /// The root keeps no parent, and a department never moves under itself or a department below it.
@@ -803,30 +996,48 @@ persistent actor class GggFixture(initMembers : [Principal]) {
 
   /// Applies an accepted action as the realm, within the proposal's scope as the departments stand now
   /// (I-GOV-13), or returns null for a motion, which has nothing to execute. This fixture replays
-  /// ggg_proposal_stop and ggg_department_edit only.
+  /// ggg_proposal_stop, ggg_department_edit, ggg_department_delete, ggg_fund_create, ggg_budget_draft
+  /// and ggg_budget_propose.
   func replay(caller : Principal, p : T.Proposal) : ?(T.ProposalStatus, ?T.ProposalResult) {
     func failed(e : T.GggError) : ?(T.ProposalStatus, ?T.ProposalResult) = ?(#Failed, ?#Error(debug_show (e)));
+    func undecodable() : ?(T.ProposalStatus, ?T.ProposalResult) = ?(#Failed, ?#Error("arg does not decode"));
     switch (p.action) {
       case (#Motion) null;
       case (#Code _) ?(#Failed, ?#Error("this fixture installs no codex"));
       case (#Call { method; arg }) {
         switch (checkScope(p.department, method, arg)) { case (?e) return failed(e); case null {} };
-        let error : ?T.GggError = switch (method) {
+        let applied : Result<?Text> = switch (method) {
           case "ggg_proposal_stop" {
-            let ?id : ?Text = from_candid (arg) else return ?(#Failed, ?#Error("arg does not decode"));
-            switch (stopProposal(caller, id)) { case (#Err(e)) ?e; case (#Ok(_)) null };
+            let ?id : ?Text = from_candid (arg) else return undecodable();
+            switch (stopProposal(caller, id)) { case (#Err(e)) #Err(e); case (#Ok(_)) #Ok(null) };
           };
           case "ggg_department_edit" {
-            let ?edit : ?T.DepartmentEditArgs = from_candid (arg) else return ?(#Failed, ?#Error("arg does not decode"));
-            switch (editDepartment(caller, edit)) { case (#Err(e)) ?e; case (#Ok(_)) null };
+            let ?edit : ?T.DepartmentEditArgs = from_candid (arg) else return undecodable();
+            switch (editDepartment(caller, edit)) { case (#Err(e)) #Err(e); case (#Ok(_)) #Ok(null) };
+          };
+          case "ggg_department_delete" {
+            let ?id : ?Text = from_candid (arg) else return undecodable();
+            deleteDepartment(caller, id);
+          };
+          case "ggg_fund_create" {
+            let ?args : ?T.FundCreateArgs = from_candid (arg) else return undecodable();
+            createFund(caller, args);
+          };
+          case "ggg_budget_draft" {
+            let ?args : ?T.BudgetDraftArgs = from_candid (arg) else return undecodable();
+            draftBudget(caller, args);
+          };
+          case "ggg_budget_propose" {
+            let ?args : ?T.BudgetProposeArgs = from_candid (arg) else return undecodable();
+            proposeBudget(caller, args);
           };
           case _ return ?(#Failed, ?#Error(method # " is not replayed by this fixture"));
         };
-        switch (error) {
-          case (?e) failed(e);
-          case null {
-            // What either call replies when it applies at once: Done, with no id.
-            let reply : Result<T.Governed> = #Ok(#Done(null));
+        switch (applied) {
+          case (#Err(e)) failed(e);
+          case (#Ok(id)) {
+            // What the call replies when it applies at once: Done, with the id of the record it created.
+            let reply : Result<T.Governed> = #Ok(#Done(id));
             ?(#Executed, ?#Reply(to_candid (reply)));
           };
         };
@@ -858,17 +1069,9 @@ persistent actor class GggFixture(initMembers : [Principal]) {
     let (_, target) = switch (findProposal(id)) { case null return #Err(#NotFound); case (?found) found };
     if (target.status != #ExecutionScheduled) return #Err(#Conflict(NOT_SCHEDULED));
     let owner = switch (findDepartment(ownerId(target))) { case null return #Err(#NotFound); case (?found) found };
-    if (direct(owner.policy)) {
-      switch (stopProposal(caller, id)) {
-        case (#Err(e)) #Err(e);
-        case (#Ok(_)) #Ok(#Done(null));
-      };
-    } else {
-      let call = #Call({ method = "ggg_proposal_stop"; arg = to_candid (id) });
-      let filed = fileProposal(caller, "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", target.department, null, null, call, scopeRule(owner), null, []);
-      audit("proposal_stop", caller, #Map([("proposal", #Text(id))]), #Text(filed.id));
-      #Ok(#Proposed(filed.id));
-    };
+    govern(caller, "proposal_stop", owner, to_candid (id), "Stop proposal " # id, "Stops the scheduled proposal " # id # ".", func() {
+      switch (stopProposal(caller, id)) { case (#Err(e)) #Err(e); case (#Ok(_)) #Ok(null) };
+    });
   };
 
   public shared ({ caller }) func ggg_mandate_create(_ : T.MandateCreateArgs) : async Result<T.Governed> {
@@ -913,7 +1116,7 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   };
 
   public query func ggg_treasury_view(args : T.ListArgs) : async Result<T.TreasuryView> {
-    switch (none<T.Fund>(args.cursor, args.limit)) {
+    switch (page(Map.values(funds), args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
       case (#Ok({ items; next })) #Ok({ treasury = null; tokens = []; nft_tokens = []; funds = items; next });
     };
@@ -1121,7 +1324,6 @@ persistent actor class GggFixture(initMembers : [Principal]) {
 
   // §3
   public shared ({ caller }) func ggg_department_create(_ : T.DepartmentCreateArgs) : async Result<T.Governed> { nobody(caller, "org.create") };
-  public shared ({ caller }) func ggg_department_delete(_ : Text) : async Result<T.Governed> { notHere(caller, "org.set_policy", "deletes no department") };
   public shared ({ caller }) func ggg_department_set_policy(_ : T.DepartmentPolicyArgs) : async Result<T.Governed> { notHere(caller, "org.set_policy", "changes no policy") };
   public shared ({ caller }) func ggg_position_create(_ : T.PositionCreateArgs) : async Result<T.Governed> { nobody(caller, "org.manage_members") };
   public shared ({ caller }) func ggg_position_edit(_ : T.PositionEditArgs) : async Result<T.Governed> { nobody(caller, "org.manage_members") };
@@ -1148,18 +1350,15 @@ persistent actor class GggFixture(initMembers : [Principal]) {
   public shared ({ caller }) func ggg_invoice_check(_ : T.InvoiceCheckArgs) : async Result<T.Invoice> { nobody(caller, "self.invoice_refresh") };
   public shared ({ caller }) func ggg_invoice_refresh(_ : T.InvoiceRefreshArgs) : async Result<T.InvoicePage> { nobody(caller, "invoice.refresh") };
   public shared ({ caller }) func ggg_invoice_item_add(_ : T.InvoiceItemAddArgs) : async Result<T.Invoice> { nobody(caller, "treasury.manage") };
-  public shared ({ caller }) func ggg_fund_create(_ : T.FundCreateArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_period_open(_ : T.PeriodOpenArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_period_close(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_budget_draft(_ : T.BudgetDraftArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_budget_propose(_ : T.BudgetProposeArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_budget_extend(_ : Text) : async Result<Nat> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_budget_amend(_ : T.BudgetAmendArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_allocation_rule_draft(_ : T.AllocationRuleDraftArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_allocation_rule_propose(_ : Text) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_payroll_run(_ : T.PayrollRunArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_loan_create(_ : T.LoanCreateArgs) : async Result<T.Governed> { nobody(caller, "org.manage_budget") };
-  public shared ({ caller }) func ggg_loan_repay(_ : T.LoanRepayArgs) : async Result<T.Loan> { nobody(caller, "org.manage_budget") };
+  public shared ({ caller }) func ggg_period_open(_ : T.PeriodOpenArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
+  public shared ({ caller }) func ggg_period_close(_ : Text) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
+  public shared ({ caller }) func ggg_budget_extend(_ : Text) : async Result<Nat> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
+  public shared ({ caller }) func ggg_budget_amend(_ : T.BudgetAmendArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
+  public shared ({ caller }) func ggg_allocation_rule_draft(_ : T.AllocationRuleDraftArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
+  public shared ({ caller }) func ggg_allocation_rule_propose(_ : Text) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
+  public shared ({ caller }) func ggg_payroll_run(_ : T.PayrollRunArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
+  public shared ({ caller }) func ggg_loan_create(_ : T.LoanCreateArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
+  public shared ({ caller }) func ggg_loan_repay(_ : T.LoanRepayArgs) : async Result<T.Loan> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_report_issue(_ : T.ReportIssueArgs) : async Result<T.FinancialReport> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_tax_policy_draft(_ : T.TaxPolicyDraftArgs) : async Result<T.Governed> { nobody(caller, "tax.manage") };
   public shared ({ caller }) func ggg_tax_policy_propose(_ : Text) : async Result<T.Governed> { nobody(caller, "tax.manage") };
