@@ -12,16 +12,17 @@ npx ggg-conformance --canister <id> --writes --member-pem me.pem
 Without `--writes`, the suite makes queries, plus update calls that a compliant canister refuses
 without changing anything. With `--writes` and a member's key, it also files a Motion proposal
 titled "GGG conformance check …", votes on it twice and withdraws it. Every update is also called
-anonymously, and every update that takes `on_behalf_of` on behalf of a stranger, with arguments generated from
-`ggg.did`, expecting both to be refused; the generic call `ggg_call_for` is tried on behalf of a stranger and
-carrying a member-only operation, expecting a refusal too. Use a
-test realm, or a realm where that is acceptable.
+anonymously, and every update that takes `on_behalf_of` on behalf of a stranger, with arguments
+generated from `ggg.did`, expecting both to be refused; the generic call `ggg_call_for` is tried on
+behalf of a stranger and carrying a member-only operation, expecting a refusal too. Use a test realm,
+or a realm where that is acceptable.
 
 When the member holds active grants from two members, one to propose and one to vote, the suite also
 files a motion for the first and expects a vote for the second on it to be refused: a delegate never
 votes on what it filed. Reads run as the member when one is given, because a GOS may refuse reads
-that need a model permission to anonymous callers. Every list is walked page by page and sent a malformed cursor, and
-every lookup by id is asked for an id that doesn't exist, so a realm with nothing in a domain is
+that need a model permission to anonymous callers. Every list is walked page by page and sent a
+malformed cursor, and every lookup by id is asked for an id that doesn't exist, so a realm with
+nothing in a domain is
 checked too.
 
 Each check reports one outcome:
@@ -74,6 +75,7 @@ path.
   GOS can check its own arithmetic against it; `test/money.test.js` runs the model's progressive-tax
   example.
 - `fixture/Ggg.mo` holds the Motoko types generated from `ggg.did`.
-- `fixture/main.mo` is a minimal Motoko GOS: members, four departments, proposals, links between realms and a published record, and every other domain empty. The build checks its interface against `ggg.did` with
-  `didc check`, and the tests expect it to pass every check.
+- `fixture/main.mo` is a minimal Motoko GOS: members, four departments, proposals, links between realms
+  and a published record, and every other domain empty. The build checks its interface against
+  `ggg.did` with `didc check`, and the tests expect it to pass every check.
 - `fixture/broken.mo` breaks GGG on purpose, and the tests expect the checks to fail.

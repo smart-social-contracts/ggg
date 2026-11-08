@@ -10,7 +10,7 @@
     {
       "id": "see",
       "label": "See my affairs and the realm",
-      "summary": "Your card, your own notifications, invoices, disputes and grants; the realm's proposals, departments, budgets, tenders, land and codex; whatever else you can read. An office's inbox only under that office's group.",
+      "summary": "Your card, your certified attributes, your own notifications, invoices, disputes and grants; the realm's proposals, departments, budgets, tenders, land and codex; whatever else you can read. An office's inbox only under that office's group.",
       "risk": "Reads are not audited, so the realm cannot tell you one by one what your delegate looked at.",
       "longest": 31536000
     },
