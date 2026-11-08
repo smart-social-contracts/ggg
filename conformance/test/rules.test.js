@@ -148,7 +148,7 @@ test('a tie over the votes cast rejects without a casting vote, and passes only 
 
 test("a department's threshold is m of its policy's n, whatever seats are filled", async () => {
   // The council decides 2 of 3, and all four members may vote: two yes votes carry it, as m, though
-  // they are half of the votes; one does not: it is less than m, though a third of the four seated.
+  // they are half of the votes; one does not: it is less than m, though a quarter of the four seated.
   const council = { department: ['council'] };
   const carried = await file(council);
   await everyone(carried, ['Yes', 'Yes', 'No', 'No']);
@@ -176,8 +176,8 @@ test("a department's threshold is m of its policy's n, whatever seats are filled
 });
 
 test("a department's quorum counts over its seated members, however many seats its policy has", async () => {
-  // The council's 75 % quorum is of the four seated, three votes, not of its policy's three seats: two
-  // yes votes reach m but, with two absent, the quorum is not met.
+  // The council's 60 % quorum is of the four seated, three votes, where over its policy's three seats
+  // two would do: two yes votes reach m but, with two absent, the quorum is not met.
   const quiet = await file({ department: ['council'] });
   await vote(alice, quiet, 'Yes');
   await vote(bob, quiet, 'Yes');
