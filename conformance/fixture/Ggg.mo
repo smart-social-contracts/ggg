@@ -544,7 +544,6 @@ module {
   public type FederalVoteProposeArgs = {
     title : Text;
     action : ProposalAction;
-    on_behalf_of : ?Principal;
   };
   public type FederalVoteStatus = { #Failed; #Passed; #Open; #Cancelled };
   public type FederationMessage = {
