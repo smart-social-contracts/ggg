@@ -10,7 +10,7 @@
     {
       "id": "see",
       "label": "See my affairs and the realm",
-      "summary": "Your card, notifications, invoices, disputes and grants; the realm's proposals, departments, budgets, tenders, land and codex; whatever else you can read.",
+      "summary": "Your card, your own notifications, invoices, disputes and grants; the realm's proposals, departments, budgets, tenders, land and codex; whatever else you can read. An office's inbox only under that office's group.",
       "risk": "Reads are not audited, so the realm cannot tell you one by one what your delegate looked at.",
       "longest": 31536000
     },
@@ -52,8 +52,8 @@
     {
       "id": "money",
       "label": "Payments from the realm's funds",
-      "summary": "Transfers, payroll, reverting a transfer, loan repayments, contracts under a mandate; always as proposals your delegate cannot vote on.",
-      "risk": "Every payment is a proposal the realm votes on, but it carries your name.",
+      "summary": "Transfers, payroll and reverting a transfer, always as proposals your delegate cannot vote on; recording a loan repayment; a contract under a mandate asks you each time.",
+      "risk": "A transfer or a payroll run is a proposal the realm votes on but carries your name; a loan repayment is recorded at once.",
       "longest": 7776000
     },
     {
@@ -109,7 +109,7 @@
     {
       "id": "orgs",
       "label": "Organisations I run",
-      "summary": "Editing the organisation, removing representatives; seating someone, and changing its admins, ask you.",
+      "summary": "Editing the organisation, reading its inbox, removing representatives; seating someone, and changing its admins, ask you.",
       "risk": "Whoever is seated acts or signs for the organisation.",
       "longest": 31536000,
       "parameter": "organization"
@@ -139,7 +139,8 @@
   "conditions": {
     "with_action": "The proposal carries an action.",
     "profile_or_seat": "The invite carries a profile beyond member, or a seat.",
-    "trust_step": "The step is one of the infrastructure and trust-policy steps, which decide which code the realm trusts.",
+    "trust_step": "The step is the trust-policy step, which decides which code the realm trusts.",
+    "head_or_veto_in_setup": "The realm is in setup, and the edit names the department's head or the policy names veto holders, which gives someone power without a vote.",
     "shares_keys": "The document is stored with keys for others.",
     "changes_admins": "The edit changes the organisation's admins.",
     "approves": "The request is approved; declining is direct.",
@@ -186,9 +187,9 @@
     "organization_get": { "tier": "direct", "group": "see" },
     "organization_list": { "tier": "direct", "group": "see" },
     "department_create": { "tier": "direct", "group": "setup", "after_launch": "admin" },
-    "department_edit": { "tier": "direct", "group": "setup", "after_launch": "admin" },
+    "department_edit": { "tier": "direct", "group": "setup", "after_launch": "admin", "confirm_if": "head_or_veto_in_setup" },
     "department_delete": { "tier": "direct", "group": "setup", "after_launch": "admin" },
-    "department_set_policy": { "tier": "direct", "group": "setup", "after_launch": "admin" },
+    "department_set_policy": { "tier": "direct", "group": "setup", "after_launch": "admin", "confirm_if": "head_or_veto_in_setup" },
     "position_create": { "tier": "direct", "group": "setup", "after_launch": "admin" },
     "position_edit": { "tier": "direct", "group": "setup", "after_launch": "admin" },
     "position_close": { "tier": "direct", "group": "setup", "after_launch": "admin" },
@@ -217,7 +218,7 @@
     "mandate_create": { "tier": "direct", "group": "admin" },
     "mandate_revoke": { "tier": "direct", "group": "admin" },
     "mandate_assign_executor": { "tier": "direct", "group": "admin" },
-    "contract_create": { "tier": "direct", "group": "money" },
+    "contract_create": { "tier": "confirm", "group": "money" },
     "contract_terminate": { "tier": "confirm", "group": "sign" },
     "governance_update": { "tier": "direct", "group": "setup", "after_launch": "admin" },
 
