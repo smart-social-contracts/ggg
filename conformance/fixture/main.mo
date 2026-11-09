@@ -1663,11 +1663,11 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public query func ggg_quarter_directory(args : T.ListArgs) : async Result<T.QuarterDirectory> {
     switch (none<T.Quarter>(args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok({ capital = null; items; next });
+      case (#Ok({ items; next })) #Ok({ capital = null; items; next; zones = null });
     };
   };
 
-  public query func ggg_join_targets() : async Result<T.JoinTargets> {
+  public query func ggg_join_targets(_ : ?T.JoinTargetsArgs) : async Result<T.JoinTargets> {
     #Ok({ default = null; targets = []; mode = null });
   };
 

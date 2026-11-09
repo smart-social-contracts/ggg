@@ -4492,7 +4492,12 @@
     },
     "join_targets": {
       "operation": "ggg_join_targets",
-      "facts": {},
+      "facts": {
+        "home_zone": {
+          "type": "text",
+          "optional": true
+        }
+      },
       "read": true
     },
     "quarter_sync": {
@@ -4569,6 +4574,23 @@
             "hash": {
               "type": "text",
               "optional": true
+            }
+          },
+          "optional": true
+        },
+        "zones": {
+          "type": "vec",
+          "element": {
+            "type": "record",
+            "fields": {
+              "_0": {
+                "type": "text"
+              },
+              "_1": {
+                "type": "nat",
+                "min": 0,
+                "max": "9223372036854775807"
+              }
             }
           },
           "optional": true

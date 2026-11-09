@@ -1868,7 +1868,12 @@ type TenderNoticeArgs = record { tender : text; journal : text; ref : opt text; 
 
 // §10
 
-type QuarterDirectory = record { capital : opt text; items : vec Quarter; next : opt text };
+// `zones` is filled by quarter_sync alone: the zones the realm defines, as zone_define takes them, for the quarter to
+// define the same (the capital is where the realm's codex defines its districts). Null in quarter_directory.
+type QuarterDirectory = record { capital : opt text; items : vec Quarter; next : opt text; zones : opt vec ZoneDefineArgs };
+// The zone a joiner states as their home, which a codex may use to keep neighbours together; it places them and
+// nothing else.
+type JoinTargetsArgs = record { home_zone : opt text };
 // The least-populated active quarter a new member joins, and every quarter that takes joins.
 type JoinTargets = record { default : opt text; targets : vec text; mode : opt text };
 // A quarter's report to the capital.
@@ -1877,6 +1882,10 @@ type QuarterReportArgs = record {
   codex_id : opt text;
   codex_version : opt text;
   leg : opt FederalVoteLeg;
+  // The zones its members live in, each a pair of the zone's id and how many members have it as their
+  // home_zone. The capital keeps what the last report said for placing new members and shows it to no one:
+  // no operation returns it, since a small count singles out a person.
+  zones : opt vec record { text; nat };
 };
 type QuarterReport = record { quarter : text; drifting : bool };
 
@@ -2348,7 +2357,7 @@ service : {
 
   // §10
   ggg_quarter_directory : (ListArgs) -> (variant { Ok : QuarterDirectory; Err : GggError }) query;
-  ggg_join_targets : () -> (variant { Ok : JoinTargets; Err : GggError }) query;
+  ggg_join_targets : (opt JoinTargetsArgs) -> (variant { Ok : JoinTargets; Err : GggError }) query;
   ggg_quarter_sync : () -> (variant { Ok : QuarterDirectory; Err : GggError });
   ggg_quarter_report : (QuarterReportArgs) -> (variant { Ok : QuarterReport; Err : GggError });
   ggg_quarter_register : (QuarterRegisterArgs) -> (variant { Ok : Governed; Err : GggError });

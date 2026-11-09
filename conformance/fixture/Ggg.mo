@@ -1047,6 +1047,9 @@ module {
   public type JoinFederationArgs = { name : ?Text; capital : Principal };
   /// The least-populated active quarter a new member joins, and every quarter that takes joins.
   public type JoinTargets = { mode : ?Text; targets : [Text]; default : ?Text };
+  /// The zone a joiner states as their home, which a codex may use to keep neighbours together; it places them and
+  /// nothing else.
+  public type JoinTargetsArgs = { home_zone : ?Text };
   public type Judge = {
     id : Text;
     appointed_at : Timestamp;
@@ -1759,8 +1762,11 @@ module {
     /// For the `quarter` named; a `welcome_message` with no `quarter` is InvalidArgument.
     welcome_message : ?Text;
   };
+  /// `zones` is filled by quarter_sync alone: the zones the realm defines, as zone_define takes them, for the quarter to
+  /// define the same (the capital is where the realm's codex defines its districts). Null in quarter_directory.
   public type QuarterDirectory = {
     next : ?Text;
+    zones : ?[ZoneDefineArgs];
     capital : ?Text;
     items : [Quarter];
   };
@@ -1770,6 +1776,10 @@ module {
   public type QuarterReportArgs = {
     leg : ?FederalVoteLeg;
     codex_version : ?Text;
+    /// The zones its members live in, each a pair of the zone's id and how many members have it as their
+    /// home_zone. The capital keeps what the last report said for placing new members and shows it to no one:
+    /// no operation returns it, since a small count singles out a person.
+    zones : ?[(Text, Nat)];
     codex_id : ?Text;
     population : Nat;
   };
@@ -2812,7 +2822,7 @@ module {
         #Ok : InvoicePage;
         #Err : GggError;
       };
-    ggg_join_targets : shared query () -> async {
+    ggg_join_targets : shared query ?JoinTargetsArgs -> async {
         #Ok : JoinTargets;
         #Err : GggError;
       };

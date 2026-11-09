@@ -1113,6 +1113,7 @@ export const idlFactory = ({ IDL }) => {
     'next' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Invoice),
   });
+  const JoinTargetsArgs = IDL.Record({ 'home_zone' : IDL.Opt(IDL.Text) });
   const JoinTargets = IDL.Record({
     'mode' : IDL.Opt(IDL.Text),
     'targets' : IDL.Vec(IDL.Text),
@@ -1766,6 +1767,11 @@ export const idlFactory = ({ IDL }) => {
     'quarter_join_mode' : IDL.Opt(IDL.Text),
     'welcome_message' : IDL.Opt(IDL.Text),
   });
+  const ZoneDefineArgs = IDL.Record({
+    'kind' : IDL.Text,
+    'name' : IDL.Text,
+    'zone' : IDL.Text,
+  });
   const Quarter = IDL.Record({
     'id' : IDL.Text,
     'status' : QuarterStatus,
@@ -1780,6 +1786,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const QuarterDirectory = IDL.Record({
     'next' : IDL.Opt(IDL.Text),
+    'zones' : IDL.Opt(IDL.Vec(ZoneDefineArgs)),
     'capital' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Quarter),
   });
@@ -1812,6 +1819,7 @@ export const idlFactory = ({ IDL }) => {
   const QuarterReportArgs = IDL.Record({
     'leg' : IDL.Opt(FederalVoteLeg),
     'codex_version' : IDL.Opt(IDL.Text),
+    'zones' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))),
     'codex_id' : IDL.Opt(IDL.Text),
     'population' : IDL.Nat,
   });
@@ -2336,11 +2344,6 @@ export const idlFactory = ({ IDL }) => {
   const ZoneClearArgs = IDL.Record({
     'zone' : IDL.Text,
     'on_behalf_of' : IDL.Opt(IDL.Principal),
-  });
-  const ZoneDefineArgs = IDL.Record({
-    'kind' : IDL.Text,
-    'name' : IDL.Text,
-    'zone' : IDL.Text,
   });
   const ZoneSetArgs = IDL.Record({
     'kind' : IDL.Opt(IDL.Text),
@@ -2900,7 +2903,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'ggg_join_targets' : IDL.Func(
-        [],
+        [IDL.Opt(JoinTargetsArgs)],
         [IDL.Variant({ 'Ok' : JoinTargets, 'Err' : GggError })],
         ['query'],
       ),

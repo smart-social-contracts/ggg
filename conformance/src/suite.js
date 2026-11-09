@@ -432,6 +432,19 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     return detail;
   });
 
+  await check('GGG', 'Q1', 'ggg_join_targets takes a home_zone or none and gives it to no one, and the directory has no zone definitions', async () => {
+    const zone = 'ggg-conformance-zone';
+    const replies = [
+      ok(await anon.ggg_join_targets([]), 'ggg_join_targets with no argument'),
+      ok(await anon.ggg_join_targets([{ home_zone: [] }]), 'ggg_join_targets without a home_zone'),
+      ok(await anon.ggg_join_targets([{ home_zone: [zone] }]), 'ggg_join_targets with a home_zone'),
+    ];
+    for (const reply of replies) assert(!show(reply).includes(zone), `ggg_join_targets gives back the zone it was told: ${show(reply)}`);
+    const directory = ok(await anon.ggg_quarter_directory({ cursor: [], limit: [] }), 'ggg_quarter_directory');
+    assert(opt(directory.zones) === null, `ggg_quarter_directory carries zones, which only quarter_sync does: ${show(directory.zones)}`);
+    return `${replies[2].targets.length} quarters take joins`;
+  });
+
   await check('GGG', 'M1', 'ggg_user_get answers a caller about itself', async () => {
     const m = ok(await anon.ggg_user_get(Principal.anonymous()), 'ggg_user_get(anonymous, as anonymous)');
     assert(m.length === 0, `the anonymous principal is a member: ${show(m)}`);
