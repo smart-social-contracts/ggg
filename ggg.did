@@ -936,10 +936,6 @@ type Quarter = record {
   compliance : Compliance;
   last_sync : opt Timestamp;
   last_activity_at : opt Timestamp;
-  // The zones its members live in, each a pair of the zone's id and how many members have it as their home_zone,
-  // as the quarter last reported them (a zone with no member is left out). The capital knows it; a quarter's
-  // view of the others leaves it null.
-  zones : opt vec record { text; nat };
 };
 
 type Forward = record {
@@ -1887,7 +1883,8 @@ type QuarterReportArgs = record {
   codex_version : opt text;
   leg : opt FederalVoteLeg;
   // The zones its members live in, each a pair of the zone's id and how many members have it as their
-  // home_zone; the capital keeps what the last report said.
+  // home_zone. The capital keeps what the last report said for placing new members and shows it to no one:
+  // no operation returns it, since a small count singles out a person.
   zones : opt vec record { text; nat };
 };
 type QuarterReport = record { quarter : text; drifting : bool };

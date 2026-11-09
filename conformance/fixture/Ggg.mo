@@ -1745,10 +1745,6 @@ module {
     codex_version : ?Text;
     name : Text;
     last_activity_at : ?Timestamp;
-    /// The zones its members live in, each a pair of the zone's id and how many members have it as their home_zone,
-    /// as the quarter last reported them (a zone with no member is left out). The capital knows it; a quarter's
-    /// view of the others leaves it null.
-    zones : ?[(Text, Nat)];
     codex_id : ?Text;
     last_sync : ?Timestamp;
     index : Nat;
@@ -1781,7 +1777,8 @@ module {
     leg : ?FederalVoteLeg;
     codex_version : ?Text;
     /// The zones its members live in, each a pair of the zone's id and how many members have it as their
-    /// home_zone; the capital keeps what the last report said.
+    /// home_zone. The capital keeps what the last report said for placing new members and shows it to no one:
+    /// no operation returns it, since a small count singles out a person.
     zones : ?[(Text, Nat)];
     codex_id : ?Text;
     population : Nat;

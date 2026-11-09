@@ -1779,7 +1779,6 @@ export const idlFactory = ({ IDL }) => {
     'codex_version' : IDL.Opt(IDL.Text),
     'name' : IDL.Text,
     'last_activity_at' : IDL.Opt(Timestamp),
-    'zones' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))),
     'codex_id' : IDL.Opt(IDL.Text),
     'last_sync' : IDL.Opt(Timestamp),
     'index' : IDL.Nat,
