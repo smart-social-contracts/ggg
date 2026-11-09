@@ -1113,6 +1113,7 @@ export const idlFactory = ({ IDL }) => {
     'next' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Invoice),
   });
+  const JoinTargetsArgs = IDL.Record({ 'home_zone' : IDL.Opt(IDL.Text) });
   const JoinTargets = IDL.Record({
     'mode' : IDL.Opt(IDL.Text),
     'targets' : IDL.Vec(IDL.Text),
@@ -1773,6 +1774,7 @@ export const idlFactory = ({ IDL }) => {
     'codex_version' : IDL.Opt(IDL.Text),
     'name' : IDL.Text,
     'last_activity_at' : IDL.Opt(Timestamp),
+    'zones' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))),
     'codex_id' : IDL.Opt(IDL.Text),
     'last_sync' : IDL.Opt(Timestamp),
     'index' : IDL.Nat,
@@ -1812,6 +1814,7 @@ export const idlFactory = ({ IDL }) => {
   const QuarterReportArgs = IDL.Record({
     'leg' : IDL.Opt(FederalVoteLeg),
     'codex_version' : IDL.Opt(IDL.Text),
+    'zones' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))),
     'codex_id' : IDL.Opt(IDL.Text),
     'population' : IDL.Nat,
   });
@@ -2900,7 +2903,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'ggg_join_targets' : IDL.Func(
-        [],
+        [IDL.Opt(JoinTargetsArgs)],
         [IDL.Variant({ 'Ok' : JoinTargets, 'Err' : GggError })],
         ['query'],
       ),

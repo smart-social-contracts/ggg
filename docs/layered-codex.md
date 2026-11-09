@@ -50,7 +50,10 @@ The two entry points of a realm's own legislation are ordinary members of these 
 
 - `on_codex_activate`: the hook on `codex_activate` (§3.2). It runs once per realm when a codex
   becomes active, not once per quarter, and not on a revert.
-- `compute_realm_join`: asked during `realm_join` for the quarter a new member goes to.
+- `compute_realm_join`: asked when a new member is placed (`join_targets`) for the quarter they go to. It gets the
+  member's `home_zone` if they state one, and the quarters the GOS offers, by capacity first, each with its
+  `zones` (§3.1), so a codex may keep neighbours together; the GOS ignores an answer that is not
+  among them.
 
 ---
 
@@ -136,7 +139,8 @@ addition is in the [model](../model/README.md) and `ggg.did`; the model's sectio
 - a document's **kind and languages**; the **languages of a realm and of a user**: `Document.kind` and
   `languages`, `Realm.languages`, `User.language`, and `translations` on `notification_send`;
 - a **district without a canister**: a `Zone` the realm defines with `zone_define`, `User.home_zone`
-  (stated at join, changed with `user_edit`) and `Zone.population`;
+  (stated at join, changed with `user_edit`), `Zone.population`, and `Quarter.zones`, the zones each quarter
+  holds members of, so that one zone may span several quarters;
 - a procedure's **deadline and silence**: `Procedure`, `procedure_define` and `License.decision_due`. A
   deadline is a `Period` (§3.3), not a `Duration`.
 

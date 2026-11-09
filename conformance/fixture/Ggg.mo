@@ -1047,6 +1047,9 @@ module {
   public type JoinFederationArgs = { name : ?Text; capital : Principal };
   /// The least-populated active quarter a new member joins, and every quarter that takes joins.
   public type JoinTargets = { mode : ?Text; targets : [Text]; default : ?Text };
+  /// The zone a joiner states as their home, which a codex may use to keep neighbours together; it places them and
+  /// nothing else.
+  public type JoinTargetsArgs = { home_zone : ?Text };
   public type Judge = {
     id : Text;
     appointed_at : Timestamp;
@@ -1742,6 +1745,10 @@ module {
     codex_version : ?Text;
     name : Text;
     last_activity_at : ?Timestamp;
+    /// The zones its members live in, each a pair of the zone's id and how many members have it as their home_zone,
+    /// as the quarter last reported them (a zone with no member is left out). The capital knows it; a quarter's
+    /// view of the others leaves it null.
+    zones : ?[(Text, Nat)];
     codex_id : ?Text;
     last_sync : ?Timestamp;
     index : Nat;
@@ -1770,6 +1777,9 @@ module {
   public type QuarterReportArgs = {
     leg : ?FederalVoteLeg;
     codex_version : ?Text;
+    /// The zones its members live in, each a pair of the zone's id and how many members have it as their
+    /// home_zone; the capital keeps what the last report said.
+    zones : ?[(Text, Nat)];
     codex_id : ?Text;
     population : Nat;
   };
@@ -2812,7 +2822,7 @@ module {
         #Ok : InvoicePage;
         #Err : GggError;
       };
-    ggg_join_targets : shared query () -> async {
+    ggg_join_targets : shared query ?JoinTargetsArgs -> async {
         #Ok : JoinTargets;
         #Err : GggError;
       };

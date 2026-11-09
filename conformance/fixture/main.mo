@@ -1667,7 +1667,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
   };
 
-  public query func ggg_join_targets() : async Result<T.JoinTargets> {
+  public query func ggg_join_targets(_ : ?T.JoinTargetsArgs) : async Result<T.JoinTargets> {
     #Ok({ default = null; targets = []; mode = null });
   };
 
