@@ -140,7 +140,8 @@ addition is in the [model](../model/README.md) and `ggg.did`; the model's sectio
   `languages`, `Realm.languages`, `User.language`, and `translations` on `notification_send`;
 - a **district without a canister**: a `Zone` the realm defines with `zone_define`, `User.home_zone`
   (stated at join, changed with `user_edit`), `Zone.population`, and `Quarter.zones`, the zones each quarter
-  holds members of, so that one zone may span several quarters;
+  holds members of, so that one zone may span several quarters. The capital defines the realm's districts (its
+  `on_codex_activate` runs there once) and `quarter_sync` carries the definitions to its quarters;
 - a procedure's **deadline and silence**: `Procedure`, `procedure_define` and `License.decision_due`. A
   deadline is a `Period` (§3.3), not a `Duration`.
 

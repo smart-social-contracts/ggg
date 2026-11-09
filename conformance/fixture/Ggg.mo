@@ -1766,8 +1766,11 @@ module {
     /// For the `quarter` named; a `welcome_message` with no `quarter` is InvalidArgument.
     welcome_message : ?Text;
   };
+  /// `zones` is filled by quarter_sync alone: the zones the realm defines, as zone_define takes them, for the quarter to
+  /// define the same (the capital is where the realm's codex defines its districts). Null in quarter_directory.
   public type QuarterDirectory = {
     next : ?Text;
+    zones : ?[ZoneDefineArgs];
     capital : ?Text;
     items : [Quarter];
   };

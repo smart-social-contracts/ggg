@@ -1018,7 +1018,7 @@ whole federation.
 | `quarter_join_federation` | `quarter.join_federation` | governed, delegable | The independent realm Harbor joins Agora as a quarter |
 | `quarter_directory`, `join_targets` | — (public) | read | Quarters and their populations; the least-populated active quarter a new member joins. `join_targets` takes the `home_zone` the joiner states, if any, and a codex's `compute_realm_join` may use it to keep neighbours together: it is used for the placement and is not part of the reply. A codex only chooses among the quarters the GOS offers it, and the GOS offers by capacity first |
 | `self_change_quarter` | `self.change_quarter` | confirm | Bob moves to South; prepared by a delegate, it waits for his approval |
-| `quarter_sync`, `quarter_report` (quarter → capital) | `quarter.sync` | | North reports population 1,240, codex 1.4.2 and 310 members in Riverside to the capital |
+| `quarter_sync`, `quarter_report` (quarter → capital) | `quarter.sync` | | North reports population 1,240, codex 1.4.2 and 310 members in Riverside to the capital. The capital's reply to `quarter_sync` also carries `zones`, the zones the realm defines (each as `zone_define` takes it: id, name, kind, no population), because the realm's codex defines its districts on the capital alone; a quarter defines the same by id, redefining one it has in place, and keeps the zones it defined itself |
 | `federal_vote_propose` | `federal_vote.propose` | confirm | Propose `FV-3`; prepared by a delegate, it waits for the member's approval |
 | `federal_vote_cancel` | `federal_vote.manage` | governed, delegable | Withdraw `FV-3` before its deadline |
 | `federal_vote_finalize` | — (public) | | After 15 Nov: 3 of 4 quarters in favour → `passed` |

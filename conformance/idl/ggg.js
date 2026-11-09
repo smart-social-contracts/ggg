@@ -1767,6 +1767,11 @@ export const idlFactory = ({ IDL }) => {
     'quarter_join_mode' : IDL.Opt(IDL.Text),
     'welcome_message' : IDL.Opt(IDL.Text),
   });
+  const ZoneDefineArgs = IDL.Record({
+    'kind' : IDL.Text,
+    'name' : IDL.Text,
+    'zone' : IDL.Text,
+  });
   const Quarter = IDL.Record({
     'id' : IDL.Text,
     'status' : QuarterStatus,
@@ -1782,6 +1787,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const QuarterDirectory = IDL.Record({
     'next' : IDL.Opt(IDL.Text),
+    'zones' : IDL.Opt(IDL.Vec(ZoneDefineArgs)),
     'capital' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Quarter),
   });
@@ -2339,11 +2345,6 @@ export const idlFactory = ({ IDL }) => {
   const ZoneClearArgs = IDL.Record({
     'zone' : IDL.Text,
     'on_behalf_of' : IDL.Opt(IDL.Principal),
-  });
-  const ZoneDefineArgs = IDL.Record({
-    'kind' : IDL.Text,
-    'name' : IDL.Text,
-    'zone' : IDL.Text,
   });
   const ZoneSetArgs = IDL.Record({
     'kind' : IDL.Opt(IDL.Text),

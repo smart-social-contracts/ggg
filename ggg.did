@@ -1872,7 +1872,9 @@ type TenderNoticeArgs = record { tender : text; journal : text; ref : opt text; 
 
 // §10
 
-type QuarterDirectory = record { capital : opt text; items : vec Quarter; next : opt text };
+// `zones` is filled by quarter_sync alone: the zones the realm defines, as zone_define takes them, for the quarter to
+// define the same (the capital is where the realm's codex defines its districts). Null in quarter_directory.
+type QuarterDirectory = record { capital : opt text; items : vec Quarter; next : opt text; zones : opt vec ZoneDefineArgs };
 // The zone a joiner states as their home, which a codex may use to keep neighbours together; it places them and
 // nothing else.
 type JoinTargetsArgs = record { home_zone : opt text };
