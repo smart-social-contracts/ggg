@@ -68,6 +68,9 @@ path.
 - `test/tags.test.js` runs the fixture with two members and checks proposal tags (model I-GOV-15): a
   list filters by any of several tags, exactly, together with a status, and only the member a draft
   was filed for replaces its tags.
+- `test/contracts.test.js` runs the fixture with two members and checks contract amendments (model
+  I-GOV-16): a split adds up to the value, an amendment keeps the contract's id and records its terms
+  before and after with the proposal that carried it, and a terminated contract is never amended.
 - `test/sync.test.js` runs three fixtures that take legislation from one another and checks the links
   between realms (model I-NEST-1 to 3) and the published record (model §11).
 - `test/codex.test.js` installs codices the fixture holds and checks `codex_revert` (model §11): the one

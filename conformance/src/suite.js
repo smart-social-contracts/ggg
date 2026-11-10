@@ -309,6 +309,7 @@ const getTable = (actor) => [
   ['ggg_proposal_linked_from', (id) => actor.ggg_proposal_linked_from({ id, ...none })],
   ['ggg_organization_get', (id) => actor.ggg_organization_get({ id, ...none })],
   ['ggg_tender_get', (id) => actor.ggg_tender_get({ id, ...none })],
+  ['ggg_contract_get', (id) => actor.ggg_contract_get({ id, ...none })],
   ['ggg_dispute_get', (id) => actor.ggg_dispute_get({ id, on_behalf_of: [] })],
   ['ggg_request_get', (id) => actor.ggg_request_get({ id, on_behalf_of: [] })],
   ['ggg_crypto_envelope', (id) => actor.ggg_crypto_envelope(id)],
@@ -958,6 +959,14 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
       const replaced = ok(result, 'ggg_proposal_set_tags(draft)').tags;
       assert(show(replaced) === show(['after']), `a draft's tags are ${show(replaced)}, not after`);
     });
+  });
+
+  await check('GGG', 'W29', 'amending an unknown contract returns NotFound', async () => {
+    needMember();
+    const amend = { contract: UNKNOWN, value: [1n], split: [], starts_at: [], ends_at: [] };
+    const result = await mine.ggg_contract_amend(amend);
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not amend contracts');
+    err(result, ['NotFound'], 'ggg_contract_amend(unknown contract)');
   });
 
   /** The active grants the member holds as a delegate. */

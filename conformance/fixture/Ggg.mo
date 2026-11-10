@@ -340,11 +340,32 @@ module {
     /// gave it its kind and procedure.
     kind : ?Text;
     terms_hash : Text;
+    /// How `value` is spread over fiscal periods, each named once, adding up to it; empty when it is not
+    /// spread (I-GOV-16).
+    split : [PeriodAmount];
     terms_ref : Text;
     procedure : ?Text;
     tender : ?Text;
     parties : [Ref];
     symbol : Text;
+  };
+  /// Each term given replaces the contract's; absent keeps it. At least one is given (I-GOV-16).
+  public type ContractAmendArgs = {
+    starts_at : ?Timestamp;
+    value : ?Money;
+    contract : Text;
+    ends_at : ?Timestamp;
+    split : ?[PeriodAmount];
+  };
+  /// One amendment of a contract (I-GOV-16): its terms before and after, the proposal that carried it,
+  /// absent when its governing department decided directly, and when it applied.
+  public type ContractAmendment = {
+    at : Timestamp;
+    id : Text;
+    after : ContractTerms;
+    contract : Text;
+    before : ContractTerms;
+    proposal : ?Text;
   };
   public type ContractCreateArgs = {
     title : Text;
@@ -354,11 +375,21 @@ module {
     ends_at : ?Timestamp;
     kind : ?Text;
     terms_hash : Text;
+    /// Absent means not spread over periods (I-GOV-16).
+    split : ?[PeriodAmount];
     terms_ref : Text;
     procedure : ?Text;
     tender : ?Text;
     parties : [Ref];
     symbol : Text;
+  };
+  /// The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
+  /// links to it are in ggg_proposal_linked_from.
+  /// A contract and its amendments a page at a time, oldest first.
+  public type ContractDetail = {
+    amendments : [ContractAmendment];
+    contract : Contract;
+    next : ?Text;
   };
   public type ContractStatus = {
     #Disputed;
@@ -366,6 +397,13 @@ module {
     #Active;
     #Draft;
     #Fulfilled;
+  };
+  /// The terms of a contract that an amendment may change.
+  public type ContractTerms = {
+    starts_at : ?Timestamp;
+    value : Money;
+    ends_at : ?Timestamp;
+    split : [PeriodAmount];
   };
   public type Court = {
     id : Text;
@@ -1520,6 +1558,8 @@ module {
     #Pending;
   };
   public type Period = { count : Nat; unit : PeriodUnit };
+  /// An amount for one fiscal period, named as a budget line names it; the period need not be open yet.
+  public type PeriodAmount = { period : Text; amount : Money };
   /// Periods open in order: one starts no earlier than the latest ends.
   public type PeriodOpenArgs = {
     starts_at : Timestamp;
@@ -1701,8 +1741,6 @@ module {
     department : ?Text;
     quorum : ?Ratio;
   };
-  /// The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
-  /// links to it are in ggg_proposal_linked_from.
   public type ProposalDetail = {
     votes : [Vote];
     next : ?Text;
@@ -2555,8 +2593,16 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
+    ggg_contract_amend : shared ContractAmendArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
     ggg_contract_create : shared ContractCreateArgs -> async {
         #Ok : Contract;
+        #Err : GggError;
+      };
+    ggg_contract_get : shared query GetArgs -> async {
+        #Ok : ?ContractDetail;
         #Err : GggError;
       };
     ggg_contract_terminate : shared Text -> async {

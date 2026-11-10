@@ -20,7 +20,11 @@
 /// budget_propose, each governed by the fund's owner, or by the root for every fund's lines), with
 /// org.manage_budget; a period is a name that period_open records in order, budget_extend copies the
 /// previous period's adopted lines fund by fund, and transfer_create moves no money but refuses a
-/// category outside a fund's adopted budget (model §5). No department has seats: every member may vote on a
+/// category outside a fund's adopted budget (model §5). They make, amend and terminate contracts
+/// (contract_create, contract_amend and contract_terminate, with contract.create_under_mandate,
+/// contract.amend and contract.terminate): no mandate or tender exists here, so the root owns every
+/// contract and its direct policy applies an amendment at once, unless a proposal carries it, and
+/// contract_get reads a contract with its amendments (I-GOV-16). No department has seats: every member may vote on a
 /// department's proposal (its tally.eligible), and its threshold is measured against its policy's n
 /// (tally.seats), as I-GOV-3 says: two yes votes carry a council proposal whether two or twenty
 /// members vote. The fixture never ends a department vote early (I-GOV-7 allows it, it does not
@@ -312,6 +316,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         };
       };
       case "ggg_profile_update" { let a : ?T.ProfileUpdateArgs = from_candid (arg); a != null };
+      case "ggg_contract_amend" { let a : ?T.ContractAmendArgs = from_candid (arg); a != null };
       case _ return ?#InvalidArgument(method # " is not an update method of this canister");
     };
     if (decodes) null else ?#InvalidArgument("arg does not decode as the arguments of " # method);
@@ -372,6 +377,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         let ?department = findDepartment(id) else return #Err(#NotFound);
         if (department.is_root) return #Err(#InvalidArgument("the root department is never deleted"));
         parentOf(department);
+      };
+      case "ggg_contract_amend" {
+        let ?args : ?T.ContractAmendArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        // No contract here names a mandate or a tender, so the root owns each one (model §1).
+        if (not Map.containsKey(contracts, Text.compare, args.contract)) return #Err(#NotFound);
+        ROOT_ID;
       };
       case _ ROOT_ID;
     };
@@ -1555,6 +1566,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         let ?args : ?T.TransferCreateArgs = from_candid (arg) else return undecodable();
         spend(caller, args);
       };
+      case "ggg_contract_amend" {
+        let ?args : ?T.ContractAmendArgs = from_candid (arg) else return undecodable();
+        amendContract(caller, args, ?p.id);
+      };
       case "ggg_codex_install" {
         let ?source : ?T.CodexSource = from_candid (arg) else return undecodable();
         switch (source) {
@@ -1631,11 +1646,122 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_mandate_assign_executor(_ : T.MandateExecutorArgs) : async Result<T.Governed> {
     nobody(caller, "mandate.assign_executor");
   };
-  public shared ({ caller }) func ggg_contract_create(_ : T.ContractCreateArgs) : async Result<T.Contract> {
-    nobody(caller, "contract.create_under_mandate");
+
+  // ---- Contracts (I-GOV-16). No mandate or tender exists here, so the root owns every contract.
+  let MAX_SPLIT = 64; // the fiscal periods a contract's value is spread over
+  let contracts = Map.empty<Text, T.Contract>();
+  let amendments = Map.empty<Text, List.List<T.ContractAmendment>>(); // by contract, oldest first
+  var nextContract = 1;
+
+  func termsOf(c : T.Contract) : T.ContractTerms = { value = c.value; split = c.split; starts_at = c.starts_at; ends_at = c.ends_at };
+
+  func ended(c : T.Contract) : Bool = c.status == #Terminated or c.status == #Fulfilled;
+
+  /// Refuses terms that break I-GOV-16: a split over more than 64 periods, naming one twice or none,
+  /// or not adding up to the value; or a start after the end.
+  func checkTerms(t : T.ContractTerms) : ?T.GggError {
+    if (t.split.size() > MAX_SPLIT) return ?#InvalidArgument("a contract is spread over at most 64 periods");
+    let named = Map.empty<Text, ()>();
+    var total = 0;
+    for ({ period; amount } in t.split.vals()) {
+      if (Text.size(period) == 0) return ?#InvalidArgument("a period of the split is not named");
+      if (Map.containsKey(named, Text.compare, period)) return ?#InvalidArgument("the split names " # period # " twice");
+      Map.add(named, Text.compare, period, ());
+      total += amount;
+    };
+    if (t.split.size() > 0 and total != t.value) {
+      return ?#InvalidArgument("the split adds up to " # Nat.toText(total) # ", not the value " # Nat.toText(t.value));
+    };
+    switch (t.starts_at, t.ends_at) {
+      case (?start, ?end) { if (start > end) return ?#InvalidArgument("starts_at is after ends_at") };
+      case _ {};
+    };
+    null;
   };
-  public shared ({ caller }) func ggg_contract_terminate(_ : Text) : async Result<T.Contract> {
-    nobody(caller, "contract.terminate");
+
+  public shared ({ caller }) func ggg_contract_create(args : T.ContractCreateArgs) : async Result<T.Contract> {
+    switch (requireMember(caller, "contract.create_under_mandate")) { case (?e) return #Err(e); case null {} };
+    if (args.mandate != null or args.tender != null) return #Err(#NotFound);
+    if (Text.size(args.title) == 0) return #Err(#InvalidArgument("title is empty"));
+    let split = switch (args.split) { case (?s) s; case null [] };
+    switch (checkTerms({ value = args.value; split; starts_at = args.starts_at; ends_at = args.ends_at })) {
+      case (?e) return #Err(e);
+      case null {};
+    };
+    let contract : T.Contract = { args with id = Nat.toText(nextContract); status = #Active; split };
+    nextContract += 1;
+    Map.add(contracts, Text.compare, contract.id, contract);
+    audit("contract_create", caller, #Map([("contract", #Text(contract.id))]), #Text(contract.id));
+    #Ok(contract);
+  };
+
+  public shared ({ caller }) func ggg_contract_terminate(id : Text) : async Result<T.Contract> {
+    switch (requireMember(caller, "contract.terminate")) { case (?e) return #Err(e); case null {} };
+    let ?contract = Map.get(contracts, Text.compare, id) else return #Err(#NotFound);
+    if (ended(contract)) return #Err(#Conflict("the contract has already ended"));
+    let terminated = { contract with status = #Terminated };
+    Map.add(contracts, Text.compare, id, terminated);
+    audit("contract_terminate", caller, #Map([("contract", #Text(id))]), #Text(id));
+    #Ok(terminated);
+  };
+
+  /// Governed by the contract's owner, the root here, whose direct policy applies it at once.
+  public shared ({ caller }) func ggg_contract_amend(args : T.ContractAmendArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "contract.amend")) { case (?e) return #Err(e); case null {} };
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_contract_amend", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    switch (amendedTerms(args)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    let title = "Amend contract " # args.contract;
+    govern(caller, "contract_amend", governing, arg, title, "Changes the value, split or dates of contract " # args.contract # ".", func() {
+      amendContract(caller, args, null);
+    });
+  };
+
+  /// The contract `args` amends and its terms after the amendment, or why it cannot be amended.
+  func amendedTerms(args : T.ContractAmendArgs) : Result<(T.Contract, T.ContractTerms)> {
+    let ?contract = Map.get(contracts, Text.compare, args.contract) else return #Err(#NotFound);
+    if (ended(contract)) return #Err(#Conflict("a terminated or fulfilled contract is not amended"));
+    let before = termsOf(contract);
+    let after : T.ContractTerms = {
+      value = switch (args.value) { case (?v) v; case null before.value };
+      split = switch (args.split) { case (?s) s; case null before.split };
+      starts_at = switch (args.starts_at) { case (?t) ?t; case null before.starts_at };
+      ends_at = switch (args.ends_at) { case (?t) ?t; case null before.ends_at };
+    };
+    if (after == before) return #Err(#InvalidArgument("the amendment changes no term"));
+    switch (checkTerms(after)) { case (?e) return #Err(e); case null {} };
+    #Ok((contract, after));
+  };
+
+  /// Applies an amendment and records it with the proposal that carried it, if any (I-GOV-16).
+  func amendContract(caller : Principal, args : T.ContractAmendArgs, proposal : ?Text) : Result<?Text> {
+    let (contract, after) = switch (amendedTerms(args)) { case (#Err(e)) return #Err(e); case (#Ok(found)) found };
+    let history = switch (Map.get(amendments, Text.compare, contract.id)) {
+      case (?h) h;
+      case null { let h = List.empty<T.ContractAmendment>(); Map.add(amendments, Text.compare, contract.id, h); h };
+    };
+    let amendment : T.ContractAmendment = {
+      id = contract.id # "." # Nat.toText(List.size(history) + 1);
+      contract = contract.id;
+      before = termsOf(contract);
+      after;
+      proposal;
+      at = now();
+    };
+    List.add(history, amendment);
+    let amendedContract = { contract with value = after.value; split = after.split; starts_at = after.starts_at; ends_at = after.ends_at };
+    Map.add(contracts, Text.compare, contract.id, amendedContract);
+    audit("contract_amend", caller, #Map([("contract", #Text(contract.id))]), #Text(amendment.id));
+    #Ok(?amendment.id);
+  };
+
+  public query func ggg_contract_get(args : T.GetArgs) : async Result<?T.ContractDetail> {
+    let ?contract = Map.get(contracts, Text.compare, args.id) else return #Ok(null);
+    let history = switch (Map.get(amendments, Text.compare, contract.id)) { case (?h) List.values(h); case null Iter.empty() };
+    switch (page(history, args.cursor, args.limit)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok({ items; next })) #Ok(?{ contract; amendments = items; next });
+    };
   };
   /// Governed by the root, whose direct policy applies it at once. The casting vote is an active member.
   public shared ({ caller }) func ggg_governance_update(args : T.GovernanceUpdateArgs) : async Result<T.Governed> {

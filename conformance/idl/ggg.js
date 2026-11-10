@@ -305,6 +305,14 @@ export const idlFactory = ({ IDL }) => {
     'healthy' : IDL.Bool,
     'checksum' : IDL.Opt(IDL.Text),
   });
+  const PeriodAmount = IDL.Record({ 'period' : IDL.Text, 'amount' : Money });
+  const ContractAmendArgs = IDL.Record({
+    'starts_at' : IDL.Opt(Timestamp),
+    'value' : IDL.Opt(Money),
+    'contract' : IDL.Text,
+    'ends_at' : IDL.Opt(Timestamp),
+    'split' : IDL.Opt(IDL.Vec(PeriodAmount)),
+  });
   const ContractCreateArgs = IDL.Record({
     'title' : IDL.Text,
     'mandate' : IDL.Opt(IDL.Text),
@@ -313,6 +321,7 @@ export const idlFactory = ({ IDL }) => {
     'ends_at' : IDL.Opt(Timestamp),
     'kind' : IDL.Opt(IDL.Text),
     'terms_hash' : IDL.Text,
+    'split' : IDL.Opt(IDL.Vec(PeriodAmount)),
     'terms_ref' : IDL.Text,
     'procedure' : IDL.Opt(IDL.Text),
     'tender' : IDL.Opt(IDL.Text),
@@ -336,11 +345,36 @@ export const idlFactory = ({ IDL }) => {
     'ends_at' : IDL.Opt(Timestamp),
     'kind' : IDL.Opt(IDL.Text),
     'terms_hash' : IDL.Text,
+    'split' : IDL.Vec(PeriodAmount),
     'terms_ref' : IDL.Text,
     'procedure' : IDL.Opt(IDL.Text),
     'tender' : IDL.Opt(IDL.Text),
     'parties' : IDL.Vec(Ref),
     'symbol' : IDL.Text,
+  });
+  const GetArgs = IDL.Record({
+    'id' : IDL.Text,
+    'cursor' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+  });
+  const ContractTerms = IDL.Record({
+    'starts_at' : IDL.Opt(Timestamp),
+    'value' : Money,
+    'ends_at' : IDL.Opt(Timestamp),
+    'split' : IDL.Vec(PeriodAmount),
+  });
+  const ContractAmendment = IDL.Record({
+    'at' : Timestamp,
+    'id' : IDL.Text,
+    'after' : ContractTerms,
+    'contract' : IDL.Text,
+    'before' : ContractTerms,
+    'proposal' : IDL.Opt(IDL.Text),
+  });
+  const ContractDetail = IDL.Record({
+    'amendments' : IDL.Vec(ContractAmendment),
+    'contract' : Contract,
+    'next' : IDL.Opt(IDL.Text),
   });
   const CourtLevel = IDL.Variant({
     'Supreme' : IDL.Null,
@@ -611,11 +645,6 @@ export const idlFactory = ({ IDL }) => {
   const ExpelArgs = IDL.Record({
     'user' : IDL.Principal,
     'department' : IDL.Text,
-  });
-  const GetArgs = IDL.Record({
-    'id' : IDL.Text,
-    'cursor' : IDL.Opt(IDL.Text),
-    'limit' : IDL.Opt(IDL.Nat32),
   });
   const AppointmentStatus = IDL.Variant({
     'Ended' : IDL.Null,
@@ -2533,10 +2562,20 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
+    'ggg_contract_amend' : IDL.Func(
+        [ContractAmendArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
     'ggg_contract_create' : IDL.Func(
         [ContractCreateArgs],
         [IDL.Variant({ 'Ok' : Contract, 'Err' : GggError })],
         [],
+      ),
+    'ggg_contract_get' : IDL.Func(
+        [GetArgs],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ContractDetail), 'Err' : GggError })],
+        ['query'],
       ),
     'ggg_contract_terminate' : IDL.Func(
         [IDL.Text],

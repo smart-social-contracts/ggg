@@ -230,6 +230,8 @@
     "mandate_assign_executor": { "tier": "direct", "group": "admin" },
     "contract_create": { "tier": "confirm", "group": "money" },
     "contract_terminate": { "tier": "confirm", "group": "sign" },
+    "contract_amend": { "tier": "confirm", "group": "money" },
+    "contract_get": { "tier": "direct", "group": "see" },
     "governance_update": { "tier": "direct", "group": "setup", "after_launch": "admin" },
 
     "treasury_view": { "tier": "direct", "group": "see" },
