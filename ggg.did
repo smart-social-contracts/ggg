@@ -193,8 +193,10 @@ type DelegationRequest = record {
 
 // ---- §3 Departments and organizations
 
-// m of n approvals.
-type Policy = record { m : nat; n : nat; quorum : Ratio; veto : vec principal };
+// How a department decides (I-GOV-3). `threshold_of` absent or Eligible: m of n approvals. Cast: a
+// majority of the votes cast, with `quorum` of n voting and the head's casting vote on a second tie; m
+// is not used then. Either way n is the body's size, what a vacancy never lowers.
+type Policy = record { m : nat; n : nat; quorum : Ratio; veto : vec principal; threshold_of : opt ThresholdBasis };
 
 type Department = record {
   id : text;
@@ -204,6 +206,7 @@ type Department = record {
   kind : opt text;
   parent : opt text;
   is_root : bool;
+  // Its chair: under a policy that counts the votes cast, the casting vote on a tie in a second vote.
   head : opt principal;
   policy : Policy;
   target_policy : opt Policy;
@@ -285,11 +288,13 @@ type ProposalLinkKind = variant { Replaces; RelatesTo };
 type ProposalLink = record { kind : ProposalLinkKind; proposal : text };
 
 // What a threshold is measured against: the yes and no votes cast, or the eligible voters; for a
-// department, Eligible means its policy's n (`tally.seats`), and Cast is weaker and refused.
+// department, Eligible means its policy's n (`tally.seats`). Cast is weaker than Eligible: refused for
+// a department of m of n, it is the default of one whose policy counts the votes cast.
 type ThresholdBasis = variant { Cast; Eligible };
 
 // `eligible`: who may vote, counted when the vote opens. `seats`: a department's policy n, what its
-// threshold is measured against (I-GOV-3); absent for a realm-wide proposal.
+// threshold is measured against under Eligible, and its quorum when its policy counts the votes cast
+// (I-GOV-3); absent for a realm-wide proposal.
 type Tally = record { yes : nat; no : nat; abstain : nat; eligible : opt nat; seats : opt nat };
 
 type Proposal = record {
@@ -311,17 +316,25 @@ type Proposal = record {
   deadline : opt Timestamp;
   // When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
   effective_at : opt Timestamp;
-  // The rule that decides it (I-GOV-3), fixed when the vote opens: the yes votes exceed (realm-wide)
-  // or reach (a department, of `tally.seats`) the threshold of the basis, with the quorum met.
+  // The rule that decides it (I-GOV-3), fixed when the vote opens: the yes votes exceed the threshold
+  // of the votes cast or of a realm's eligible voters, or reach it of a department's n (`tally.seats`),
+  // with the quorum met.
   threshold : Ratio;
   quorum : Ratio;
   threshold_of : ThresholdBasis;
-  // The realm's casting vote when the proposal was created: a member whose yes decides a tie under the
-  // Cast basis, so only a realm-wide proposal has one. Never the proposer's choice.
+  // A member whose yes decides a tie over the votes cast, fixed when the vote opens: the realm's for a
+  // realm-wide proposal, the department's head when majority_of_cast. Never the proposer's choice.
   casting_vote : opt principal;
   tally : Tally;
   result : opt ProposalResult;
   links : vec ProposalLink;
+  // True when the department's policy counted the votes cast as the vote opened (I-GOV-3): the quorum
+  // counts over `tally.seats`, a tie over the votes cast gets a second vote, where the casting vote
+  // decides a tie (I-GOV-14), and under Eligible the yes votes must also be a majority of the votes
+  // cast. Absent means false.
+  majority_of_cast : opt bool;
+  // The count of a first vote that tied under majority_of_cast; `tally` is then the second vote's.
+  first_vote : opt Tally;
 };
 
 type VoteChoice = variant { Yes; No; Abstain };
@@ -1435,8 +1448,9 @@ type ProposalCreateArgs = record {
   kind : opt text;
   matter : opt text;
   // Stricter than the realm's or the department's rule, never weaker (InvalidArgument): a higher threshold
-  // or quorum, or Eligible where the default is Cast. The casting vote is the realm's, for a realm-wide
-  // proposal only, not the proposer's.
+  // or quorum, or Eligible where the default is Cast. In a department that counts the votes cast,
+  // Eligible adds that the yes votes reach the threshold of n, and keeps the majority of the votes
+  // cast. The casting vote is the scope's, never the proposer's.
   threshold : opt Ratio;
   quorum : opt Ratio;
   threshold_of : opt ThresholdBasis;

@@ -105,10 +105,12 @@ addition is in the [model](../model/README.md) and `ggg.did`; the model's sectio
   proposal, not a forbid on `proposal_finalize`: the proposer may state a stricter rule than the realm's
   or the department's, never a weaker one, and a guard on `proposal_create` requires the majority the
   matter needs. A realm-wide proposal's yes votes exceed the threshold of the basis, a department's reach
-  it over its policy's n seats, whatever seats are filled; the casting vote is the realm's, for a
-  realm-wide proposal only, set by governed configuration, never the proposer's. A proposal a governed
-  call files takes the scope's default rule, so legislation that needs more requires a proposal of its
-  own and may refuse the direct path with a guard (model I-GOV-3);
+  it over its policy's n seats, whatever seats are filled, or, where its policy counts the votes cast,
+  outnumber its no votes with a quorum of n. The casting vote is the scope's, never the proposer's: the
+  realm's, set by governed configuration, decides a realm-wide tie; a department's head decides a tie
+  in its second vote. A proposal a governed call files takes the scope's default rule, so legislation
+  that needs more requires a proposal of its own and may refuse the direct path with a guard (model
+  I-GOV-3);
 - **outside bodies**: `External` parties with a `Dispatch` outbox (`external_add`, `dispatch_confirm`,
   `dispatch_list`). An outside body is not a realm; a dispatch to it is a plain notice that gates
   nothing, confirmed by the operator or bridge that delivered it;
@@ -378,14 +380,14 @@ or the call is refused with `InvalidArgument`. The rules:
   the policy's own rule, more under a stricter one the proposer stated), every veto holder has voted
   and none of them against, and its quorum is met. Only an acceptance ends a department vote this
   early: until its deadline, or until every eligible member has voted, a `no` can still be replaced,
-  even when the threshold is out of reach, and a veto holder yet to vote keeps it open. The end at which every
-  eligible member has voted can still reject, and a realm-wide vote has no such early end. When it is
-  finalized doesn't matter: a vote that ended before `effective_at` does
-  not expire. Finalized before `effective_at` the proposal is scheduled, even if its `deadline` is
-  later, and finalized after it the proposal is accepted and its action executes at once. A GOS may do
-  that in the same step as `proposal_finalize`, which then replies `Executed` or `Failed`, or settle
-  the proposal itself when the vote ends, or leave it `Accepted` for `proposal_execute`; the model
-  allows all three (I-GOV-12).
+  even when the threshold is out of reach, and a veto holder yet to vote keeps it open. The end at which
+  every eligible member has voted can still reject, and a realm-wide vote, or one over a department's
+  votes cast, has no such early end. When it is finalized doesn't matter: a vote that ended before
+  `effective_at` does not expire. Finalized before `effective_at` the proposal is scheduled, even if
+  its `deadline` is later, and finalized after it the proposal is accepted and its action executes at
+  once. A GOS may do that in the same step as `proposal_finalize`, which then replies `Executed` or
+  `Failed`, or settle the proposal itself when the vote ends, or leave it `Accepted` for
+  `proposal_execute`; the model allows all three (I-GOV-12).
 - When several proposals are scheduled for the same moment, no order is specified.
 - Codex guards see it as a fact of `proposal_create`, so legislation can require a minimum delay. This
   is how a statutory wait is expressed: for an ordinance, a guard requires `effective_at` to lie at

@@ -563,10 +563,15 @@ export const idlFactory = ({ IDL }) => {
     'limit' : IDL.Opt(IDL.Nat32),
     'department' : IDL.Opt(IDL.Text),
   });
+  const ThresholdBasis = IDL.Variant({
+    'Cast' : IDL.Null,
+    'Eligible' : IDL.Null,
+  });
   const Policy = IDL.Record({
     'm' : IDL.Nat,
     'n' : IDL.Nat,
     'veto' : IDL.Vec(IDL.Principal),
+    'threshold_of' : IDL.Opt(ThresholdBasis),
     'quorum' : Ratio,
   });
   const Department = IDL.Record({
@@ -1638,10 +1643,6 @@ export const idlFactory = ({ IDL }) => {
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'avatar' : IDL.Opt(IDL.Text),
   });
-  const ThresholdBasis = IDL.Variant({
-    'Cast' : IDL.Null,
-    'Eligible' : IDL.Null,
-  });
   const ProposalLinkKind = IDL.Variant({
     'RelatesTo' : IDL.Null,
     'Replaces' : IDL.Null,
@@ -1694,6 +1695,7 @@ export const idlFactory = ({ IDL }) => {
     'result' : IDL.Opt(ProposalResult),
     'tally' : Tally,
     'title' : IDL.Text,
+    'majority_of_cast' : IDL.Opt(IDL.Bool),
     'action' : ProposalAction,
     'threshold' : Ratio,
     'effective_at' : IDL.Opt(Timestamp),
@@ -1702,6 +1704,7 @@ export const idlFactory = ({ IDL }) => {
     'deadline' : IDL.Opt(Timestamp),
     'threshold_of' : ThresholdBasis,
     'links' : IDL.Vec(ProposalLink),
+    'first_vote' : IDL.Opt(Tally),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'proposer' : IDL.Principal,
     'matter' : IDL.Opt(IDL.Text),

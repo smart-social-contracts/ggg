@@ -1037,6 +1037,14 @@
               "element": {
                 "type": "principal"
               }
+            },
+            "threshold_of": {
+              "type": "ThresholdBasis",
+              "values": [
+                "Cast",
+                "Eligible"
+              ],
+              "optional": true
             }
           }
         }

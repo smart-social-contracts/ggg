@@ -63,7 +63,8 @@ path.
   names an unknown tier, group or condition, or disagrees with the model's `delegable` and `confirm` flags.
 - `test/rules.test.js` runs the fixture with four members and checks what a proposal's stated rule
   decides (model I-GOV-3): over the eligible voters a tie rejects, a majority accepts, absentees count
-  against.
+  against; in a department that counts the votes cast, abstentions count towards the quorum of its n
+  only, and a tie gets a second vote, where the chair's casting vote decides (I-GOV-14).
 - `test/sync.test.js` runs three fixtures that take legislation from one another and checks the links
   between realms (model I-NEST-1 to 3) and the published record (model §11).
 - `test/codex.test.js` installs codices the fixture holds and checks `codex_revert` (model §11): the one
@@ -75,7 +76,7 @@ path.
   GOS can check its own arithmetic against it; `test/money.test.js` runs the model's progressive-tax
   example.
 - `fixture/Ggg.mo` holds the Motoko types generated from `ggg.did`.
-- `fixture/main.mo` is a minimal Motoko GOS: members, four departments, proposals, links between realms
+- `fixture/main.mo` is a minimal Motoko GOS: members, five departments, proposals, links between realms
   and a published record, and every other domain empty. The build checks its interface against
   `ggg.did` with `didc check`, and the tests expect it to pass every check.
 - `fixture/broken.mo` breaks GGG on purpose, and the tests expect the checks to fail.

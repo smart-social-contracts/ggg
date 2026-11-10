@@ -906,6 +906,22 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     });
   });
 
+  await check('GGG', 'W26', "a proposal of a department that counts the votes cast takes a majority of them, its quorum and its head's casting vote", async () => {
+    needMember();
+    const walked = await walk((a) => reader.ggg_department_list(a), (d) => d.id);
+    checkWalk(walked, 'ggg_department_list');
+    const counting = walked.items.find((d) => !d.is_root && tag(opt(d.policy.threshold_of) ?? { Eligible: null }) === 'Cast');
+    if (!counting) throw new Skip('no department counts the votes cast');
+    await fileRule('a majority of the votes cast', { department: [counting.id] }, (p) => {
+      assert(tag(p.threshold_of) === 'Cast' && p.threshold === WHOLE / 2n, `the rule is ${p.threshold} of ${tag(p.threshold_of)}, not a majority of the votes cast`);
+      assert(p.quorum === counting.policy.quorum, `quorum is ${p.quorum}, the policy's is ${counting.policy.quorum}`);
+      assert(opt(p.majority_of_cast) === true, `majority_of_cast is ${show(p.majority_of_cast)}`);
+      assert(opt(p.tally.seats) === counting.policy.n, `tally.seats is ${show(p.tally.seats)}, the policy's n is ${counting.policy.n}`);
+      assert(show(p.casting_vote) === show(counting.head), `casting_vote is ${show(p.casting_vote)}, the head is ${show(counting.head)}`);
+    });
+    return counting.id;
+  });
+
   /** The active grants the member holds as a delegate. */
   const grantsHeld = async () => {
     const grants = await walk((a) => mine.ggg_delegation_list({ ...a, role: { Delegate: null } }), (d) => d.id);

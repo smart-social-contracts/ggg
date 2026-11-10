@@ -1,8 +1,10 @@
 // The rule that decides a proposal (I-GOV-3), on PocketIC with four members: over the eligible voters a tie
 // at the threshold rejects, a clear majority accepts, and absentees count against, where over the votes
 // cast they would not; a tie over the votes cast passes only when the realm's configured casting
-// member voted yes; and a department's threshold is measured against its policy's n, not the seats
-// filled. The suite's W18 to W20 cover what is stored; this covers what it decides.
+// member voted yes; a department's threshold is measured against its policy's n, not the seats
+// filled; and a plenary that counts the votes cast takes more yes than no with its quorum of n, and puts
+// a tie to a second vote, where only the chair's casting vote decides a tie (I-GOV-14). The suite's
+// W18 to W20 and W26 cover what is stored; this covers what it decides.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, before, test } from 'node:test';
@@ -198,4 +200,102 @@ test('a vacancy never makes a vote easier: with one member seated, a 2-of-3 coun
   assert.equal(tag(ok(await solo(alice).ggg_proposal_finalize(id)).status), 'Rejected');
   const p = ok(await solo(alice).ggg_proposal_get({ id, cursor: [], limit: [] }))[0].proposal;
   assert.deepEqual([p.tally.seats, p.tally.eligible, p.tally.yes], [[3n], [1n], 1n]);
+});
+
+// The plenary has five seats and decides by a majority of the votes cast, with half of its seats
+// voting (three votes) and Alice, the first member, as its chair.
+const plenary = { department: ['plenary'] };
+
+test('a plenary that counts the votes cast is carried by more yes than no, abstentions aside', async () => {
+  const carried = await file(plenary);
+  const p = await proposal(carried);
+  assert.equal(tag(p.threshold_of), 'Cast');
+  assert.deepEqual([p.threshold, p.quorum, p.majority_of_cast, p.tally.seats], [50_000_000n, 50_000_000n, [true], [5n]]);
+  assert.equal(p.casting_vote[0].toText(), alice.getPrincipal().toText(), "the casting vote is the head's");
+  // Two yes of five seats: not m of n, but more yes than no.
+  await everyone(carried, ['Yes', 'Yes', 'No', 'Abstain']);
+  assert.equal(await finalize(carried), 'Accepted');
+  const oneYes = await file(plenary);
+  await everyone(oneYes, ['Yes', 'Abstain', 'Abstain', 'Abstain']);
+  assert.equal(await finalize(oneYes), 'Accepted');
+  const lost = await file(plenary);
+  await everyone(lost, ['Yes', 'No', 'No', 'Abstain']);
+  assert.equal(await finalize(lost), 'Rejected');
+});
+
+test("a plenary's quorum counts over its policy's n, not the members seated", async () => {
+  // Half of the four seated is two votes, half of the five seats three.
+  const quiet = await file(plenary);
+  await vote(alice, quiet, 'Yes');
+  await vote(bob, quiet, 'Yes');
+  const heard = await file(plenary);
+  await vote(alice, heard, 'Yes');
+  await vote(bob, heard, 'Yes');
+  await vote(carol, heard, 'Abstain');
+  await pastTheDeadline();
+  assert.equal(await finalize(quiet), 'Rejected');
+  assert.equal(await finalize(heard), 'Accepted');
+});
+
+test("a tie in the plenary gets a second vote, and only a tie in that one is the chair's to decide", async () => {
+  /** Ties a first vote, with the chair voting yes, and returns the proposal as its second vote opens. */
+  const tied = async () => {
+    const id = await file(plenary);
+    const first = await proposal(id);
+    await everyone(id, ['Yes', 'No', 'Yes', 'No']);
+    const second = ok(await as(alice).ggg_proposal_finalize(id));
+    assert.equal(tag(second.status), 'Voting', "the chair's yes does not decide a first tie");
+    assert.deepEqual([second.first_vote[0].yes, second.first_vote[0].no], [2n, 2n]);
+    assert.deepEqual([second.tally.yes, second.tally.no, second.tally.abstain], [0n, 0n, 0n]);
+    assert.equal(second.deadline[0] - second.opens_at[0], first.deadline[0] - first.opens_at[0], 'the second vote lasts as long as the first');
+    const detail = ok(await as(alice).ggg_proposal_get({ id, cursor: [], limit: [] }))[0];
+    assert.equal(detail.votes.length, 0, 'every member votes again');
+    return id;
+  };
+
+  const chairYes = await tied();
+  await everyone(chairYes, ['Yes', 'No', 'Abstain', 'Abstain']);
+  assert.equal(await finalize(chairYes), 'Accepted');
+
+  const chairNo = await tied();
+  await everyone(chairNo, ['No', 'Yes', 'Abstain', 'Abstain']);
+  assert.equal(await finalize(chairNo), 'Rejected');
+
+  const decided = await tied();
+  await everyone(decided, ['No', 'Yes', 'Yes', 'Abstain']);
+  assert.equal(await finalize(decided), 'Accepted', 'a second vote that does not tie is decided by its majority');
+
+  const chairAway = await tied();
+  await vote(bob, chairAway, 'Yes');
+  await vote(carol, chairAway, 'No');
+  await vote(dave, chairAway, 'Abstain');
+  await pastTheDeadline();
+  assert.equal(await finalize(chairAway), 'Rejected', 'without the chair, a second tie rejects');
+});
+
+test("a proposer tightens the plenary's rule, never loosens it", async () => {
+  // An absolute majority, three of the five seats, on top of more yes than no.
+  const absolute = { ...plenary, threshold_of: [{ Eligible: null }] };
+  const short = await file(absolute);
+  const p = await proposal(short);
+  assert.deepEqual([tag(p.threshold_of), p.majority_of_cast], ['Eligible', [true]]);
+  await everyone(short, ['Yes', 'Yes', 'No', 'Abstain']);
+  assert.equal(await finalize(short), 'Rejected');
+  const reached = await file(absolute);
+  await everyone(reached, ['Yes', 'Yes', 'Yes', 'No']);
+  assert.equal(await finalize(reached), 'Accepted');
+
+  // A higher quorum: four of the five seats.
+  const quorate = await file({ ...plenary, quorum: [80_000_000n] });
+  await everyone(quorate, ['Yes', 'Yes', 'No', 'Abstain']);
+  const unquorate = await file({ ...plenary, quorum: [80_000_000n] });
+  await vote(alice, unquorate, 'Yes');
+  await vote(bob, unquorate, 'Yes');
+  await vote(carol, unquorate, 'No');
+  await pastTheDeadline();
+  assert.equal(await finalize(quorate), 'Accepted');
+  assert.equal(await finalize(unquorate), 'Rejected');
+
+  refusedWith(await as(alice).ggg_proposal_create(motion({ ...plenary, threshold: [40_000_000n] })), 'InvalidArgument');
+  refusedWith(await as(alice).ggg_proposal_create(motion({ ...plenary, quorum: [40_000_000n] })), 'InvalidArgument');
 });
