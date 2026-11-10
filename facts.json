@@ -943,6 +943,17 @@
             "Dissolved"
           ],
           "optional": true
+        },
+        "kind": {
+          "type": "OrganizationKind",
+          "values": [
+            "Company",
+            "Party",
+            "Union",
+            "Association",
+            "Other"
+          ],
+          "optional": true
         }
       },
       "read": true
@@ -1236,6 +1247,17 @@
         },
         "description": {
           "type": "text"
+        },
+        "kind": {
+          "type": "OrganizationKind",
+          "values": [
+            "Company",
+            "Party",
+            "Union",
+            "Association",
+            "Other"
+          ],
+          "optional": true
         }
       }
     },
@@ -1254,6 +1276,17 @@
           "element": {
             "type": "principal"
           },
+          "optional": true
+        },
+        "kind": {
+          "type": "OrganizationKind",
+          "values": [
+            "Company",
+            "Party",
+            "Union",
+            "Association",
+            "Other"
+          ],
           "optional": true
         }
       }

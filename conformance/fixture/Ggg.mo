@@ -1436,6 +1436,7 @@ module {
   public type Organization = {
     id : Text;
     status : OrganizationStatus;
+    kind : OrganizationKind;
     description : Text;
     admins : [Principal];
   };
@@ -1445,17 +1446,30 @@ module {
     organization : Organization;
   };
   public type OrganizationEditArgs = {
+    kind : ?OrganizationKind;
     description : ?Text;
     admins : ?[Principal];
     organization : Text;
   };
+  /// What an organization is (I-ORG-9). Other is any organization that is none of the four, and the one
+  /// registered without a kind or before kinds existed.
+  public type OrganizationKind = {
+    #Union;
+    #Party;
+    #Company;
+    #Other;
+    #Association;
+  };
   public type OrganizationListArgs = {
     status : ?OrganizationStatus;
     cursor : ?Text;
+    kind : ?OrganizationKind;
     limit : ?Nat32;
   };
   public type OrganizationPage = { next : ?Text; items : [Organization] };
+  /// `kind` absent means Other (I-ORG-9).
   public type OrganizationRegisterArgs = {
+    kind : ?OrganizationKind;
     description : Text;
     organization : Text;
   };

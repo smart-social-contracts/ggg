@@ -255,7 +255,7 @@ function listTable(actor) {
       return (a) => actor.ggg_department_get({ ...a, id });
     }, 'seats'),
     list('ggg_department_chart (sub-departments)', () => (a) => actor.ggg_department_chart({ ...a, department: [] }), 'children'),
-    list('ggg_organization_list', () => (a) => actor.ggg_organization_list({ ...a, status: [] })),
+    list('ggg_organization_list', () => (a) => actor.ggg_organization_list({ ...a, status: [], kind: [] })),
     list('ggg_treasury_view (funds)', () => (a) => actor.ggg_treasury_view(a), 'funds'),
     list('ggg_ledger_view', () => (a) =>
       actor.ggg_ledger_view({ ...a, transaction: [], symbol: [], kind: [], fund: [], period: [] })),
@@ -431,6 +431,17 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
       }
     }
     return detail;
+  });
+
+  await check('GGG', 'O2', 'ggg_organization_list filters by kind', async () => {
+    let listed = 0;
+    for (const kind of ['Company', 'Party', 'Union', 'Association', 'Other']) {
+      const walked = await walk((a) => reader.ggg_organization_list({ ...a, status: [], kind: [{ [kind]: null }] }), (o) => o.id);
+      checkWalk(walked, `ggg_organization_list(${kind})`);
+      for (const o of walked.items) assert(tag(o.kind) === kind, `organization ${o.id} is ${tag(o.kind)}, listed as ${kind}`);
+      listed += walked.items.length;
+    }
+    return `${listed} organizations listed by kind`;
   });
 
   await check('GGG', 'Q1', 'ggg_join_targets takes a home_zone or none and gives it to no one, and the directory has no zone definitions', async () => {

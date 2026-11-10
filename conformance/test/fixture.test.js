@@ -53,6 +53,7 @@ test('the fixture passes the read-only checks', async () => {
   assert.equal(o.R3, 'pass');
   assert.equal(o.R4, 'pass');
   assert.equal(o.O1, 'pass');
+  assert.equal(o.O2, 'pass');
   assert.equal(o.Q1, 'pass');
   assert.equal(o.W1, 'skip');
 });
