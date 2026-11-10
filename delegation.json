@@ -220,6 +220,7 @@
     "proposal_create": { "tier": "direct", "group": "propose", "confirm_if": "with_action" },
     "proposal_vote": { "tier": "direct", "group": "vote" },
     "proposal_withdraw": { "tier": "direct", "group": "propose" },
+    "proposal_set_tags": { "tier": "direct", "group": "propose" },
     "proposal_open": { "tier": "direct", "group": "office" },
     "proposal_finalize": { "tier": "direct", "group": "office" },
     "proposal_execute": { "tier": "direct", "group": "office" },

@@ -297,6 +297,7 @@ test('an install from a release is also a proposal\'s Call action, and runs once
     threshold_of: [],
     effective_at: [],
     links: [],
+    tags: [],
     on_behalf_of: [],
   }));
   for (const voter of [alice, bob]) ok(await on(c, voter).ggg_proposal_vote({ proposal: id, choice: { Yes: null }, on_behalf_of: [] }));
@@ -336,6 +337,7 @@ test('a stop while the action runs is a Conflict, and the action runs once', asy
       threshold_of: [],
       effective_at: [at],
       links: [],
+      tags: [],
       on_behalf_of: [],
     }));
     for (const voter of [alice, bob]) {

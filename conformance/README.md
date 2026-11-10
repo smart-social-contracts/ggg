@@ -65,6 +65,9 @@ path.
   decides (model I-GOV-3): over the eligible voters a tie rejects, a majority accepts, absentees count
   against; in a department that counts the votes cast, abstentions count towards the quorum of its n
   only, and a tie gets a second vote, where the chair's casting vote decides (I-GOV-14).
+- `test/tags.test.js` runs the fixture with two members and checks proposal tags (model I-GOV-15): a
+  list filters by any of several tags, exactly, together with a status, and only the member a draft
+  was filed for replaces its tags.
 - `test/sync.test.js` runs three fixtures that take legislation from one another and checks the links
   between realms (model I-NEST-1 to 3) and the published record (model §11).
 - `test/codex.test.js` installs codices the fixture holds and checks `codex_revert` (model §11): the one

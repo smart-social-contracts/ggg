@@ -66,6 +66,7 @@ const motion = (rule = {}) => ({
   threshold_of: [],
   effective_at: [],
   links: [],
+  tags: [],
   on_behalf_of: [],
   ...rule,
 });

@@ -328,6 +328,9 @@ type Proposal = record {
   tally : Tally;
   result : opt ProposalResult;
   links : vec ProposalLink;
+  // The realm's own words for grouping proposals (an area, a district, a kind of act), at most 16,
+  // each 1 to 64 characters and named once (I-GOV-15).
+  tags : vec text;
   // True when the department's policy counted the votes cast as the vote opened (I-GOV-3): the quorum
   // counts over `tally.seats`, a tie over the votes cast gets a second vote, where the casting vote
   // decides a tie (I-GOV-14), and under Eligible the yes votes must also be a majority of the votes
@@ -1434,7 +1437,9 @@ type ProposalDetail = record { proposal : Proposal; votes : vec Vote; next : opt
 // The links of other proposals to one proposal, oldest first.
 type ProposalLinkPage = record { items : vec ProposalLink; next : opt text };
 
-type ProposalListArgs = record { cursor : opt text; limit : opt nat32; status : opt ProposalStatus };
+// `tags`: only the proposals that carry at least one of them, compared exactly; absent or empty
+// means any (I-GOV-15).
+type ProposalListArgs = record { cursor : opt text; limit : opt nat32; status : opt ProposalStatus; tags : opt vec text };
 type ProposalPage = record { items : vec Proposal; next : opt text };
 
 // links is optional, and absent means none, so callers built before links existed keep working. At
@@ -1458,6 +1463,8 @@ type ProposalCreateArgs = record {
   // Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
   effective_at : opt Timestamp;
   links : opt vec ProposalLink;
+  // Absent means none (I-GOV-15).
+  tags : opt vec text;
   on_behalf_of : opt principal;
 };
 
@@ -1468,6 +1475,9 @@ type ProposalVoteArgs = record {
 };
 
 type ProposalWithdrawArgs = record { proposal : text; on_behalf_of : opt principal };
+
+// Replaces a draft's tags (I-GOV-15).
+type ProposalSetTagsArgs = record { proposal : text; tags : vec text; on_behalf_of : opt principal };
 
 // A replayed proposal records itself as the mandate's proposal.
 type MandateCreateArgs = record {
@@ -2244,6 +2254,7 @@ service : {
   ggg_proposal_create : (ProposalCreateArgs) -> (variant { Ok : text; Err : GggError });
   ggg_proposal_vote : (ProposalVoteArgs) -> (variant { Ok : Vote; Err : GggError });
   ggg_proposal_withdraw : (ProposalWithdrawArgs) -> (variant { Ok : Proposal; Err : GggError });
+  ggg_proposal_set_tags : (ProposalSetTagsArgs) -> (variant { Ok : Proposal; Err : GggError });
   ggg_proposal_open : (text) -> (variant { Ok : Proposal; Err : GggError });
   ggg_proposal_finalize : (text) -> (variant { Ok : Proposal; Err : GggError });
   ggg_proposal_execute : (text) -> (variant { Ok : Proposal; Err : GggError });

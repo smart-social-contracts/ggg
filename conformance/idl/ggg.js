@@ -1657,6 +1657,7 @@ export const idlFactory = ({ IDL }) => {
     'threshold' : IDL.Opt(Ratio),
     'effective_at' : IDL.Opt(Timestamp),
     'kind' : IDL.Opt(IDL.Text),
+    'tags' : IDL.Opt(IDL.Vec(IDL.Text)),
     'description' : IDL.Text,
     'threshold_of' : IDL.Opt(ThresholdBasis),
     'links' : IDL.Opt(IDL.Vec(ProposalLink)),
@@ -1700,6 +1701,7 @@ export const idlFactory = ({ IDL }) => {
     'threshold' : Ratio,
     'effective_at' : IDL.Opt(Timestamp),
     'kind' : IDL.Opt(IDL.Text),
+    'tags' : IDL.Vec(IDL.Text),
     'description' : IDL.Text,
     'deadline' : IDL.Opt(Timestamp),
     'threshold_of' : ThresholdBasis,
@@ -1738,11 +1740,17 @@ export const idlFactory = ({ IDL }) => {
   const ProposalListArgs = IDL.Record({
     'status' : IDL.Opt(ProposalStatus),
     'cursor' : IDL.Opt(IDL.Text),
+    'tags' : IDL.Opt(IDL.Vec(IDL.Text)),
     'limit' : IDL.Opt(IDL.Nat32),
   });
   const ProposalPage = IDL.Record({
     'next' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Proposal),
+  });
+  const ProposalSetTagsArgs = IDL.Record({
+    'tags' : IDL.Vec(IDL.Text),
+    'on_behalf_of' : IDL.Opt(IDL.Principal),
+    'proposal' : IDL.Text,
   });
   const ProposalVoteArgs = IDL.Record({
     'on_behalf_of' : IDL.Opt(IDL.Principal),
@@ -3212,6 +3220,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'ggg_proposal_open' : IDL.Func(
         [IDL.Text],
+        [IDL.Variant({ 'Ok' : Proposal, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_proposal_set_tags' : IDL.Func(
+        [ProposalSetTagsArgs],
         [IDL.Variant({ 'Ok' : Proposal, 'Err' : GggError })],
         [],
       ),

@@ -81,6 +81,7 @@ async function create({ action = motion, days = null, department = null } = {}) 
     threshold_of: [],
     effective_at,
     links: [],
+    tags: [],
     on_behalf_of: [],
   });
 }
@@ -202,6 +203,7 @@ test('an effective_at that is not in the future is refused', async () => {
     quorum: [],
     threshold_of: [],
     links: [],
+    tags: [],
     on_behalf_of: [],
   };
   refusedWith(await as(alice).ggg_proposal_create({ ...args, effective_at: [1n] }), 'InvalidArgument');

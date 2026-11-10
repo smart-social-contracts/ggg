@@ -32,6 +32,8 @@
 /// department's m/n over its policy's n, or the plenary's majority of the votes cast, unless the
 /// proposer states a stricter one, which the fixture stores and applies (I-GOV-3). A tie in the
 /// plenary's first vote is recorded by proposal_finalize, which opens the second vote (I-GOV-14).
+/// A proposal keeps the tags it was filed with, and the list filters by them (I-GOV-15); with no drafts,
+/// no proposal's tags are ever replaced.
 /// Links between realms (I-NEST-1 to 3): members vote to take legislation from a sync source and to
 /// accept a follower, which the root's direct policy applies at once; each vote records the link,
 /// then reads the realms' realm_info to refuse a cycle (Unavailable when one cannot be read), and
@@ -69,6 +71,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   let MAP_VIEW = 32;
   let WHOLE = 100_000_000; // 100 %, in hundred-millionths
   let MAX_LINKS = 16; // a proposal's own links
+  let MAX_TAGS = 16; // a proposal's tags, and the tags a list filters by
+  let MAX_TAG_SIZE = 64; // characters
   /// The realm's governance rule, set with governance_update: the voting window, and the threshold,
   /// quorum and casting vote of a realm-wide proposal.
   var votingWindow : T.Duration = 7 * 24 * 3600 * 1_000_000_000;
@@ -383,7 +387,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     } else {
       let call = #Call({ method = "ggg_" # op; arg });
       let scope = if (governing.is_root) null else ?governing.id; // the root's proposals are realm-wide
-      let filed = fileProposal(caller, title, description, scope, null, null, call, scopeRule(governing), null, []);
+      let filed = fileProposal(caller, title, description, scope, null, null, call, scopeRule(governing), null, [], []);
       audit(op, caller, #Map([("filed", #Text(filed.id))]), #Text(filed.id));
       #Ok(#Proposed(filed.id));
     };
@@ -478,6 +482,18 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   /// The member a proposal was filed for: the grantor when it was filed on their behalf.
   func filedFor(p : T.Proposal) : Principal {
     switch (p.on_behalf_of) { case (?grantor) grantor; case null p.proposer };
+  };
+
+  /// Refuses tags that break I-GOV-15: too many, empty or too long, or one named twice.
+  func checkTags(tags : [Text]) : ?T.GggError {
+    if (tags.size() > MAX_TAGS) return ?#InvalidArgument("a proposal has at most 16 tags");
+    let named = Map.empty<Text, ()>();
+    for (t in tags.vals()) {
+      if (Text.size(t) == 0 or Text.size(t) > MAX_TAG_SIZE) return ?#InvalidArgument("a tag is 1 to 64 characters");
+      if (Map.containsKey(named, Text.compare, t)) return ?#InvalidArgument("the tags name " # t # " twice");
+      Map.add(named, Text.compare, t, ());
+    };
+    null;
   };
 
   /// Refuses links that break I-GOV-10. `filer` is the member the new proposal is filed for.
@@ -1206,12 +1222,16 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
   };
 
+  /// The proposals with the status named, if one is, and at least one of the tags named, if any are.
   public query func ggg_proposal_list(args : T.ProposalListArgs) : async Result<T.ProposalPage> {
-    let all = switch (args.status) {
-      case null Map.values(proposals);
-      case (?s) Iter.filter<T.Proposal>(Map.values(proposals), func(p) { p.status == s });
+    let tags = switch (args.tags) { case (?t) t; case null [] };
+    if (tags.size() > MAX_TAGS) return #Err(#InvalidArgument("a list filters by at most 16 tags"));
+    let wanted = func(p : T.Proposal) : Bool {
+      let statusMatches = switch (args.status) { case (?s) p.status == s; case null true };
+      let tagged = tags.size() == 0 or Array.any<Text>(p.tags, func(t) { Array.any<Text>(tags, func(w) { w == t }) });
+      statusMatches and tagged;
     };
-    page(all, args.cursor, args.limit);
+    page(Iter.filter<T.Proposal>(Map.values(proposals), wanted), args.cursor, args.limit);
   };
 
   public shared ({ caller }) func ggg_proposal_create(args : T.ProposalCreateArgs) : async Result<Text> {
@@ -1240,12 +1260,14 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
     let links = switch (args.links) { case (?l) l; case null [] };
     switch (checkLinks(caller, links)) { case (?e) return #Err(e); case null {} };
+    let tags = switch (args.tags) { case (?t) t; case null [] };
+    switch (checkTags(tags)) { case (?e) return #Err(e); case null {} };
     switch (args.effective_at) {
       case (?e) { if (e <= now()) return #Err(#InvalidArgument("effective_at must lie in the future")) };
       case null {};
     };
     let rule = switch (statedRule(args)) { case (#Err(e)) return #Err(e); case (#Ok(r)) r };
-    let p = fileProposal(caller, args.title, args.description, args.department, args.kind, args.matter, args.action, rule, args.effective_at, links);
+    let p = fileProposal(caller, args.title, args.description, args.department, args.kind, args.matter, args.action, rule, args.effective_at, links, tags);
     markProposed(lines, p.id);
     audit("proposal_create", caller, #Map([("title", #Text(p.title))]), #Text(p.id));
     #Ok(p.id);
@@ -1274,6 +1296,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     rule : Rule,
     effective_at : ?T.Timestamp,
     links : [T.ProposalLink],
+    tags : [Text],
   ) : T.Proposal {
     let t = now();
     let n = nextProposal;
@@ -1300,6 +1323,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members); seats = policySeats(scopeOf(department)) };
       result = null;
       links;
+      tags;
       majority_of_cast = ?rule.majority_of_cast;
       first_vote = null;
     };
@@ -1353,6 +1377,17 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     settled(withdrawn);
     audit("proposal_withdraw", caller, #Map([("proposal", #Text(p.id))]), #Text(p.id));
     #Ok(withdrawn);
+  };
+
+  /// Only a draft's tags can be replaced (I-GOV-15), and proposals here are filed already open.
+  public shared ({ caller }) func ggg_proposal_set_tags(args : T.ProposalSetTagsArgs) : async Result<T.Proposal> {
+    switch (requireMember(caller, "proposal.create")) { case (?e) return #Err(e); case null {} };
+    if (args.on_behalf_of != null) return #Err(noDelegation("proposal.create"));
+    let (_, p) = switch (findProposal(args.proposal)) { case null return #Err(#NotFound); case (?found) found };
+    if (filedFor(p) != caller) {
+      return #Err(#Forbidden({ permission = ?"proposal.create"; message = "Only the member a proposal was filed for may tag it." }));
+    };
+    #Err(#Conflict("only a draft's tags can be replaced"));
   };
 
   /// Proposals here are filed already open, so there is never a draft to open.

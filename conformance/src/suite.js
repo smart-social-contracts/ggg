@@ -229,7 +229,7 @@ function listTable(actor) {
     delegation ??= items[0]?.id ?? null;
   };
   return [
-    list('ggg_proposal_list', () => (a) => actor.ggg_proposal_list({ ...a, status: [] }), 'items', (items) => {
+    list('ggg_proposal_list', () => (a) => actor.ggg_proposal_list({ ...a, status: [], tags: [] }), 'items', (items) => {
       proposal = items[0]?.id ?? null;
     }),
     list('ggg_proposal_linked_from', () => {
@@ -483,7 +483,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
   });
 
   await check('GGG', 'P1', 'ggg_proposal_list paginates and returns well-formed summaries', async () => {
-    const walked = await walk((a) => reader.ggg_proposal_list({ ...a, status: [] }), (p) => p.id);
+    const walked = await walk((a) => reader.ggg_proposal_list({ ...a, status: [], tags: [] }), (p) => p.id);
     const detail = checkWalk(walked, 'ggg_proposal_list');
     walked.items.forEach(checkProposal);
     proposals = walked.items;
@@ -529,7 +529,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
 
   await check('GGG', 'P4', 'ggg_proposal_list filters by status', async () => {
     const status = proposals.length ? proposals[0].status : { Voting: null };
-    const result = await reader.ggg_proposal_list({ cursor: [], limit: [PAGE], status: [status] });
+    const result = await reader.ggg_proposal_list({ cursor: [], limit: [PAGE], status: [status], tags: [] });
     refused(result.Err, 'ggg_proposal_list');
     for (const p of ok(result, 'ggg_proposal_list(status)').items) {
       assert(tag(p.status) === tag(status), `filter ${tag(status)} returned proposal ${p.id} with ${tag(p.status)}`);
@@ -538,7 +538,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
   });
 
   await check('GGG', 'P5', 'a malformed cursor returns InvalidArgument', async () => {
-    const result = await reader.ggg_proposal_list({ cursor: [BAD_CURSOR], limit: [PAGE], status: [] });
+    const result = await reader.ggg_proposal_list({ cursor: [BAD_CURSOR], limit: [PAGE], status: [], tags: [] });
     refused(result.Err, 'ggg_proposal_list');
     err(result, ['InvalidArgument'], 'ggg_proposal_list(malformed cursor)');
   });
@@ -612,6 +612,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     threshold_of: [],
     effective_at: [],
     links: [],
+    tags: [],
     on_behalf_of: [],
     ...extra,
   });
@@ -920,6 +921,43 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
       assert(show(p.casting_vote) === show(counting.head), `casting_vote is ${show(p.casting_vote)}, the head is ${show(counting.head)}`);
     });
     return counting.id;
+  });
+
+  /** The ids of the proposals `ggg_proposal_list` returns for `tags`, every page. */
+  const taggedIds = async (tags) => {
+    const walked = await walk((a) => reader.ggg_proposal_list({ ...a, status: [], tags: [tags] }), (p) => p.id);
+    checkWalk(walked, `ggg_proposal_list(tags ${tags.join(', ')})`);
+    for (const p of walked.items) {
+      assert(p.tags.some((t) => tags.includes(t)), `proposal ${p.id}, tagged ${show(p.tags)}, carries none of ${tags.join(', ')}`);
+    }
+    return walked.items.map((p) => p.id);
+  };
+
+  await check('GGG', 'W27', 'a proposal keeps its tags, and ggg_proposal_list finds it by any one of them', async () => {
+    needMember();
+    const mark = `ggg-conformance-${Date.now()}`;
+    const tags = [mark, 'Old Town'];
+    await fileRule('tags', { tags: [tags] }, async (p) => {
+      assert(show(p.tags) === show(tags), `tags are ${show(p.tags)}, not ${show(tags)}`);
+      assert((await taggedIds([`${mark}-other`, mark])).includes(p.id), `listing by ${mark} misses proposal ${p.id}`);
+      assert(!(await taggedIds([`${mark}-other`])).includes(p.id), `listing by another tag finds proposal ${p.id}`);
+    });
+  });
+
+  await check('GGG', 'W28', 'tags out of bounds are refused, and only a draft has its tags replaced', async () => {
+    needMember();
+    const many = Array.from({ length: 17 }, (_, i) => `tag-${i}`);
+    for (const [what, tags] of [['17 tags', many], ['an empty tag', ['']], ['a tag of 65 characters', ['x'.repeat(65)]], ['a tag twice', ['a', 'a']]]) {
+      await proposeAs(motion(what, { tags: [tags] }), `ggg_proposal_create(${what})`);
+    }
+    err(await reader.ggg_proposal_list({ cursor: [], limit: [PAGE], status: [], tags: [many] }), ['InvalidArgument'], 'ggg_proposal_list(17 tags)');
+    err(await mine.ggg_proposal_set_tags({ proposal: NO_PROPOSAL, tags: [], on_behalf_of: [] }), ['NotFound'], 'ggg_proposal_set_tags(unknown proposal)');
+    await fileRule('tags replaced', { tags: [['before']] }, async (p) => {
+      const result = await mine.ggg_proposal_set_tags({ proposal: p.id, tags: ['after'], on_behalf_of: [] });
+      if (tag(p.status) !== 'Draft') return err(result, ['Conflict'], `ggg_proposal_set_tags(${tag(p.status)})`);
+      const replaced = ok(result, 'ggg_proposal_set_tags(draft)').tags;
+      assert(show(replaced) === show(['after']), `a draft's tags are ${show(replaced)}, not after`);
+    });
   });
 
   /** The active grants the member holds as a delegate. */
