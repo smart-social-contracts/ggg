@@ -654,6 +654,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         "contract.create_under_mandate",
         "contract.amend",
         "contract.terminate",
+        "organization.add",
+        "organization.edit",
         "codex.install",
         "codex.revert",
         "realm.data_view",
