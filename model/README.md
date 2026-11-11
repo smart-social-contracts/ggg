@@ -574,9 +574,10 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
     active member); for a department's, its `head` (`department_edit`). A proposal copies it when its
     vote opens: a chair who filed the proposal keeps it, and a later change moves no open proposal. A
     department under an m-of-n policy has none, since it counts over the seats, where no tie arises.
-    A department's casting vote belongs to its `head` as it stands when the vote opens, an acting head
-    named before then included, and with no head a tie rejects. A head who holds no seat in the
-    department cannot vote (I-GOV-2), so its ties reject too. If the realm's casting member leaves the
+    A department's casting vote belongs to whoever `department_edit` has made its `head` when the vote
+    opens; an acting appointment (`appoint_acting`) to a seat does not count, since it never changes
+    `Department.head`. With no head a tie rejects. A head who holds no seat in the department cannot
+    vote (I-GOV-2), so its ties reject too. If the realm's casting member leaves the
     realm, new proposals still copy them but their vote does not count (I-GOV-2), so realm-wide ties
     reject until `governance_update` names another member or clears it.
   - The proposer may state a stricter rule when creating the proposal, never a weaker one
