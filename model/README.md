@@ -568,23 +568,27 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
     the seats filled, so here too a vacancy never makes a vote easier; the policy's m is not used. A
     veto holder's `no` rejects it whatever the count (I-GOV-7). A tie in its first vote is put to a
     second vote (I-GOV-14), and a tie in the second vote is decided by the casting vote.
-  - Under `cast`, the yes votes standing exactly at `threshold` of the yes and no votes, at least one of
-    them, are a tie (at 50 %, as many yes as no). The `casting_vote` member's yes accepts a tie; without
-    one, or if that member did not vote yes, the tie rejects, so a tie never passes on its own. A
-    realm-wide tie is decided at once; a department's under `majority_of_cast` only in its second vote.
+  - Under `cast`, a vote is a tie when at least one yes or no was cast and the yes votes are exactly
+    `threshold` of the yes and no votes together (at 50 %: as many yes as no). The `casting_vote`
+    member's yes accepts a tie; without one, or if that member did not vote yes, the tie rejects, so a
+    tie never passes on its own. A realm-wide tie is decided at once; a department's under
+    `majority_of_cast` only in its second vote.
     The casting vote is part of the scope's default rule, never the proposer's: for a realm-wide
     proposal the realm's, set by governed configuration, `Realm.casting_vote` (`governance_update`, an
     active member); for a department's, its `head` (`department_edit`). A proposal copies it when its
     vote opens: a chair who filed the proposal keeps it, and a later change moves no open proposal. A
     department under an m-of-n policy has none, since it counts over the seats, where no tie arises.
-    If the realm's casting member leaves, new proposals still copy them, their vote does not count on
-    those (I-GOV-2) and ties reject, until `governance_update` names another or clears it; likewise a
-    head who holds no seat, or none, leaves a department's ties to reject.
+    A department's casting vote belongs to its `head` as it stands when the vote opens, an acting head
+    named before then included, and with no head a tie rejects. A head who holds no seat in the
+    department cannot vote (I-GOV-2), so its ties reject too. If the realm's casting member leaves the
+    realm, new proposals still copy them but their vote does not count (I-GOV-2), so realm-wide ties
+    reject until `governance_update` names another member or clears it.
   - The proposer may state a stricter rule when creating the proposal, never a weaker one
     (`InvalidArgument`): a higher threshold or quorum, or `eligible` where the default is `cast`. Each
     change narrows what the default accepts, so legislation's guards, which may require them, only ever
-    tighten. A threshold above the default's over the votes cast still treats a tie at itself as a tie,
-    decided the same way; the default had already passed that count, so it is never looser. In a
+    tighten. A stricter threshold t over the votes cast has its own tie, the yes votes exactly t of the
+    yes and no votes, decided as the default's tie is. That never loosens the default: above 50 %, such
+    a count already has more yes than no, which the default accepts outright. In a
     department that counts the votes cast, `eligible` adds a requirement and removes none: the yes
     votes must also *reach* `threshold` of n, rounded up as under m of n (an absolute majority of 33
     seats is 17, at 50 %), while the majority of the votes cast, with its second vote and casting
@@ -668,16 +672,22 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   the governing department, so that proposal carries it when it is filed.
 - I-GOV-14: Under `majority_of_cast` (I-GOV-3), a first vote that meets its quorum and ties does not end
   the proposal: recording its outcome (`proposal_finalize`, or the GOS settling it, I-GOV-12) opens a
-  second vote on the same proposal instead, which stays `voting`. The second vote keeps the rule, the
+  second vote on the same proposal instead, which stays `voting`. A veto holder's `no` still rejects
+  the proposal whatever the count (I-GOV-3), so a tied first vote in which a veto holder voted no is
+  rejected, not put to a second vote. The second vote keeps the rule, its casting vote included, the
   action, `effective_at`, `tally.eligible` and `tally.seats`; `first_vote` keeps the first vote's
   count, the ballots start empty, so every member votes again, and `opens_at` and `deadline` become
   the second vote's: it opens when the tie is recorded and lasts as long as the first did (with no
-  deadline when the first had none). It ends as any vote does (I-GOV-7); a tie in it is decided by the
-  casting vote, and there is no third vote. A first vote that ended after `effective_at` expires the
-  proposal instead, like a second vote that does. The first vote's ballots stay in the audit log
-  (I-ALL-4).
-- I-GOV-15: A proposal's `tags` are text in the realm's own words, compared exactly: at most 16, each
-  1 to 64 characters, none named twice, else `InvalidArgument`. They are set by `proposal_create`
+  deadline when the first had none). It ends as any vote does (I-GOV-7) and is decided like the first,
+  so a second vote that misses its quorum is rejected; a tie in it is decided by the casting vote, and
+  there is no third vote. A first vote that ended after `effective_at` expires the proposal instead,
+  like a second vote that does. The first vote's ballots stay in the audit log (I-ALL-4).
+- I-GOV-15: A proposal's `tags` are text in the realm's own words: at most 16, each 1 to 64 Unicode
+  code points (`València` is 8, whatever its bytes or UTF-16 units), with no control character
+  (U+0000 to U+001F, U+007F to U+009F) and no whitespace (Unicode `White_Space`) at either end, none
+  named twice, else `InvalidArgument`. Tags are compared exactly: equal only when their code points
+  are, so `Parks` and `parks` are two tags. GGG never normalises a tag; clients SHOULD send it in NFC,
+  since the same word in another normalisation form is another tag. They are set by `proposal_create`
   (absent means none) and replaced only while the proposal is a `draft`, by its proposer or for the
   member it was filed for, with `proposal_set_tags` (`Conflict` once it is open, `Forbidden` for
   another's); they are not part of what is voted on. `proposal_list` with `tags` lists only the
@@ -1538,5 +1548,5 @@ There is no permission for raw database writes: everything is an operation.
 | D29 | How a reviewer reads a pending attribute | Decided 8 Nov 2026: `attribute_pending_list`, a read under `attribute.review`, lists the attributes awaiting review with kind and value in clear, consistent with I-PRV-1, paged by id so that deciding a page skips none; a holder of `attribute.review` on a scope reads and decides only the attributes in it, scope `kind:<kind>` for the kinds that body certifies, and held without a scope every pending attribute of the realm, `attribute_pending_list` and `attribute_review` applying the same scope; the audit events of `attribute_submit` and `attribute_review` keep the attribute's id, and for a review the decision, never its kind or value (§2) |
 | D30 | What the fee exemption covers, and what a second adopted line does | Decided 8 Nov 2026: only the fee's ledger entry, which the GOS books itself in the category `ledger_fee`, is exempt from an adopted budget; `ledger_fee` is reserved, a `transfer_create` or `budget_draft` naming it `InvalidArgument`, budget or not, so no proposal or extension carries one; a later adopted line of the same fund, period and category amends the earlier one, within one adoption too, where the line drafted later stands, so one line stands per fund, period and category, `budget_extend` carries the newest and the spending booked against the earlier one carries over (§5) |
 | D31 | A department that decides by a majority of the votes cast | Decided 10 Nov 2026: a department's policy may count the votes cast (`Policy.threshold_of` `cast`): the yes votes must exceed the no votes, abstentions counting towards the quorum only, with the policy's quorum of its n; a tie gets a second vote on the same proposal, and a tie in that one is decided by the casting vote of the department's `head`, its chair, copied when the vote opens, so a chair who proposed keeps it and an absent chair's tie rejects. The rule is the department's, never legislation's arithmetic: no hook computes it. A proposer may only tighten it: a higher threshold of the votes cast or quorum, or `eligible`, which adds that the yes votes reach the threshold of n (an absolute majority) and keeps the majority of the votes cast and its tie procedure, so no stated rule passes what the default rejects or would put to a second vote. Amends D15 and D20 (I-GOV-3, I-GOV-14) |
-| D32 | How proposals are grouped and found | Decided 10 Nov 2026: by `tags`, free text in the realm's own words, at most 16 of up to 64 characters each, set at creation and replaced while a draft; `proposal_list` filters by any of them. No fixed vocabulary: `kind` and `matter` stay one value each (I-GOV-15) |
+| D32 | How proposals are grouped and found | Decided 10 Nov 2026: by `tags`, free text in the realm's own words, at most 16 of 1 to 64 code points each, compared exactly and never normalised (clients send NFC), set at creation and replaced while a draft; `proposal_list` filters by any of them. No fixed vocabulary: `kind` and `matter` stay one value each (I-GOV-15) |
 | D33 | How a contract changes after it is made | Decided 10 Nov 2026: `contract_amend`, governed by the contract's owner (its mandate's executor, else its tender's requester, else the root), replaces its value, its split over fiscal periods and its dates, keeping its id and everything else; each amendment is a `ContractAmendment` with the terms before and after, the proposal that carried it and when; a terminated or fulfilled contract is not amended, and `contract_get` reads a contract with its amendments (I-GOV-16) |

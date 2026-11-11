@@ -945,12 +945,30 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     });
   });
 
-  await check('GGG', 'W28', 'tags out of bounds are refused, and only a draft has its tags replaced', async () => {
+  await check('GGG', 'W28', 'tags are 1 to 64 code points, compared exactly; out of bounds, padded or with control characters they are refused, and only a draft has its tags replaced', async () => {
     needMember();
     const many = Array.from({ length: 17 }, (_, i) => `tag-${i}`);
-    for (const [what, tags] of [['17 tags', many], ['an empty tag', ['']], ['a tag of 65 characters', ['x'.repeat(65)]], ['a tag twice', ['a', 'a']]]) {
+    // 64 code points, but 65 UTF-16 units and more bytes: '\u{1D11E}' (a musical clef) lies outside the BMP.
+    const longest = `Val\u00e8ncia-${'x'.repeat(54)}\u{1D11E}`;
+    assert([...longest].length === 64, 'the longest tag is 64 code points');
+    const refused = [
+      ['17 tags', many],
+      ['an empty tag', ['']],
+      ['a tag of 65 code points', [`${longest}x`]],
+      ['a tag twice', ['a', 'a']],
+      ['a leading space', [' Val\u00e8ncia']],
+      ['a trailing space', ['Val\u00e8ncia ']],
+      ['a control character', ['Old\tTown']],
+    ];
+    for (const [what, tags] of refused) {
       await proposeAs(motion(what, { tags: [tags] }), `ggg_proposal_create(${what})`);
     }
+    // Compared exactly: the case differs, so these are two tags.
+    const kept = ['Val\u00e8ncia', 'val\u00e8ncia', longest];
+    await fileRule('tags in any script', { tags: [kept] }, async (p) => {
+      assert(show(p.tags) === show(kept), `tags are ${show(p.tags)}, not ${show(kept)}`);
+      assert(!(await taggedIds(['VAL\u00c8NCIA'])).includes(p.id), `listing by VAL\u00c8NCIA finds proposal ${p.id}, tagged ${show(p.tags)}`);
+    });
     err(await reader.ggg_proposal_list({ cursor: [], limit: [PAGE], status: [], tags: [many] }), ['InvalidArgument'], 'ggg_proposal_list(17 tags)');
     err(await mine.ggg_proposal_set_tags({ proposal: NO_PROPOSAL, tags: [], on_behalf_of: [] }), ['NotFound'], 'ggg_proposal_set_tags(unknown proposal)');
     await fileRule('tags replaced', { tags: [['before']] }, async (p) => {
