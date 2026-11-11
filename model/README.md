@@ -1076,8 +1076,9 @@ it was awarded.
 ### Lifecycle
 
 `Tender.status`: `draft` → `open` → `closed` → `evaluation` → `awarded` → `contracted`;
-`draft` | `open` → `cancelled`; a tender with lots goes from `evaluation` to `awarded`, `contracted` or
-`cancelled` as its lots are decided (I-PRC-5). `Lot.status`: `open` → `awarded` | `void`.
+`draft` | `open` → `cancelled`; a tender with lots goes from `evaluation` to `awarded` or `cancelled`
+once no lot is `open`, and on to `contracted` as its awarded lots are contracted (I-PRC-5).
+`Lot.status`: `open` → `awarded` | `void`.
 
 ### Operations
 
@@ -1100,20 +1101,22 @@ it was awarded.
 - I-PRC-3: The award goes to the best-scored bid under the published rubric, or the deviation is
   justified and recorded.
 - I-PRC-4: Bids are accepted only between `opens_at` and `closes_at`.
-- I-PRC-5: A tender is one procurement, or is divided into lots, which `tender_create` names in `lots`:
-  at most 64, each with an `id` named once in the tender, a `title` and an optional `estimated_value`
-  (`InvalidArgument` otherwise). A bid prices one lot, so a vendor bidding on three lots submits three
-  bids: `bid_submit` names the `lot` when the tender has lots and names none when it has none
-  (`InvalidArgument`). Each lot is awarded on its own: `tender_award` names the lot and, as I-PRC-3
-  says, goes to the best-scored revealed bid of that lot, so lots of one tender may go to different
-  vendors; `tender_lot_void` leaves a lot with no award, for lack of a bid or of an acceptable one. Both
-  need the tender in `evaluation` and the lot `open`, else `Conflict`. A tender with lots is `awarded`
-  once no lot is `open` and one is `awarded`, and `cancelled` once every lot is `void`; it is
-  `contracted` when every awarded lot has its contract. `contract_create` names the tender and the
-  `lot` for each of them, one contract per awarded lot (`Conflict` for a second), and names a lot only
-  with its tender (`InvalidArgument`). With lots, the tender's own `winner` and `contract` stay empty
-  and each `Lot` holds its own. The model holds no classification code or portal field of a lot: a
-  realm that needs one keeps it in an extension, keyed by the lot.
+- I-PRC-5: A tender is one procurement, or is divided into lots, which `tender_create` names in
+  `lots`: at most 64, each with an `id` named once in the tender, a `title` and an optional
+  `estimated_value` (`InvalidArgument` otherwise). A bid prices one lot, so a vendor bidding on
+  three lots submits three bids: `bid_submit` names the `lot` when the tender has lots and names
+  none when it has none (`InvalidArgument`). Each lot is awarded on its own: `tender_award` names
+  the lot and, as I-PRC-3 says, goes to the best-scored revealed bid of that lot, so lots of one
+  tender may go to different vendors; a `bid` it names must be a bid of that lot
+  (`InvalidArgument`). `tender_lot_void` leaves a lot with no award, for lack of a bid or of an
+  acceptable one. Both need the tender in `evaluation` and the lot `open`, else `Conflict`. A lot's
+  contract may be made once the lot is `awarded`: `contract_create` names the tender and the `lot`
+  (`Conflict` for a lot that is not awarded, or for a second contract), and names a lot only with
+  its tender (`InvalidArgument`). Once no lot is `open`, the tender is `cancelled` if every lot is
+  `void`, else `awarded`, and `contracted` once every awarded lot has its contract. With lots, the
+  tender's own `winner` and `contract` stay empty and each `Lot` holds its own. The model holds no
+  classification code or portal field of a lot: a realm that needs one keeps it in an extension,
+  keyed by the lot.
 
 ## 10. Quarters and federation
 
