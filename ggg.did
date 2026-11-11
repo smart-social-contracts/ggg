@@ -710,6 +710,8 @@ type Land = record {
   token_id : opt nat;
   registered_by : principal;
   metadata : Value;
+  // The zones the parcel lies in, such as a planning area, at most 8, each a zone the realm defines (I-AST-6).
+  zones : vec text;
 };
 
 // A member's own home cell (an h3 index, set with zone_set, tied to `user`), or a zone the realm defines
@@ -742,6 +744,8 @@ type License = record {
   expires_at : opt Timestamp;
   evidence_ref : opt text;
   conditions : Value;
+  // The parcel the licence is for, when it is for one (I-LIC-4).
+  land : opt text;
 };
 
 // What the realm's silence past a deadline means: Positive grants, Negative refuses.
@@ -1814,6 +1818,8 @@ type LandAssessArgs = record {
   legislation : opt text;
 };
 type LandFreezeArgs = record { land : text; reason : opt text };
+// Replaces the zones a parcel lies in: at most 8, each defined with zone_define and named once (I-AST-6).
+type LandZoneSetArgs = record { land : text; zones : vec text };
 
 // Defines a zone of the realm, such as a district, which members name as their home_zone; the same id
 // again redefines it.
@@ -1874,6 +1880,8 @@ type RequestSetDueArgs = record { request : text; due_at : Timestamp; extension_
 type RequestDecideArgs = record { request : text; decision : text; reply : opt text };
 
 // For the caller, or an organization they administer.
+// `land` names the parcel the licence is for, which must exist (NotFound), so that legislation on the
+// parcel's zones reaches the decision (I-LIC-4).
 type LicenseApplyArgs = record {
   kind : text;
   holder : opt Ref;
@@ -1881,6 +1889,7 @@ type LicenseApplyArgs = record {
   evidence_ref : opt text;
   conditions : opt Value;
   on_behalf_of : opt principal;
+  land : opt text;
 };
 type LicenseRenewArgs = record { license : text; evidence_ref : opt text; on_behalf_of : opt principal };
 type LicenseDecideArgs = record {
@@ -2482,6 +2491,7 @@ service : {
   ggg_land_map : (LandMapArgs) -> (variant { Ok : LandMap; Err : GggError }) query;
   ggg_credential_verify : (CredentialVerifyArgs) -> (variant { Ok : CredentialCheck; Err : GggError }) query;
   ggg_land_register : (LandRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_land_zone_set : (LandZoneSetArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_land_transfer : (LandTransferArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_land_mint_nft : (LandMintArgs) -> (variant { Ok : nat; Err : GggError });
   ggg_land_assess : (LandAssessArgs) -> (variant { Ok : Land; Err : GggError });

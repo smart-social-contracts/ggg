@@ -278,6 +278,7 @@
     "land_map": { "tier": "direct", "group": "see" },
     "credential_verify": { "tier": "none" },
     "land_register": { "tier": "direct", "group": "office" },
+    "land_zone_set": { "tier": "direct", "group": "setup", "after_launch": "admin" },
     "land_transfer": { "tier": "confirm", "group": "sign" },
     "land_mint_nft": { "tier": "direct", "group": "office" },
     "land_assess": { "tier": "confirm", "group": "sign" },

@@ -9,6 +9,7 @@
     { "id": "data_protection", "description": "Personal data: the legal bases for sharing it and the duties that follow." },
     { "id": "language", "description": "Official languages, and the languages of documents and services." },
     { "id": "treasury", "description": "Budgets, funds, the allocation of revenue and payments." },
-    { "id": "federation", "description": "Relations with other realms: sync sources, followers and quarters." }
+    { "id": "federation", "description": "Relations with other realms: sync sources, followers and quarters." },
+    { "id": "planning", "description": "Urban planning: plans and their zones, what may be built or used on a parcel, and the licences and suspensions that follow." }
   ]
 }

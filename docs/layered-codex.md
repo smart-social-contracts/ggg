@@ -76,6 +76,7 @@ chapter file names.
 | `language` | Official languages, and the languages of documents and services. |
 | `treasury` | Budgets, funds, the allocation of revenue and payments. |
 | `federation` | Relations with other realms: sync sources, followers and quarters. |
+| `planning` | Urban planning: plans and their zones, what may be built or used on a parcel, and the licences and suspensions that follow. |
 
 Later: `immigration`, `education`, `social_security`, `defense`, and so on.
 
@@ -146,7 +147,12 @@ addition is in the [model](../model/README.md) and `ggg.did`; the model's sectio
   returns the counts: a small one singles out a person). The capital defines the realm's districts (its
   `on_codex_activate` runs there once) and `quarter_sync` carries the definitions to its quarters;
 - a procedure's **deadline and silence**: `Procedure`, `procedure_define` and `License.decision_due`. A
-  deadline is a `Period` (§3.3), not a `Duration`.
+  deadline is a `Period` (§3.3), not a `Duration`;
+- **planning**: a parcel's zones, `Land.zones`, set with `land_zone_set` (a plan's area is a `Zone` the
+  realm defines with `zone_define`), and the parcel a licence is for, `License.land`, named at
+  `license_apply`. `zones`, the zones of the licence's parcel, is a derived fact of `license_decide`
+  (§1), so a rule can refuse the decisions on a plan's parcels while its suspension lasts; the plan's
+  dates are the chapter's.
 
 **Narrowed:**
 

@@ -3293,6 +3293,20 @@
         }
       }
     },
+    "land_zone_set": {
+      "operation": "ggg_land_zone_set",
+      "facts": {
+        "land": {
+          "type": "text"
+        },
+        "zones": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          }
+        }
+      }
+    },
     "land_transfer": {
       "operation": "ggg_land_transfer",
       "facts": {
@@ -3653,6 +3667,10 @@
         "on_behalf_of": {
           "type": "principal",
           "optional": true
+        },
+        "land": {
+          "type": "text",
+          "optional": true
         }
       }
     },
@@ -3695,6 +3713,13 @@
         "conditions": {
           "type": "Value",
           "optional": true
+        },
+        "zones": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          },
+          "derived": "the zones of the parcel the licence is for; none when it names no parcel"
         }
       }
     },
