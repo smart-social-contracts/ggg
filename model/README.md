@@ -702,11 +702,14 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   split adds up to the new value, so a spread contract that changes its value needs a new split;
   `starts_at` is not after `ends_at`; under a mandate, the value stays within its `max_value` and
   `ends_at` within its term (I-GOV-4). An amendment that breaks them, or changes no term, is refused
-  with `InvalidArgument`. A `terminated` or `fulfilled` contract is never amended (`Conflict`),
-  checked again when a proposal executes the call. Its governing department is the contract's owner
-  (§1). Each amendment is recorded as a `ContractAmendment`, with the terms before and after, the
-  proposal that carried it (absent when the call applied at once) and when it applied; amendments
-  are never edited or removed, and `contract_get` lists them oldest first, a page at a time.
+  with `InvalidArgument`. A `terminated` or `fulfilled` contract is never amended, and neither is its
+  `value` set below what has been paid on it (both `Conflict`), each checked again when a proposal
+  executes the call. What has been paid on a contract is the sum of the amounts of the transfers filed
+  for it (`transfer_create`'s `contract`), those that failed excepted. Its governing department is
+  the contract's owner (§1). Each amendment is recorded as a `ContractAmendment`, with the terms
+  before and after, the proposal that carried it (absent when the call applied at once) and when it
+  applied; amendments are never edited or removed, and `contract_get` lists them oldest first, a
+  page at a time.
 
 ## 5. Finance
 
@@ -1550,4 +1553,4 @@ There is no permission for raw database writes: everything is an operation.
 | D30 | What the fee exemption covers, and what a second adopted line does | Decided 8 Nov 2026: only the fee's ledger entry, which the GOS books itself in the category `ledger_fee`, is exempt from an adopted budget; `ledger_fee` is reserved, a `transfer_create` or `budget_draft` naming it `InvalidArgument`, budget or not, so no proposal or extension carries one; a later adopted line of the same fund, period and category amends the earlier one, within one adoption too, where the line drafted later stands, so one line stands per fund, period and category, `budget_extend` carries the newest and the spending booked against the earlier one carries over (§5) |
 | D31 | A department that decides by a majority of the votes cast | Decided 10 Nov 2026: a department's policy may count the votes cast (`Policy.threshold_of` `cast`): the yes votes must exceed the no votes, abstentions counting towards the quorum only, with the policy's quorum of its n; a tie gets a second vote on the same proposal, and a tie in that one is decided by the casting vote of the department's `head`, its chair, copied when the vote opens, so a chair who proposed keeps it and an absent chair's tie rejects. The rule is the department's, never legislation's arithmetic: no hook computes it. A proposer may only tighten it: a higher threshold of the votes cast or quorum, or `eligible`, which adds that the yes votes reach the threshold of n (an absolute majority) and keeps the majority of the votes cast and its tie procedure, so no stated rule passes what the default rejects or would put to a second vote. Amends D15 and D20 (I-GOV-3, I-GOV-14) |
 | D32 | How proposals are grouped and found | Decided 10 Nov 2026: by `tags`, free text in the realm's own words, at most 16 of 1 to 64 code points each, compared exactly and never normalised (clients send NFC), set at creation and replaced while a draft; `proposal_list` filters by any of them. No fixed vocabulary: `kind` and `matter` stay one value each (I-GOV-15) |
-| D33 | How a contract changes after it is made | Decided 10 Nov 2026: `contract_amend`, governed by the contract's owner (its mandate's executor, else its tender's requester, else the root), replaces its value, its split over fiscal periods and its dates, keeping its id and everything else; each amendment is a `ContractAmendment` with the terms before and after, the proposal that carried it and when; a terminated or fulfilled contract is not amended, and `contract_get` reads a contract with its amendments (I-GOV-16) |
+| D33 | How a contract changes after it is made | Decided 10 Nov 2026: `contract_amend`, governed by the contract's owner (its mandate's executor, else its tender's requester, else the root), replaces its value, its split over fiscal periods and its dates, keeping its id and everything else; each amendment is a `ContractAmendment` with the terms before and after, the proposal that carried it and when; a terminated or fulfilled contract is not amended, nor its value set below what has been paid on it, and `contract_get` reads a contract with its amendments (I-GOV-16) |
