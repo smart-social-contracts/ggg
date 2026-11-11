@@ -943,8 +943,8 @@ module {
   };
   /// A framework agreement a contract is a call-off under (I-PRC-6). `reference` is the agreement's number or
   /// title where the holder keeps it, or the tender's id when the holder is a realm; 1 to 128 code points.
-  /// `winners` are the organizations the agreement was awarded to, at most 32, empty when the realm does not
-  /// know them.
+  /// `winners` are the ids of this realm's organizations the agreement was awarded to, at most 32, empty when the
+  /// realm does not know them.
   public type Framework = {
     reference : Text;
     holder : FrameworkHolder;
@@ -2162,10 +2162,10 @@ module {
   /// One line of the realm's own description of the call.
   public type SummaryLine = { value : Text; label_ : Text };
   /// One move of one fund's money from a quarter to the capital. The ledger transfer's memo is `id` (UTF-8) and
-  /// its created_at_time is `created_at`, both fixed when the sweep is recorded, like `to`, `amount` and `fee` (I-FED-5). On the capital `id` is
-  /// `<quarter>/<id>`. `epoch` is the start of the quarter's treasury epoch it belongs to; `block` the ledger's
-  /// block index; `amount` reaches the capital and `fee`, the ledger's, is paid by the quarter; `reason` is the
-  /// ledger's error when it failed.
+  /// its created_at_time is `created_at`, both fixed when the sweep is recorded, like `to`, `amount` and `fee`
+  /// (I-FED-5). On the capital `id` is `<quarter>/<id>`. `epoch` is the start of the quarter's treasury epoch
+  /// that contains `created_at`; `block` the ledger's block index; `amount` reaches the capital and `fee`, the
+  /// ledger's, is paid by the quarter; `reason` is the ledger's error when it failed.
   public type Sweep = {
     id : Text;
     to : Account;
@@ -2193,7 +2193,8 @@ module {
   public type SweepPage = { next : ?Text; items : [Sweep] };
   /// Settles a NeedsCheck sweep: the block found on the ledger makes it Sent, none makes it Failed (I-FED-6).
   public type SweepResolveArgs = { sweep : Text; block : ?Nat };
-  /// A quarter moves its `fund`'s money in `symbol`, all but `keep`, into the capital's fund `into`.
+  /// A quarter moves its `fund`'s money in `symbol`, all but `keep`, into the capital's fund `into`. A rule is
+  /// known by its `fund` and `symbol`, which a capital names once (I-FED-5).
   public type SweepRule = {
     fund : Text;
     into : Text;
@@ -2340,7 +2341,8 @@ module {
     procedure : ?Text;
   };
   /// `bid` defaults to the best-scored revealed bid, of the lot when there are lots; a lower-scored one needs a
-  /// justification. `lot` is required when the tender has lots and refused when it has none (I-PRC-5).
+  /// justification, and a named one must be a bid of the lot (InvalidArgument). `lot` is required when the
+  /// tender has lots and refused when it has none (I-PRC-5).
   public type TenderAwardArgs = {
     bid : ?Text;
     lot : ?Text;
@@ -2499,7 +2501,8 @@ module {
   public type TreasuryConfigureArgs = {
     auto_allocate : ?Bool;
     epoch : ?Duration;
-    /// Replaces the capital's sweep rules; InvalidArgument on a realm that is not a capital (I-FED-5).
+    /// Replaces the capital's sweep rules: InvalidArgument on a realm that is not a capital or for two rules on
+    /// one fund and symbol, NotFound for an `into` that is not a fund or a symbol that is not a token (I-FED-5).
     sweep : ?[SweepRule];
     source_fund : ?Text;
     anchor_month : ?Nat8;
