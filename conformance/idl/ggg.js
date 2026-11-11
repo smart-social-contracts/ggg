@@ -184,6 +184,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Bid = IDL.Record({
     'id' : IDL.Text,
+    'lot' : IDL.Opt(IDL.Text),
     'sealed' : IDL.Bool,
     'score' : IDL.Opt(IDL.Nat),
     'vendor' : IDL.Text,
@@ -194,6 +195,7 @@ export const idlFactory = ({ IDL }) => {
     'payload_hash' : IDL.Text,
   });
   const BidSubmitArgs = IDL.Record({
+    'lot' : IDL.Opt(IDL.Text),
     'vendor' : IDL.Text,
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'payload_ref' : IDL.Text,
@@ -351,6 +353,7 @@ export const idlFactory = ({ IDL }) => {
     'split' : IDL.Opt(IDL.Vec(PeriodAmount)),
   });
   const ContractCreateArgs = IDL.Record({
+    'lot' : IDL.Opt(IDL.Text),
     'title' : IDL.Text,
     'mandate' : IDL.Opt(IDL.Text),
     'starts_at' : IDL.Opt(Timestamp),
@@ -374,6 +377,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Contract = IDL.Record({
     'id' : IDL.Text,
+    'lot' : IDL.Opt(IDL.Text),
     'status' : ContractStatus,
     'title' : IDL.Text,
     'mandate' : IDL.Opt(IDL.Text),
@@ -2279,10 +2283,16 @@ export const idlFactory = ({ IDL }) => {
   });
   const TenderAwardArgs = IDL.Record({
     'bid' : IDL.Opt(IDL.Text),
+    'lot' : IDL.Opt(IDL.Text),
     'justification' : IDL.Opt(IDL.Text),
     'tender' : IDL.Text,
   });
   const Criterion = IDL.Record({ 'weight' : Ratio, 'criterion' : IDL.Text });
+  const LotArgs = IDL.Record({
+    'id' : IDL.Text,
+    'title' : IDL.Text,
+    'estimated_value' : IDL.Opt(Money),
+  });
   const TenderCreateArgs = IDL.Record({
     'opens_at' : IDL.Opt(Timestamp),
     'title' : IDL.Text,
@@ -2291,6 +2301,7 @@ export const idlFactory = ({ IDL }) => {
     'closes_at' : IDL.Opt(Timestamp),
     'rubric' : IDL.Vec(Criterion),
     'kind' : IDL.Opt(IDL.Text),
+    'lots' : IDL.Opt(IDL.Vec(LotArgs)),
     'description' : IDL.Opt(IDL.Text),
     'procedure' : IDL.Opt(IDL.Text),
   });
@@ -2302,6 +2313,19 @@ export const idlFactory = ({ IDL }) => {
     'Draft' : IDL.Null,
     'Cancelled' : IDL.Null,
     'Contracted' : IDL.Null,
+  });
+  const LotStatus = IDL.Variant({
+    'Open' : IDL.Null,
+    'Void' : IDL.Null,
+    'Awarded' : IDL.Null,
+  });
+  const Lot = IDL.Record({
+    'id' : IDL.Text,
+    'status' : LotStatus,
+    'title' : IDL.Text,
+    'estimated_value' : IDL.Opt(Money),
+    'contract' : IDL.Opt(IDL.Text),
+    'winner' : IDL.Opt(IDL.Text),
   });
   const Notice = IDL.Record({
     'ref' : IDL.Opt(IDL.Text),
@@ -2319,6 +2343,7 @@ export const idlFactory = ({ IDL }) => {
     'rubric' : IDL.Vec(Criterion),
     'contract' : IDL.Opt(IDL.Text),
     'kind' : IDL.Opt(IDL.Text),
+    'lots' : IDL.Vec(Lot),
     'notices' : IDL.Vec(Notice),
     'winner' : IDL.Opt(IDL.Text),
     'description' : IDL.Text,
@@ -2337,6 +2362,11 @@ export const idlFactory = ({ IDL }) => {
   const TenderPage = IDL.Record({
     'next' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Tender),
+  });
+  const TenderLotVoidArgs = IDL.Record({
+    'lot' : IDL.Text,
+    'tender' : IDL.Text,
+    'reason' : IDL.Opt(IDL.Text),
   });
   const TenderNoticeArgs = IDL.Record({
     'at' : IDL.Opt(Timestamp),
@@ -3692,6 +3722,11 @@ export const idlFactory = ({ IDL }) => {
         [TenderListArgs],
         [IDL.Variant({ 'Ok' : TenderPage, 'Err' : GggError })],
         ['query'],
+      ),
+    'ggg_tender_lot_void' : IDL.Func(
+        [TenderLotVoidArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
       ),
     'ggg_tender_notice' : IDL.Func(
         [TenderNoticeArgs],

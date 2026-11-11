@@ -63,6 +63,7 @@ const create = (overrides = {}) =>
     starts_at: [JAN_2026],
     ends_at: [JAN_2026 + 90n * DAY],
     split: [spread(['FY2026', 30_000n], ['FY2027', 20_000n])],
+    lot: [],
     ...overrides,
   });
 const amendArgs = (contract, terms) => ({ contract, value: [], split: [], starts_at: [], ends_at: [], ...terms });
@@ -92,6 +93,11 @@ test('an amendment re-spreads a contract and moves its end, keeping its id, and 
   assert.deepEqual(amendment.before.ends_at, [JAN_2026 + 90n * DAY]);
   assert.deepEqual([amendment.after.split, amendment.after.ends_at], [contract.split, [later]]);
   assert.deepEqual(amendment.proposal, [], 'the root decided directly, so no proposal carried it');
+});
+
+test('a lot is named only with the tender it belongs to (I-PRC-5)', async () => {
+  refusedWith(await create({ lot: ['2'] }), 'InvalidArgument');
+  assert.equal(ok(await create()).lot.length, 0);
 });
 
 test("a spread contract's value changes only with a split that adds up to it", async () => {
