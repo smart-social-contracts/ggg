@@ -77,6 +77,11 @@ path.
 - `test/spending.test.js` runs the fixture with one member and checks spending stages (model I-FIN-9,
   I-FIN-10): a line's reserved and committed money, transfers charged to it and refused past it with
   a message that names the line and the shortfall, and scheduled transfers paid or cancelled.
+- `test/sweep.test.js` runs two fixtures, a capital and its quarter, with a small ICRC-1 ledger
+  (`fixture/ledger.mo`) that can drop its answers, and checks the quarter → capital sweep (model I-FED-5
+  to 7): money moved once and booked on both sides with its block, a capital that does not answer, a
+  lost answer found as a duplicate rather than sent again, and a sweep unanswered past the ledger's
+  deduplication window left for a person to resolve.
 - `test/sync.test.js` runs three fixtures that take legislation from one another and checks the links
   between realms (model I-NEST-1 to 3) and the published record (model §11).
 - `test/codex.test.js` installs codices the fixture holds and checks `codex_revert` (model §11): the one

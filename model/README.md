@@ -722,14 +722,14 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Treasury` | `id` (`1`), `config` (Json: epoch length, anchor month, source fund, auto-allocate), `debt_outstanding` | Singleton. `debt_outstanding` is the sum of the active loans' `outstanding`. | Monthly epochs, source fund `ROOT`, auto-allocation on, 420,000 REALM of debt |
+| `Treasury` | `id` (`1`), `config` (Json: epoch length, anchor month, source fund, auto-allocate; on a capital, its sweep rules, §10), `debt_outstanding` | Singleton. `debt_outstanding` is the sum of the active loans' `outstanding`. | Monthly epochs, source fund `ROOT`, auto-allocation on, 420,000 REALM of debt |
 | `Token` | `id` (symbol), `ledger`, `indexer`, `decimals`, `fee` | A fungible ledger the realm uses (ICRC-1). | `ckBTC`: ledger `mxzaz-…`, 8 decimals, fee 10 |
 | `NFTToken` | `id` (symbol), `canister`, `name`, `description`, `transferable`, `required_license` (licence type or empty), `supply_cap`, `total_supply` | An NFT ledger (ICRC-7) the realm mints into. | `LAND` (transferable); `CRED` (non-transferable, minting needs a licence) |
 | `Fund` | `id` (code), `name`, `kind` (general, special revenue, …), `department` → `Department`, `balances` (Json: running balance per token), `allocation_rule` → `AllocationRule` | | `ROADS`: special revenue, owned by Infrastructure |
 | `FiscalPeriod` | `id`, `name`, `starts_at`, `ends_at`, `status`, `statements` (Json: running totals), `source_hash` (chained over its entries) | | `FY2026`: 2026-01-01 to 2026-12-31, `open` |
 | `Budget` | `id`, `fund` → `Fund`, `period` → `FiscalPeriod`, `category`, `kind` (`revenue` or `expense`), `planned`, `actual`, `status`, `proposal` → `Proposal`, `reserved`, `committed` | One line of a period's budget: `category` is the realm's word for what (capital, salaries, property tax), `kind` whether the money comes in or goes out. An adopted expense line's `reserved` and `committed` money and its `actual` leave its available credit, `planned - reserved - committed - actual`, never negative (I-FIN-9). | Roads FY2026, expense, capital: planned 300,000, reserved 40,000, committed 90,000, actual 120,500, so 49,500 available, `adopted` |
 | `AllocationRule` | `id`, `source_fund`, `rules` (Json: fund and `share`), `status`, `proposal` → `Proposal` | How revenue is split between funds. Shares are in hundred-millionths and add up to at most 100 000 000. | From `ROOT`: 30% `WELFARE`, 20% `ROADS`, 50% `GENERAL` |
-| `LedgerEntry` | `id`, `transaction`, `kind` (asset, liability, equity, revenue, expense), `category`, `debit`, `credit`, `symbol`, `fund` → `Fund`, `period` → `FiscalPeriod`, `transfer` → `Transfer`, `invoice` → `Invoice`, `user` → `User`, `organization` → `Organization`, `contract` → `Contract`, `case` → `Case`, `penalty` → `Penalty`, `appeal` → `Appeal`, `at`, `description` | Double entry. At most one of the source references is set. | Tx `T-88`: debit `ROADS` capital expense 50,000, credit cash 50,000, contract `C-9` |
+| `LedgerEntry` | `id`, `transaction`, `kind` (asset, liability, equity, revenue, expense), `category`, `debit`, `credit`, `symbol`, `fund` → `Fund`, `period` → `FiscalPeriod`, `transfer` → `Transfer`, `invoice` → `Invoice`, `user` → `User`, `organization` → `Organization`, `contract` → `Contract`, `case` → `Case`, `penalty` → `Penalty`, `appeal` → `Appeal`, `sweep` → `Sweep`, `at`, `description` | Double entry. At most one of the source references is set. | Tx `T-88`: debit `ROADS` capital expense 50,000, credit cash 50,000, contract `C-9` |
 | `Invoice` | `id`, `payer` (`Entity:id`), `amount`, `symbol`, `items` (lines, each an `InvoiceItem`: `concept`, `amount` (signed: a discount is negative), `quantity`, `unit`, `legislation`), `facts` (Json), `due_at`, `status`, `reason` (`Entity:id`), `paid_at`, `payment` (Json) | Paid into the subaccount derived from its `id`. At least one item, and the items sum to `amount`, which is never negative; `facts` is what legislation reads about the invoice beyond its items. | `INV-301`: Alice owes 120 REALM property tax, due 2026-12-31, `pending`: lines `property_tax` 150 and `large_family_bonus` −30 |
 | `Transfer` | `id`, `sender`, `to`, `symbol`, `amount`, `ledger_tx`, `invoice` → `Invoice`, `status`, `at`, `payroll` (the payroll run), `due_at`, `budget` → `Budget`, `committed`, `contract` → `Contract` | `budget` is the line it is charged to, `committed` whether it drew on that line's committed money (I-FIN-9). A `scheduled` transfer is owed by its `due_at` (I-FIN-10). `contract` is the contract it pays, whose value the payments never exceed (I-FIN-11). | 50,000 REALM from `ROADS` to BuildCo, ledger tx 18234, `completed`; 12,000 REALM to BuildCo for its January certificate, `scheduled`, due 2026-03-15, charged to Roads FY2026 capital from its committed money |
 | `Trade` | `id`, `contract` → `Contract`, `leg_a` → `Transfer`, `leg_b` → `Transfer`, `status` | An exchange of two transfers. | `C-9` milestone: realm pays 10,000 REALM, BuildCo hands over the road deed NFT |
@@ -760,7 +760,7 @@ There is no balance entity: the ledgers are the source of truth.
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
 | `treasury_view`, `ledger_view`, `report_view` | `treasury.view` | read, delegable | Finance sees `ROOT` 1.2M, `ROADS` 180k REALM |
-| `treasury_configure`, `token_register`, `nft_token_register` | `treasury.manage` | governed, delegable | Quarterly allocation epochs; register ckUSDC |
+| `treasury_configure`, `token_register`, `nft_token_register` | `treasury.manage` | governed, delegable | Quarterly allocation epochs; register ckUSDC; on the capital, sweep every quarter's `GENERAL` into its own |
 | `transfer_create` (from a fund) | `transfer.create` | delegable, governed | `{fund: "ROADS", to: "buildco", amount: 50000}` → proposal under Infrastructure's policy |
 | `transfer_revert` | `transfer.delete` | governed, delegable | Cancel a duplicate pending payment; cancel a scheduled one, unpaid |
 | `transfer_pay` | `transfer.create` | delegable | Pay BuildCo's scheduled 12,000 REALM on 10 March, before it is due |
@@ -830,10 +830,13 @@ period, a `transfer_create` from it in that period names a category with an adop
 and any other is refused with `Conflict`; a transfer with no category counts as the category
 `transfer`; a fund with only extended lines, or with none, spends as before. The ledger's fee for a
 payment is exempt: the fee's ledger entry, which the GOS books itself in the category `ledger_fee`,
-is a mechanical cost of the payment, not a spending decision. `ledger_fee` is reserved: a
-`transfer_create` or `budget_draft` naming it is refused with `InvalidArgument`, budget or not, so
-no proposal or extension carries one; every other category, an uncategorised transfer and payroll
-included, needs a line once the fund's budget is adopted. Within a fund and period a category is
+is a mechanical cost of the payment, not a spending decision. So is a sweep (§10), which moves the
+realm's money from a quarter to its capital: it is neither revenue nor spending, and its entries are
+booked by the GOS in the category `sweep`, kind `equity`, on both sides. `ledger_fee` and `sweep`
+are reserved: a `transfer_create` or `budget_draft` naming either is refused with
+`InvalidArgument`, budget or not, so no proposal or extension carries one; every other category, an
+uncategorised transfer and payroll included, needs a line once the fund's budget is adopted.
+Within a fund and period a category is
 either `revenue` or `expense`: a draft whose fund, period and category already have a line of the
 other kind is refused with `InvalidArgument`, and `budget_extend` leaves out a line whose category
 the new period already holds as the other kind. A `budget_propose` whose derived total, `revenue` or
@@ -842,7 +845,8 @@ the new period already holds as the other kind. A `budget_propose` whose derived
 ### Invariants
 
 - I-FIN-1: Every transaction's ledger entries balance (Σ debit = Σ credit).
-- I-FIN-2: Money moves out of a fund only through `transfer_create` under the fund owner's policy.
+- I-FIN-2: Money moves out of a fund only through `transfer_create` under the fund owner's policy, or
+  in a quarter's sweep to its capital under the capital's governed rules (I-FED-5).
 - I-FIN-3: An invoice is `paid` only when the ledger shows the amount in its subaccount.
 - I-FIN-4: Adopted budgets, allocation rules and tax policies are frozen; changes create a new version.
 - I-FIN-5: A closed fiscal period accepts no new entries; corrections go into a restating report.
@@ -1115,6 +1119,8 @@ takes legislation from other realms, its sync sources, over links both sides vot
 | `SyncSource` | `source` (a realm, by its capital, or a stand-in record: an https URL and the checksum of its content), `name`, `status` | On a follower, in `Realm.sync_sources`: a realm it takes legislation from, with the link's status. A stand-in record stands for a source that runs no realm. | CV, `active`; the EU's record at `https://…/releases.json`, `sha256:…`, `active` |
 | `Follower` | `id` (the follower's capital, as text), `capital`, `status`, `layers` (each a `ReportedLayer`), `compliance`, `population`, `reported_at` | On a sync source: a realm that takes legislation from it, with the link's status and the follower's last report. | València on CV: `active`; reported Spain's 2.4.0 and CV's 1.1.0, compliant, population 800,000, on 3 Nov |
 | `ReportedLayer` | `version`, `checksum` | One layer a follower runs, as it reports it. It names no source: the sync source finds the layer by its checksum in its own record. | Spain's 2.4.0, `sha256:…` |
+| `SweepRule` | `fund`, `symbol`, `into` → `Fund`, `keep` | On the capital, in `Treasury.config.sweep`: each quarter moves its `fund`'s money in `symbol`, all but `keep`, into the capital's fund `into` ([sweeps](#sweeps)). | Every quarter's `GENERAL` REALM into the capital's `GENERAL`, keeping 5,000 |
+| `Sweep` | `id`, `quarter`, `fund`, `symbol`, `into`, `to`, `epoch`, `amount`, `fee`, `created_at`, `block`, `status`, `reason`, `reported_at` | One move of one fund's money from a quarter to the capital, kept by both: on the quarter as `id`, on the capital as `<quarter>/<id>`. `to` is the capital's account it is sent to and `block` the ledger's block index; `amount` reaches the capital, `fee` is the ledger's, paid by the quarter. | North's `SW-14`: 182,400 REALM of `GENERAL` for November into the capital's `GENERAL`, block 90,113, `booked` |
 
 There is no central user-to-quarter directory. A user's home quarter is found from their own client
 pointer, the quarter index, or a broadcast search, so no canister grows with the population of the
@@ -1128,6 +1134,11 @@ whole federation.
 - `FederalVoteLeg.status`: `open` → `reported`, with `outcome` `passed` or `failed`.
 - `SyncSource.status`, `Follower.status` (the link's): `requested` → `active` → `ended`;
   `requested` → `ended`.
+- `Sweep.status`, on the quarter: `sending` (its ledger transfer is in flight, or its outcome is not
+  known) → `sent` (the ledger gave its block) → `booked` (the capital booked it); `sending` →
+  `failed` (the ledger refused it: nothing moved) | `needs_check` (no answer within the ledger's
+  deduplication window); `needs_check` → `sent` | `failed` (`sweep_resolve`). On the capital a sweep
+  is only ever `booked`.
 
 ### Operations
 
@@ -1148,6 +1159,10 @@ whole federation.
 | `link_notify` (from the capital at the other side of a link) | `link.sync` (held only by the capitals of the realm's links) | | CV tells València their link is `active`; later, València tells CV it `ended` |
 | `follower_report` (from a follower's capital, over an active link) | `link.sync` | | València reports to CV the layers it runs, that it is compliant, and its population |
 | `follower_list` | `realm.data_view` | read, delegable | CV's followers, with what each runs |
+| `quarter_sweep` (on a quarter) | `treasury.manage` | delegable | North sweeps now, rather than at the end of its treasury epoch: 182,400 REALM of `GENERAL` to the capital |
+| `quarter_sweep_report` (quarter → capital) | `quarter.sync` | | North tells the capital that `SW-14` moved 182,400 REALM in block 90,113; the capital books it into `GENERAL` |
+| `sweep_resolve` (on a quarter) | `treasury.manage` | governed, delegable | Finance found `SW-15`'s transfer in block 90,877 after the ledger was down for a day: `sent` |
+| `sweep_list` | `treasury.view` | read, delegable | North's sweeps this year; on the capital, every quarter's |
 
 ### Time zones
 
@@ -1172,6 +1187,39 @@ with `realm_configure`. The realm may also set it by a realm-wide vote: `quarter
 `welcome_message` for the `quarter` it names, which the capital sends to the quarter (`quarter.sync`) and
 the quarter applies. A `welcome_message` with no `quarter` is refused with `InvalidArgument`, before any
 vote. If the quarter cannot apply it, the call fails and nothing changes.
+
+### Sweeps
+
+Money paid in a quarter, such as a household's property tax paid in its home quarter, is the
+quarter's until it is swept into the capital's funds, where the realm's budget is. The capital decides
+what is swept: its `SweepRule`s, set by the governed `treasury_configure` with `sweep` (a realm that
+is not a capital refuses them with `InvalidArgument`). A rule is known by its `fund` and `symbol`, the
+quarter's fund and token: a capital names each pair once (`InvalidArgument` for two rules on the
+same), `into` is one of the capital's funds and `symbol` one of the tokens it registered (`NotFound`
+otherwise), and the rules given replace the earlier ones. `quarter_sync` sends the rules to each quarter,
+as it sends the zones, together with `to`, the capital's account that receives sweeps; the quarter
+keeps the last ones it received.
+
+A quarter sweeps at the end of each of its treasury epochs (`Treasury.config.epoch`), and whenever
+`quarter_sweep` asks it to. For each rule, it moves to `to` the fund's balance in `symbol`, as its
+books hold it (`Fund.balances`), less `keep` and less the ledger's fee; when that leaves nothing, or the
+quarter has no such fund or token, nothing is swept. Each sweep is recorded before any money moves, `sending`, with its `epoch` (the
+start of the treasury epoch it belongs to) and its `created_at`. Its ledger transfer is an ICRC-1
+`icrc1_transfer` whose `memo` is the sweep's `id` (UTF-8, at most 32 bytes) and whose
+`created_at_time` is its `created_at`, fixed, like its `to`, `amount` and `fee`, when the sweep is
+recorded. Every attempt sends exactly that transfer, so a ledger that has already applied it answers
+with the block it applied it in (`Duplicate`), and the money moves once (I-FED-5).
+
+- **The ledger gives a block:** the sweep is `sent`. The quarter books it and reports it to the
+  capital with `quarter_sweep_report`; the capital books it into `into`, once, and the sweep is
+  `booked` (I-FED-7). If the capital does not answer, the money is already on its account and only
+  its books wait: the quarter reports again at each later sweep until the capital answers.
+- **The ledger refuses the transfer** (too little money, a wrong fee): nothing moved. The sweep is
+  `failed`, with the ledger's error as its `reason`, and the next epoch sweeps again.
+- **The ledger does not answer:** the outcome is unknown. The quarter sends the same transfer again
+  at its next sweep, but only while the ledger would still recognise it as a repeat (I-FED-6). Past
+  that, the sweep is `needs_check` and is never sent again. A person who has looked at the ledger
+  settles it with `sweep_resolve`: the block they found makes it `sent`, none makes it `failed`.
 
 ### Links between realms
 
@@ -1213,6 +1261,29 @@ installed whole; and the paths from several sync sources must form one chain in 
   (or the rule's explicit absence policy).
 - I-FED-3: Every quarter runs the same federation codex version as the capital, or is flagged as drifting.
 - I-FED-4: Calls between quarters are accepted only from registered quarter canisters.
+- I-FED-5: A quarter records at most one sweep per rule and treasury epoch, the one that contains
+  the sweep's `created_at`, whether the end-of-epoch timer or `quarter_sweep` asked, and starts no
+  sweep for a rule while an earlier one of that rule is `sending` or `needs_check`. A sweep's ledger
+  transfer is fixed when it is recorded: every attempt sends the same `icrc1_transfer`, with `memo`
+  its `id` and `created_at_time` its `created_at`, so its money moves at most once. `quarter_sweep`
+  on a realm that is not a quarter is `Conflict`.
+- I-FED-6: A quarter sends a sweep's transfer again only until 23 hours after its `created_at`, an
+  hour inside the 24-hour window in which an ICRC-1 ledger recognises a repeat (the reference
+  ledger's transaction window). A sweep whose outcome is still unknown then, or that the ledger
+  answers with `TooOld`, is `needs_check` and is never sent again. `sweep_resolve`, governed by the
+  owner of the swept fund, settles only a `needs_check` sweep (`Conflict` otherwise): with the
+  `block` found on the ledger it is `sent`, without one `failed`.
+- I-FED-7: A sweep is booked exactly once on each side, linked so the two reconcile: the quarter
+  books it when it is `sent`, `amount` out of `fund` in the category `sweep` and `fee` in
+  `ledger_fee`; the capital books it when it is reported, `amount` into `into` in the category
+  `sweep`. Each entry names the sweep (`LedgerEntry.sweep`), and both sides keep its `block`.
+  `quarter_sweep_report` is accepted only from a registered quarter (I-FED-4, else `Forbidden`) and
+  only for a `sent` sweep with a `block` (else `InvalidArgument`) whose `into` is a fund of the
+  capital (else `NotFound`). A second report of a booked sweep returns the capital's record; one
+  that differs from it is `Conflict`. The capital books on the
+  registered quarter's word: it does not look the block up on the ledger, so a quarter's report is
+  what it books. The quarter's and the capital's money together change only by the ledger's fee, and
+  no fund goes below zero: a sweep takes at most what its fund holds above `keep` and the fee.
 - I-NEST-1: A link is active only after both votes, the follower's `sync_source_add` and the source's
   `follower_accept`, in either order; until then it is `requested`. A stand-in record cannot vote, so
   its link is `active` on the follower's vote alone, and a second `sync_source_add` of the same URL
@@ -1603,3 +1674,4 @@ There is no permission for raw database writes: everything is an operation.
 | D33 | How a contract changes after it is made | Decided 10 Nov 2026: `contract_amend`, governed by the contract's owner (its mandate's executor, else its tender's requester, else the root), replaces its value, its split over fiscal periods and its dates, keeping its id and everything else; each amendment is a `ContractAmendment` with the terms before and after, the proposal that carried it and when; a terminated or fulfilled contract is not amended, nor its value set below what has been paid on it, no payment takes a contract above its value (I-FIN-11), and `contract_get` reads a contract with its amendments (I-GOV-16) |
 | D34 | How a party is told apart from a company | Decided 10 Nov 2026: `Organization.kind`, one of `company`, `party`, `union`, `association` and `other`; no class of its own for a party. `other` is needed: a foundation, a cooperative or a public body is none of the four, and a kind added to the list later would break every reader of `Organization`. Set at registration, changed by `organization_edit`, `other` when absent or older (I-ORG-9) |
 | D35 | How spending moves through its stages | Decided 10 Nov 2026: two facts, no new class. A budget line's `reserved` and `committed` money beside `planned` and `actual`, moved by the governed `budget_stage`, with its available credit, `planned - reserved - committed - actual`, never negative: a transfer that would take a line above `planned` is refused, since spending without available credit is void. A transfer is charged when the obligation is recognised, and may be `scheduled`, owed by a due date, paid later with `transfer_pay` and cancelled only by the governed `transfer_revert`. `budget_list` and `transfer_list` read them (I-FIN-9, I-FIN-10) |
+| D36 | How money paid in a quarter reaches the capital's funds | Decided 10 Nov 2026: the quarter pushes it. The capital sets the sweep rules by vote (`treasury_configure`: a quarter's fund and token, the capital's fund, what the quarter keeps) and sends them with `quarter_sync`; each quarter sweeps at the end of its treasury epochs, or on `quarter_sweep`, one recorded sweep per rule and epoch whose ICRC-1 `memo` and `created_at_time` are fixed, so a retry never moves money twice; it reports each sweep to the capital (`quarter_sweep_report`), which books it once; both keep its block. An outcome still unknown 23 hours after it was sent, inside the ledger's 24-hour deduplication window, is never resent: the sweep is `needs_check` until a person resolves it (`sweep_resolve`). The capital pulling from each quarter was rejected: it makes the capital call every quarter each epoch, where quarters already push with `quarter_sync` (I-FED-5 to I-FED-7) |

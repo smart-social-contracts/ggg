@@ -191,7 +191,7 @@ module {
     proposal : ?Text;
   };
   public type BudgetAmendArgs = { planned : Money; budget : Text };
-  /// `category` never names `ledger_fee`, which the GOS books itself (InvalidArgument).
+  /// `category` never names `ledger_fee` or `sweep`, entries the GOS books itself (InvalidArgument).
   public type BudgetDraftArgs = {
     period : Text;
     fund : Text;
@@ -1196,7 +1196,7 @@ module {
     limit : ?Nat32;
     symbol : ?Text;
   };
-  /// At most one of the source references (transfer … appeal) is set.
+  /// At most one of the source references (transfer … sweep) is set.
   public type LedgerEntry = {
     at : Timestamp;
     id : Text;
@@ -1211,6 +1211,8 @@ module {
     user : ?Principal;
     description : Text;
     credit : Money;
+    /// The sweep it books (I-FED-7): its id on a quarter, `<quarter>/<id>` on the capital.
+    sweep : ?Text;
     appeal : ?Text;
     category : Text;
     organization : ?Text;
@@ -1869,8 +1871,10 @@ module {
   };
   /// `zones` is filled by quarter_sync alone: the zones the realm defines, as zone_define takes them, for the quarter to
   /// define the same (the capital is where the realm's codex defines its districts). Null in quarter_directory.
+  /// `sweep` too is filled by quarter_sync alone: the capital's sweep rules, which the quarter keeps (I-FED-5).
   public type QuarterDirectory = {
     next : ?Text;
+    sweep : ?SweepConfig;
     zones : ?[ZoneDefineArgs];
     capital : ?Text;
     items : [Quarter];
@@ -1895,6 +1899,8 @@ module {
     #Suspended;
     #Merging;
   };
+  /// Sweeps now, by the rules `quarter_sync` last returned: the rule of `fund`, or every rule.
+  public type QuarterSweepArgs = { fund : ?Text };
   public type Rate = Nat;
   /// A ratio in hundred-millionths: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456.
   /// One scale for quorum, threshold, share, weight and tax rate (model §1). A Ratio is at most 100 %; a
@@ -2108,6 +2114,50 @@ module {
   public type Silence = { #Negative; #Positive };
   /// One line of the realm's own description of the call.
   public type SummaryLine = { value : Text; label_ : Text };
+  /// One move of one fund's money from a quarter to the capital. The ledger transfer's memo is `id` (UTF-8) and
+  /// its created_at_time is `created_at`, both fixed when the sweep is recorded, like `to`, `amount` and `fee`
+  /// (I-FED-5). On the capital `id` is `<quarter>/<id>`. `epoch` is the start of the quarter's treasury epoch
+  /// that contains `created_at`; `block` the ledger's block index; `amount` reaches the capital and `fee`, the
+  /// ledger's, is paid by the quarter; `reason` is the ledger's error when it failed.
+  public type Sweep = {
+    id : Text;
+    to : Account;
+    fee : Money;
+    status : SweepStatus;
+    fund : Text;
+    into : Text;
+    quarter : Text;
+    created_at : Timestamp;
+    epoch : Timestamp;
+    reported_at : ?Timestamp;
+    block : ?Nat;
+    amount : Money;
+    symbol : Text;
+    reason : ?Text;
+  };
+  /// The rules, and the capital's account that receives every sweep.
+  public type SweepConfig = { to : Account; rules : [SweepRule] };
+  public type SweepListArgs = {
+    status : ?SweepStatus;
+    cursor : ?Text;
+    quarter : ?Text;
+    limit : ?Nat32;
+  };
+  public type SweepPage = { next : ?Text; items : [Sweep] };
+  /// Settles a NeedsCheck sweep: the block found on the ledger makes it Sent, none makes it Failed (I-FED-6).
+  public type SweepResolveArgs = { sweep : Text; block : ?Nat };
+  /// A quarter moves its `fund`'s money in `symbol`, all but `keep`, into the capital's fund `into`. A rule is
+  /// known by its `fund` and `symbol`, which a capital names once (I-FED-5).
+  public type SweepRule = {
+    fund : Text;
+    into : Text;
+    keep : Money;
+    symbol : Text;
+  };
+  /// Sending: in flight, or its outcome unknown; Sent: the ledger gave its block; Booked: the capital booked it;
+  /// Failed: the ledger refused it, nothing moved; NeedsCheck: no answer within the ledger's deduplication window,
+  /// never sent again (I-FED-6). On the capital a sweep is Booked.
+  public type SweepStatus = { #Failed; #Sent; #NeedsCheck; #Sending; #Booked };
   public type SyncSource = {
     status : LinkStatus;
     source : SyncSourceRef;
@@ -2342,7 +2392,7 @@ module {
     payroll : ?Text;
   };
   /// The fund must also cover the ledger fee. `symbol` defaults to the accounting currency. `category`
-  /// never names `ledger_fee`, the fee's own entry, which the GOS books itself (InvalidArgument).
+  /// never names `ledger_fee` or `sweep`, entries the GOS books itself (InvalidArgument).
   public type TransferCreateArgs = {
     to : Ref;
     /// The contract it pays: NotFound if there is none, InvalidArgument in another symbol than the
@@ -2388,12 +2438,17 @@ module {
   public type TreasuryConfig = {
     auto_allocate : Bool;
     epoch : Duration;
+    /// On a capital, what its quarters sweep into its funds (I-FED-5); empty elsewhere.
+    sweep : [SweepRule];
     source_fund : Text;
     anchor_month : Nat8;
   };
   public type TreasuryConfigureArgs = {
     auto_allocate : ?Bool;
     epoch : ?Duration;
+    /// Replaces the capital's sweep rules: InvalidArgument on a realm that is not a capital or for two rules on
+    /// one fund and symbol, NotFound for an `into` that is not a fund or a symbol that is not a token (I-FED-5).
+    sweep : ?[SweepRule];
     source_fund : ?Text;
     anchor_month : ?Nat8;
   };
@@ -3257,6 +3312,16 @@ module {
         #Err : GggError;
       };
     ggg_quarter_secede : shared () -> async { #Ok : Governed; #Err : GggError };
+    /// The sweeps this call recorded, sent or reported.
+    ggg_quarter_sweep : shared QuarterSweepArgs -> async {
+        #Ok : [Sweep];
+        #Err : GggError;
+      };
+    /// From a registered quarter: books a Sent sweep once and returns the capital's record (I-FED-7).
+    ggg_quarter_sweep_report : shared Sweep -> async {
+        #Ok : Sweep;
+        #Err : GggError;
+      };
     ggg_quarter_sync : shared () -> async {
         #Ok : QuarterDirectory;
         #Err : GggError;
@@ -3355,6 +3420,14 @@ module {
     ggg_setup_state : shared () -> async { #Ok : SetupState; #Err : GggError };
     ggg_setup_step : shared SetupStep -> async {
         #Ok : SetupState;
+        #Err : GggError;
+      };
+    ggg_sweep_list : shared query SweepListArgs -> async {
+        #Ok : SweepPage;
+        #Err : GggError;
+      };
+    ggg_sweep_resolve : shared SweepResolveArgs -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     ggg_sync_source_add : shared SyncSourceAddArgs -> async {

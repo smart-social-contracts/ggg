@@ -2082,6 +2082,58 @@
         "auto_allocate": {
           "type": "bool",
           "optional": true
+        },
+        "sweep": {
+          "type": "vec",
+          "element": {
+            "type": "SweepRule",
+            "fields": {
+              "fund": {
+                "type": "text"
+              },
+              "symbol": {
+                "type": "text"
+              },
+              "into": {
+                "type": "text"
+              },
+              "keep": {
+                "type": "nat",
+                "kind": "money",
+                "min": 0,
+                "max": 9007199254740991
+              }
+            }
+          },
+          "optional": true
+        }
+      },
+      "lists": {
+        "sweep": "treasury_configure.sweep"
+      }
+    },
+    "treasury_configure.sweep": {
+      "operation": "ggg_treasury_configure",
+      "list": {
+        "field": "sweep",
+        "of": "the argument",
+        "element": "SweepRule"
+      },
+      "facts": {
+        "fund": {
+          "type": "text"
+        },
+        "symbol": {
+          "type": "text"
+        },
+        "into": {
+          "type": "text"
+        },
+        "keep": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "max": 9007199254740991
         }
       }
     },
@@ -4918,6 +4970,143 @@
           "derived": "the reporting quarter's compliance"
         }
       }
+    },
+    "quarter_sweep": {
+      "operation": "ggg_quarter_sweep",
+      "facts": {
+        "fund": {
+          "type": "text",
+          "optional": true
+        }
+      }
+    },
+    "quarter_sweep_report": {
+      "operation": "ggg_quarter_sweep_report",
+      "facts": {
+        "id": {
+          "type": "text"
+        },
+        "quarter": {
+          "type": "text"
+        },
+        "fund": {
+          "type": "text"
+        },
+        "symbol": {
+          "type": "text"
+        },
+        "into": {
+          "type": "text"
+        },
+        "to": {
+          "type": "Account",
+          "fields": {
+            "owner": {
+              "type": "principal"
+            },
+            "subaccount": {
+              "type": "blob",
+              "optional": true
+            }
+          }
+        },
+        "epoch": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "max": "9223372036854775807"
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "max": 9007199254740991
+        },
+        "fee": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "max": 9007199254740991
+        },
+        "created_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "max": "9223372036854775807"
+        },
+        "block": {
+          "type": "nat",
+          "min": 0,
+          "max": "9223372036854775807",
+          "optional": true
+        },
+        "status": {
+          "type": "SweepStatus",
+          "values": [
+            "Sending",
+            "Sent",
+            "Booked",
+            "Failed",
+            "NeedsCheck"
+          ]
+        },
+        "reason": {
+          "type": "text",
+          "optional": true
+        },
+        "reported_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "max": "9223372036854775807",
+          "optional": true
+        }
+      }
+    },
+    "sweep_resolve": {
+      "operation": "ggg_sweep_resolve",
+      "facts": {
+        "sweep": {
+          "type": "text"
+        },
+        "block": {
+          "type": "nat",
+          "min": 0,
+          "max": "9223372036854775807",
+          "optional": true
+        }
+      }
+    },
+    "sweep_list": {
+      "operation": "ggg_sweep_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "quarter": {
+          "type": "text",
+          "optional": true
+        },
+        "status": {
+          "type": "SweepStatus",
+          "values": [
+            "Sending",
+            "Sent",
+            "Booked",
+            "Failed",
+            "NeedsCheck"
+          ],
+          "optional": true
+        }
+      },
+      "read": true
     },
     "quarter_register": {
       "operation": "ggg_quarter_register",
