@@ -454,7 +454,7 @@ Two kinds of body:
 | `department_set_policy` | `org.set_policy` | governed, delegable | Infrastructure goes from 1-of-1 to 2-of-3 with 50% quorum; the Council decides by a majority of the votes cast. During setup it asks each time when the policy names veto holders |
 | `department_get`, `department_list`, `department_chart` | `realm.data_view` | read, delegable | Civil Registry's chart: 3 positions, 7 of 9 seats filled |
 | `position_create`, `position_edit`, `position_close` | `org.manage_members` | governed, delegable | Open 2 `inspector` seats in Infrastructure at 2,400 REALM/month |
-| `appoint`, `appoint_acting`, `appointment_end` | `org.appoint` | governed, delegable | Appoint Carla planning officer; Bob acts as head while Dana is on leave. During setup an appointment asks each time |
+| `appoint`, `appoint_acting`, `appointment_end` | `org.appoint` | governed, delegable | Appoint Carla planning officer; Bob acts as clerk while Dana is on leave. During setup an appointment asks each time |
 | `department_expel` | `org.expel` | governed, delegable | Expel a member from Infrastructure after a misconduct verdict |
 | `authority_grant`, `authority_revoke` | `org.grant_authority`, `org.revoke_authority` | governed, delegable | Finance grants Infrastructure spending on `ROADS`; during setup `authority_grant` asks each time |
 | `organization_register` | `organization.add` | delegable | Dr. Ana registers Clinic B, a `company`, and becomes its admin |
