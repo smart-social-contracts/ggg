@@ -385,7 +385,30 @@ type Contract = record {
   status : ContractStatus;
   starts_at : opt Timestamp;
   ends_at : opt Timestamp;
+  // How `value` is spread over fiscal periods, each named once, adding up to it; empty when it is not
+  // spread (I-GOV-16).
+  split : vec PeriodAmount;
 };
+
+// An amount for one fiscal period, named as a budget line names it; the period need not be open yet.
+type PeriodAmount = record { period : text; amount : Money };
+
+// The terms of a contract that an amendment may change.
+type ContractTerms = record { value : Money; split : vec PeriodAmount; starts_at : opt Timestamp; ends_at : opt Timestamp };
+
+// One amendment of a contract (I-GOV-16): its terms before and after, the proposal that carried it,
+// absent when its governing department decided directly, and when it applied.
+type ContractAmendment = record {
+  id : text;
+  contract : text;
+  before : ContractTerms;
+  after : ContractTerms;
+  proposal : opt text;
+  at : Timestamp;
+};
+
+// A contract and its amendments a page at a time, oldest first.
+type ContractDetail = record { contract : Contract; amendments : vec ContractAmendment; next : opt text };
 
 // ---- §5 Finance
 
@@ -1505,6 +1528,17 @@ type ContractCreateArgs = record {
   terms_hash : text;
   starts_at : opt Timestamp;
   ends_at : opt Timestamp;
+  // Absent means not spread over periods (I-GOV-16).
+  split : opt vec PeriodAmount;
+};
+
+// Each term given replaces the contract's; absent keeps it. At least one is given (I-GOV-16).
+type ContractAmendArgs = record {
+  contract : text;
+  value : opt Money;
+  split : opt vec PeriodAmount;
+  starts_at : opt Timestamp;
+  ends_at : opt Timestamp;
 };
 
 // `casting_vote` names an active member, else InvalidArgument.
@@ -2267,6 +2301,8 @@ service : {
   ggg_mandate_assign_executor : (MandateExecutorArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_contract_create : (ContractCreateArgs) -> (variant { Ok : Contract; Err : GggError });
   ggg_contract_terminate : (text) -> (variant { Ok : Contract; Err : GggError });
+  ggg_contract_amend : (ContractAmendArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_contract_get : (GetArgs) -> (variant { Ok : opt ContractDetail; Err : GggError }) query;
   ggg_governance_update : (GovernanceUpdateArgs) -> (variant { Ok : Governed; Err : GggError });
 
   // §5

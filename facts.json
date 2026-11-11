@@ -1728,10 +1728,29 @@
           "min": 0,
           "max": "9223372036854775807",
           "optional": true
+        },
+        "split": {
+          "type": "vec",
+          "element": {
+            "type": "PeriodAmount",
+            "fields": {
+              "period": {
+                "type": "text"
+              },
+              "amount": {
+                "type": "nat",
+                "kind": "money",
+                "min": 0,
+                "max": 9007199254740991
+              }
+            }
+          },
+          "optional": true
         }
       },
       "lists": {
-        "parties": "contract_create.parties"
+        "parties": "contract_create.parties",
+        "split": "contract_create.split"
       }
     },
     "contract_create.parties": {
@@ -1750,6 +1769,25 @@
         }
       }
     },
+    "contract_create.split": {
+      "operation": "ggg_contract_create",
+      "list": {
+        "field": "split",
+        "of": "the argument",
+        "element": "PeriodAmount"
+      },
+      "facts": {
+        "period": {
+          "type": "text"
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "max": 9007199254740991
+        }
+      }
+    },
     "contract_terminate": {
       "operation": "ggg_contract_terminate",
       "facts": {
@@ -1757,6 +1795,94 @@
           "type": "text"
         }
       }
+    },
+    "contract_amend": {
+      "operation": "ggg_contract_amend",
+      "facts": {
+        "contract": {
+          "type": "text"
+        },
+        "value": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "max": 9007199254740991,
+          "optional": true
+        },
+        "split": {
+          "type": "vec",
+          "element": {
+            "type": "PeriodAmount",
+            "fields": {
+              "period": {
+                "type": "text"
+              },
+              "amount": {
+                "type": "nat",
+                "kind": "money",
+                "min": 0,
+                "max": 9007199254740991
+              }
+            }
+          },
+          "optional": true
+        },
+        "starts_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "max": "9223372036854775807",
+          "optional": true
+        },
+        "ends_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "max": "9223372036854775807",
+          "optional": true
+        }
+      },
+      "lists": {
+        "split": "contract_amend.split"
+      }
+    },
+    "contract_amend.split": {
+      "operation": "ggg_contract_amend",
+      "list": {
+        "field": "split",
+        "of": "the argument",
+        "element": "PeriodAmount"
+      },
+      "facts": {
+        "period": {
+          "type": "text"
+        },
+        "amount": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "max": 9007199254740991
+        }
+      }
+    },
+    "contract_get": {
+      "operation": "ggg_contract_get",
+      "facts": {
+        "id": {
+          "type": "text"
+        },
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        }
+      },
+      "read": true
     },
     "governance_update": {
       "operation": "ggg_governance_update",
