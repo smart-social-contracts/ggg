@@ -607,6 +607,8 @@ test('an adopted budget amends the extended lines and an earlier line of the sam
     description: [],
     contract: [],
     on_behalf_of: [],
+    due_at: [],
+    committed: [],
   });
   const spend = (fund, category) => as(bob).ggg_transfer_create(transfer(fund, category));
   const expense = (fund, period, category) => ({ ...lineArgs(fund, period), category });
@@ -635,20 +637,20 @@ test('an adopted budget amends the extended lines and an earlier line of the sam
   assert.equal(ok(await as(bob).ggg_budget_extend('P2')), 3n);
   refusedWith(await as(bob).ggg_budget_extend('P2'), 'Conflict'); // every fund has its lines
   // With only extended lines a fund spends as before, in any category.
-  assert.deepEqual(ok(await spend('LIBRARY', 'music')), { Done: [] });
+  assert.equal(tag(ok(await spend('LIBRARY', 'music'))), 'Done');
 
   // LIBRARY adopts its P2 budget: books and transfer as expenses, events as revenue. The extended lines
   // are amended. Only an adopted expense line allows spending; no category is the category "transfer".
   await draft(expense('LIBRARY', 'P2', 'books'));
   await draft(expense('LIBRARY', 'P2', 'transfer'));
   await adopt('P2', 'LIBRARY');
-  assert.deepEqual(ok(await spend('LIBRARY', 'books')), { Done: [] });
-  assert.deepEqual(ok(await spend('LIBRARY', null)), { Done: [] });
+  assert.equal(tag(ok(await spend('LIBRARY', 'books'))), 'Done');
+  assert.equal(tag(ok(await spend('LIBRARY', null))), 'Done');
   refusedWith(await spend('LIBRARY', 'events'), 'Conflict'); // a revenue line
   refusedWith(await spend('LIBRARY', 'music'), 'Conflict'); // no line
   // A fund with only extended lines, and one with no budget, spend as before.
-  assert.deepEqual(ok(await spend('ARCHIVE', 'anything')), { Done: [] });
-  assert.deepEqual(ok(await spend('GENERAL', 'anything')), { Done: [] });
+  assert.equal(tag(ok(await spend('ARCHIVE', 'anything'))), 'Done');
+  assert.equal(tag(ok(await spend('GENERAL', 'anything'))), 'Done');
   // ledger_fee, the fee entry the realm books itself, is reserved: no transfer or budget line names it,
   // budget or not, and a proposal carrying one is refused at filing.
   refusedWith(await spend('LIBRARY', 'ledger_fee'), 'InvalidArgument');
@@ -661,7 +663,7 @@ test('an adopted budget amends the extended lines and an earlier line of the sam
   // category, and books is still budgeted.
   await draft({ ...expense('LIBRARY', 'P2', 'books'), planned: 2_000n });
   await adopt('P2', 'LIBRARY');
-  assert.deepEqual(ok(await spend('LIBRARY', 'books')), { Done: [] });
+  assert.equal(tag(ok(await spend('LIBRARY', 'books'))), 'Done');
 
   // P3's extension carries the three LIBRARY lines that stood at P2's end (the newest books, transfer
   // and events; neither the amended fees nor the first books line comes back) and ARCHIVE's storage,

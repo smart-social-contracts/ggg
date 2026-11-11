@@ -261,6 +261,8 @@ function listTable(actor) {
       actor.ggg_ledger_view({ ...a, transaction: [], symbol: [], kind: [], fund: [], period: [] })),
     list('ggg_report_view', () => (a) => actor.ggg_report_view({ ...a, id: [] })),
     list('ggg_loan_list', () => (a) => actor.ggg_loan_list({ ...a, status: [] })),
+    list('ggg_budget_list', () => (a) => actor.ggg_budget_list({ ...a, fund: [], period: [] })),
+    list('ggg_transfer_list', () => (a) => actor.ggg_transfer_list({ ...a, fund: [], status: [] })),
     list('ggg_my_invoices', () => (a) => actor.ggg_my_invoices({ ...a, on_behalf_of: [] })),
     list('ggg_land_list', () => (a) => actor.ggg_land_list({ ...a, owner: [] })),
     list('ggg_land_map (zones)', () => (a) => actor.ggg_land_map({ ...a, x: 0n, y: 0n, w: 32n, h: 32n }), 'zones'),
@@ -442,6 +444,27 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
       listed += walked.items.length;
     }
     return `${listed} organizations listed by kind`;
+  });
+
+  await check('GGG', 'B1', 'no budget line holds more than it plans, and only an adopted expense line holds reserved or committed money', async () => {
+    const walked = await walk((a) => reader.ggg_budget_list({ ...a, fund: [], period: [] }), (b) => b.id);
+    const detail = checkWalk(walked, 'ggg_budget_list');
+    for (const b of walked.items) {
+      const staged = tag(b.status) === 'Adopted' && tag(b.kind) === 'Expense';
+      if (!staged) assert(b.reserved === 0n && b.committed === 0n, `line ${b.id} is ${tag(b.status)} ${tag(b.kind)} but holds reserved or committed money`);
+      if (staged) assert(b.reserved + b.committed + b.actual <= b.planned, `line ${b.id} holds ${b.reserved + b.committed + b.actual}, above the ${b.planned} it plans`);
+    }
+    return detail;
+  });
+
+  await check('GGG', 'T1', 'every scheduled transfer has a due date, and a list by status holds only that status', async () => {
+    const walked = await walk((a) => reader.ggg_transfer_list({ ...a, fund: [], status: [{ Scheduled: null }] }), (t) => t.id);
+    const detail = checkWalk(walked, 'ggg_transfer_list(Scheduled)');
+    for (const t of walked.items) {
+      assert(tag(t.status) === 'Scheduled', `transfer ${t.id} is ${tag(t.status)}, listed as Scheduled`);
+      assert(opt(t.due_at) !== null, `scheduled transfer ${t.id} has no due date`);
+    }
+    return detail;
   });
 
   await check('GGG', 'Q1', 'ggg_join_targets takes a home_zone or none and gives it to no one, and the directory has no zone definitions', async () => {
@@ -988,6 +1011,13 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
       const replaced = ok(result, 'ggg_proposal_set_tags(draft)').tags;
       assert(show(replaced) === show(['after']), `a draft's tags are ${show(replaced)}, not after`);
     });
+  });
+
+  await check('GGG', 'W30', 'paying an unknown transfer returns NotFound', async () => {
+    needMember();
+    const result = await mine.ggg_transfer_pay(UNKNOWN);
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not pay transfers');
+    err(result, ['NotFound'], 'ggg_transfer_pay(unknown transfer)');
   });
 
   await check('GGG', 'W29', 'amending an unknown contract returns NotFound', async () => {

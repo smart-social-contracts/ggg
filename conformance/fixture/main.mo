@@ -20,7 +20,11 @@
 /// budget_propose, each governed by the fund's owner, or by the root for every fund's lines), with
 /// org.manage_budget; a period is a name that period_open records in order, budget_extend copies the
 /// previous period's adopted lines fund by fund, and transfer_create moves no money but refuses a
-/// category outside a fund's adopted budget (model §5). They make, amend and terminate contracts
+/// category outside a fund's adopted budget (model §5). A transfer is charged to its adopted expense
+/// line, from its committed money or its available credit, and is refused when that is short;
+/// budget_stage reserves and commits a line's money, a transfer with a due date is scheduled until
+/// transfer_pay, and transfer_revert, with transfer.delete, cancels a scheduled one and gives its money
+/// back (I-FIN-9, I-FIN-10). They make, amend and terminate contracts
 /// (contract_create, contract_amend and contract_terminate, with contract.create_under_mandate,
 /// contract.amend and contract.terminate): no mandate or tender exists here, so the root owns every
 /// contract and its direct policy applies an amendment at once, unless a proposal carries it, and
@@ -200,6 +204,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   let FEE_CATEGORY = "ledger_fee";
   let budgets = Map.empty<Nat, T.Budget>();
   var nextBudget = 1;
+  // Transfers by id. The realm holds no token here, so a transfer that names none is in REALM.
+  let transfers = Map.empty<Text, T.Transfer>();
+  var nextTransfer = 1;
+  let REALM_TOKEN = "REALM";
   // The periods, by name, in the order they were opened: the last is the current one.
   var periods : [Text] = [];
 
@@ -320,6 +328,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       };
       case "ggg_profile_update" { let a : ?T.ProfileUpdateArgs = from_candid (arg); a != null };
       case "ggg_contract_amend" { let a : ?T.ContractAmendArgs = from_candid (arg); a != null };
+      case "ggg_budget_stage" { let a : ?T.BudgetStageArgs = from_candid (arg); a != null };
+      case "ggg_transfer_revert" { let a : ?T.TransferRevertArgs = from_candid (arg); a != null };
       case _ return ?#InvalidArgument(method # " is not an update method of this canister");
     };
     if (decodes) null else ?#InvalidArgument("arg does not decode as the arguments of " # method);
@@ -380,6 +390,16 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         let ?department = findDepartment(id) else return #Err(#NotFound);
         if (department.is_root) return #Err(#InvalidArgument("the root department is never deleted"));
         parentOf(department);
+      };
+      case "ggg_budget_stage" {
+        let ?args : ?T.BudgetStageArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        let ?line = Array.find<T.Budget>(Iter.toArray(Map.values(budgets)), func(b) { b.id == args.budget }) else return #Err(#NotFound);
+        switch (fundOwner(line.fund)) { case (#Err(e)) return #Err(e); case (#Ok(d)) d };
+      };
+      case "ggg_transfer_revert" {
+        let ?args : ?T.TransferRevertArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        let ?transfer = Map.get(transfers, Text.compare, args.transfer) else return #Err(#NotFound);
+        switch (fundOwner(transfer.sender.id)) { case (#Err(e)) return #Err(e); case (#Ok(d)) d };
       };
       case "ggg_contract_amend" {
         let ?args : ?T.ContractAmendArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
@@ -667,6 +687,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         "org.set_policy",
         "org.manage_budget",
         "transfer.create",
+        "transfer.delete",
+        "treasury.view",
         "contract.create_under_mandate",
         "contract.amend",
         "contract.terminate",
@@ -1024,6 +1046,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       actual = 0;
       status = #Draft;
       proposal = null;
+      reserved = 0;
+      committed = 0;
     };
     Map.add(budgets, Nat.compare, n, line);
     audit("budget_draft", caller, #Map([("budget", #Text(line.id))]), #Text(line.id));
@@ -1087,24 +1111,47 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case null drafts(args);
     };
     if (lines.size() == 0) return #Err(#Conflict("no line of " # args.period # " to adopt"));
+    switch (checkCarried(lines)) { case (?e) return #Err(e); case null {} };
     // Line by line, in the order drafted: the fund's extended lines and an earlier adopted line of the
     // same category are amended, the spending booked against the latter carried over, then the line is
     // adopted; so a dropped category does not come back and one line stands per fund, period and
     // category, within one adoption too (D24, D30).
     for ((n, line) in lines.vals()) {
-      var carried : T.Money = 0;
+      var carried = { reserved = 0; committed = 0; actual = 0 };
       label replace for ((m, b) in Iter.toArray(Map.entries(budgets)).vals()) {
         if (b.fund != line.fund or b.period != line.period) continue replace;
         if (b.status == #Extended) Map.add(budgets, Nat.compare, m, { b with status = #Amended });
         if (b.status == #Adopted and b.category == line.category) {
           Map.add(budgets, Nat.compare, m, { b with status = #Amended });
-          carried += b.actual;
+          carried := { reserved = carried.reserved + b.reserved; committed = carried.committed + b.committed; actual = carried.actual + b.actual };
         };
       };
-      Map.add(budgets, Nat.compare, n, { line with status = #Adopted; actual = line.actual + carried });
+      let adopted = {
+        line with status = #Adopted;
+        reserved = line.reserved + carried.reserved;
+        committed = line.committed + carried.committed;
+        actual = line.actual + carried.actual;
+      };
+      Map.add(budgets, Nat.compare, n, adopted);
     };
     audit("budget_propose", caller, #Map([("period", #Text(args.period)), ("lines", #Nat(lines.size()))]), #Text("ok"));
     #Ok(null);
+  };
+
+  /// What an adopted line holds besides its available credit, which a line replacing it carries (I-FIN-9).
+  func held(b : T.Budget) : T.Money = b.reserved + b.committed + b.actual;
+
+  /// Refuses an adoption with a line that would hold more than it plans, with what it carries (I-FIN-9).
+  func checkCarried(lines : [(Nat, T.Budget)]) : ?T.GggError {
+    for ((_, line) in lines.vals()) {
+      for (b in Map.values(budgets)) {
+        let replaced = b.status == #Adopted and b.fund == line.fund and b.period == line.period and b.category == line.category;
+        if (replaced and held(b) > line.planned) {
+          return ?#Conflict("line " # line.id # " plans " # Nat.toText(line.planned) # ", less than the " # Nat.toText(held(b)) # " that " # b.id # " holds");
+        };
+      };
+    };
+    null;
   };
 
   // ---- Periods, extension and spending (model §5, D24)
@@ -1155,7 +1202,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
           if (otherKindHeld(f.id, period, b.category, b.kind)) continue carry;
           let n = nextBudget;
           nextBudget += 1;
-          Map.add(budgets, Nat.compare, n, { b with id = "B-" # Nat.toText(n); period; status = #Extended; proposal = null });
+          Map.add(budgets, Nat.compare, n, { b with id = "B-" # Nat.toText(n); period; status = #Extended; proposal = null; reserved = 0; committed = 0 });
           copied += 1;
         };
       };
@@ -1165,36 +1212,198 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     #Ok(copied);
   };
 
-  /// An adopted budget is exhaustive for its fund: in the current period, a transfer from a fund with an
-  /// adopted budget names a category with an adopted expense line; one with no category is the
-  /// category "transfer" (model §5, D24).
-  func checkSpending(args : T.TransferCreateArgs) : ?T.GggError {
-    switch (feeReserved(args.category)) { case (?e) return ?e; case null {} };
-    let ?period = currentPeriod() else return null;
+  /// The line a transfer is charged to (I-FIN-9). An adopted budget is exhaustive for its fund: in the
+  /// current period, a transfer from a fund with an adopted budget names a category with an adopted
+  /// expense line, and is charged to it; one with no category is the category "transfer" (model §5,
+  /// D24). A fund with no adopted budget charges no line.
+  func chargedLine(args : T.TransferCreateArgs) : Result<?(Nat, T.Budget)> {
+    switch (feeReserved(args.category)) { case (?e) return #Err(e); case null {} };
+    let ?period = currentPeriod() else return #Ok(null);
     let adopted = linesOf(args.fund, period, [#Adopted]);
-    if (adopted.size() == 0) return null;
+    if (adopted.size() == 0) return #Ok(null);
     let named = switch (args.category) { case (?c) c; case null "transfer" };
-    let budgeted = Array.any<(Nat, T.Budget)>(adopted, func((_, b)) { b.category == named and b.kind == #Expense });
-    if (budgeted) null else ?#Conflict("the adopted budget of " # args.fund # " for " # period # " has no expense line for " # named);
+    switch (Array.find<(Nat, T.Budget)>(adopted, func((_, b)) { b.category == named and b.kind == #Expense })) {
+      case (?line) #Ok(?line);
+      case null #Err(#Conflict("the adopted budget of " # args.fund # " for " # period # " has no expense line for " # named));
+    };
   };
 
-  /// Governed by the fund's owner (I-FIN-2). This fixture moves no money: it checks the budget and
-  /// records the transfer in the audit log.
+  func available(b : T.Budget) : Nat = b.planned - held(b);
+
+  func describe(b : T.Budget) : Text = "line " # b.id # " (" # b.fund # ", " # b.period # ", " # b.category # ")";
+
+  /// Refuses a transfer its line cannot pay: from its committed money when `committed`, else from its
+  /// available credit. The message names the line and says by how much it is short (I-FIN-9).
+  func checkCharge(line : T.Budget, amount : T.Money, committed : Bool) : ?T.GggError {
+    let (has, what) = if (committed) (line.committed, "committed") else (available(line), "available");
+    if (amount <= has) return null;
+    ?#Conflict(describe(line) # " has " # Nat.toText(has) # " " # what # "; the transfer of " # Nat.toText(amount) # " is " # Nat.toText(amount - has) # " short");
+  };
+
+  /// The line and the check a transfer meets before it is filed, and again when it applies.
+  func checkSpending(args : T.TransferCreateArgs) : Result<?(Nat, T.Budget)> {
+    let line = switch (chargedLine(args)) { case (#Err(e)) return #Err(e); case (#Ok(l)) l };
+    switch (line) {
+      case (?(_, b)) { switch (checkCharge(b, args.amount, args.committed == ?true)) { case (?e) return #Err(e); case null {} } };
+      case null {};
+    };
+    #Ok(line);
+  };
+
+  /// Governed by the fund's owner (I-FIN-2). This fixture moves no money: it charges the budget line and
+  /// records the transfer, completed at once, or scheduled when it has a due date (I-FIN-9, I-FIN-10).
   public shared ({ caller }) func ggg_transfer_create(args : T.TransferCreateArgs) : async Result<T.Governed> {
     switch (requireMember(caller, "transfer.create")) { case (?e) return #Err(e); case null {} };
     if (args.on_behalf_of != null) return #Err(noDelegation("transfer.create"));
     let arg = to_candid (args);
     let governing = switch (governingDepartment("ggg_transfer_create", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
-    switch (checkSpending(args)) { case (?e) return #Err(e); case null {} };
+    switch (checkSpending(args)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    switch (args.due_at) {
+      case (?due) { if (due <= now()) return #Err(#InvalidArgument("due_at must lie in the future")) };
+      case null {};
+    };
     govern(caller, "transfer_create", governing, arg, "Transfer from " # args.fund, "Transfers from the fund " # args.fund # ".", func() {
       spend(caller, args);
     });
   };
 
   func spend(caller : Principal, args : T.TransferCreateArgs) : Result<?Text> {
-    switch (checkSpending(args)) { case (?e) return #Err(e); case null {} };
-    audit("transfer_create", caller, #Map([("fund", #Text(args.fund)), ("amount", #Nat(args.amount))]), #Text("ok"));
+    let line = switch (checkSpending(args)) { case (#Err(e)) return #Err(e); case (#Ok(l)) l };
+    let committed = line != null and args.committed == ?true;
+    switch (line) {
+      case (?(n, b)) {
+        let charged = if (committed) ({ b with committed = b.committed - args.amount : Nat }) else b;
+        Map.add(budgets, Nat.compare, n, { charged with actual = b.actual + args.amount });
+      };
+      case null {};
+    };
+    let id = "T-" # Nat.toText(nextTransfer);
+    nextTransfer += 1;
+    let transfer : T.Transfer = {
+      id;
+      sender = { kind = "Fund"; id = args.fund };
+      to = args.to;
+      symbol = switch (args.symbol) { case (?s) s; case null REALM_TOKEN };
+      amount = args.amount;
+      ledger_tx = null;
+      invoice = null;
+      status = if (args.due_at == null) #Completed else #Scheduled;
+      at = now();
+      payroll = null;
+      due_at = args.due_at;
+      budget = switch (line) { case (?(_, b)) ?b.id; case null null };
+      committed;
+    };
+    Map.add(transfers, Text.compare, id, transfer);
+    audit("transfer_create", caller, #Map([("fund", #Text(args.fund)), ("amount", #Nat(args.amount))]), #Text(id));
+    #Ok(?id);
+  };
+
+  /// Pays a scheduled transfer. Not governed: transfer_create decided it (I-FIN-10). This fixture moves
+  /// no money, so it completes at once.
+  public shared ({ caller }) func ggg_transfer_pay(id : Text) : async Result<T.Transfer> {
+    switch (requireMember(caller, "transfer.create")) { case (?e) return #Err(e); case null {} };
+    let ?transfer = Map.get(transfers, Text.compare, id) else return #Err(#NotFound);
+    if (transfer.status != #Scheduled) return #Err(#Conflict("only a scheduled transfer is paid"));
+    let paid = { transfer with status = #Completed };
+    Map.add(transfers, Text.compare, id, paid);
+    audit("transfer_pay", caller, #Map([("transfer", #Text(id))]), #Text(id));
+    #Ok(paid);
+  };
+
+  /// Governed by the owner of the transfer's fund. Only a scheduled transfer can be reverted here, since
+  /// this fixture moves no money and no transfer is ever pending (I-FIN-10).
+  public shared ({ caller }) func ggg_transfer_revert(args : T.TransferRevertArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "transfer.delete")) { case (?e) return #Err(e); case null {} };
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_transfer_revert", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    switch (checkRevert(args.transfer)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    govern(caller, "transfer_revert", governing, arg, "Cancel transfer " # args.transfer, "Cancels the scheduled transfer " # args.transfer # ".", func() {
+      cancelTransfer(caller, args.transfer);
+    });
+  };
+
+  func checkRevert(id : Text) : Result<T.Transfer> {
+    let ?transfer = Map.get(transfers, Text.compare, id) else return #Err(#NotFound);
+    if (transfer.status != #Scheduled) return #Err(#Conflict("only a scheduled transfer can be reverted here"));
+    #Ok(transfer);
+  };
+
+  /// Cancels a scheduled transfer and gives back what it charged, to the stage it came from, on the line
+  /// that now stands for its fund, period and category (I-FIN-9).
+  func cancelTransfer(caller : Principal, id : Text) : Result<?Text> {
+    let transfer = switch (checkRevert(id)) { case (#Err(e)) return #Err(e); case (#Ok(t)) t };
+    switch (standingLine(transfer.budget)) {
+      case (?(n, b)) {
+        let back = { b with actual = b.actual - transfer.amount : Nat };
+        Map.add(budgets, Nat.compare, n, if (transfer.committed) ({ back with committed = b.committed + transfer.amount }) else back);
+      };
+      case null {};
+    };
+    Map.add(transfers, Text.compare, id, { transfer with status = #Cancelled });
+    audit("transfer_revert", caller, #Map([("transfer", #Text(id))]), #Text(id));
     #Ok(null);
+  };
+
+  /// The adopted line of the same fund, period and category as the line `budget` names: that line, or the
+  /// one that replaced it and carried its money.
+  func standingLine(budget : ?Text) : ?(Nat, T.Budget) {
+    let ?id = budget else return null;
+    let ?(_, named) = Array.find<(Nat, T.Budget)>(Iter.toArray(Map.entries(budgets)), func((_, b)) { b.id == id }) else return null;
+    Array.find<(Nat, T.Budget)>(linesOf(named.fund, named.period, [#Adopted]), func((_, b)) { b.category == named.category });
+  };
+
+  public query func ggg_transfer_list(args : T.TransferListArgs) : async Result<T.TransferPage> {
+    let wanted = func(t : T.Transfer) : Bool {
+      let fundMatches = switch (args.fund) { case (?f) t.sender.id == f; case null true };
+      let statusMatches = switch (args.status) { case (?s) t.status == s; case null true };
+      fundMatches and statusMatches;
+    };
+    page(Iter.filter<T.Transfer>(Map.values(transfers), wanted), args.cursor, args.limit);
+  };
+
+  // ---- Budget stages (I-FIN-9)
+
+  /// Governed by the owner of the line's fund.
+  public shared ({ caller }) func ggg_budget_stage(args : T.BudgetStageArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "org.manage_budget")) { case (?e) return #Err(e); case null {} };
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_budget_stage", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    switch (staged(args)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    govern(caller, "budget_stage", governing, arg, "Stage budget line " # args.budget, "Moves the reserved and committed money of budget line " # args.budget # ".", func() {
+      stageBudget(caller, args);
+    });
+  };
+
+  /// The line `args` names, with its reserved and committed money moved, or why they cannot move.
+  func staged(args : T.BudgetStageArgs) : Result<(Nat, T.Budget)> {
+    let ?(n, line) = Array.find<(Nat, T.Budget)>(Iter.toArray(Map.entries(budgets)), func((_, b)) { b.id == args.budget }) else return #Err(#NotFound);
+    if (line.status != #Adopted or line.kind != #Expense) return #Err(#InvalidArgument(describe(line) # " is not an adopted expense line"));
+    if (args.reserve == 0 and args.commit == 0) return #Err(#InvalidArgument("the stage moves no money"));
+    let reserved = line.reserved + args.reserve;
+    let committed = line.committed + args.commit;
+    if (reserved < 0 or committed < 0) return #Err(#Conflict(describe(line) # " would hold less than nothing reserved or committed"));
+    let holds = Int.abs(reserved) + Int.abs(committed) + line.actual;
+    if (holds > line.planned) {
+      return #Err(#Conflict(describe(line) # " plans " # Nat.toText(line.planned) # "; this stage would take it " # Nat.toText(holds - line.planned) # " above"));
+    };
+    #Ok((n, { line with reserved = Int.abs(reserved); committed = Int.abs(committed) }));
+  };
+
+  func stageBudget(caller : Principal, args : T.BudgetStageArgs) : Result<?Text> {
+    let (n, line) = switch (staged(args)) { case (#Err(e)) return #Err(e); case (#Ok(found)) found };
+    Map.add(budgets, Nat.compare, n, line);
+    audit("budget_stage", caller, #Map([("budget", #Text(line.id))]), #Text(line.id));
+    #Ok(null);
+  };
+
+  public query func ggg_budget_list(args : T.BudgetListArgs) : async Result<T.BudgetPage> {
+    let wanted = func(b : T.Budget) : Bool {
+      let fundMatches = switch (args.fund) { case (?f) b.fund == f; case null true };
+      let periodMatches = switch (args.period) { case (?p) b.period == p; case null true };
+      fundMatches and periodMatches;
+    };
+    page(Iter.filter<T.Budget>(Map.values(budgets), wanted), args.cursor, args.limit);
   };
 
   /// The root keeps no parent, and a department never moves under itself or a department below it.
@@ -1641,6 +1850,14 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case "ggg_contract_amend" {
         let ?args : ?T.ContractAmendArgs = from_candid (arg) else return undecodable();
         amendContract(caller, args, ?p.id);
+      };
+      case "ggg_budget_stage" {
+        let ?args : ?T.BudgetStageArgs = from_candid (arg) else return undecodable();
+        stageBudget(caller, args);
+      };
+      case "ggg_transfer_revert" {
+        let ?args : ?T.TransferRevertArgs = from_candid (arg) else return undecodable();
+        cancelTransfer(caller, args.transfer);
       };
       case "ggg_codex_install" {
         let ?source : ?T.CodexSource = from_candid (arg) else return undecodable();
@@ -2577,7 +2794,6 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_treasury_configure(_ : T.TreasuryConfigureArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_token_register(_ : T.TokenRegisterArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_nft_token_register(_ : T.NFTTokenRegisterArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
-  public shared ({ caller }) func ggg_transfer_revert(_ : T.TransferRevertArgs) : async Result<T.Governed> { nobody(caller, "transfer.delete") };
   public shared ({ caller }) func ggg_invoice_create(_ : T.InvoiceCreateArgs) : async Result<T.InvoiceCreated> { nobody(caller, "treasury.manage") };
   public shared ({ caller }) func ggg_invoice_check(_ : T.InvoiceCheckArgs) : async Result<T.Invoice> { nobody(caller, "self.invoice_refresh") };
   public shared ({ caller }) func ggg_invoice_refresh(_ : T.InvoiceRefreshArgs) : async Result<T.InvoicePage> { nobody(caller, "invoice.refresh") };

@@ -487,6 +487,11 @@ type Budget = record {
   actual : Money;
   status : BudgetStatus;
   proposal : opt text;
+  // Of an adopted expense line: money set aside for a spending not yet committed, and money committed to
+  // a third party not yet charged. What is left, planned - reserved - committed - actual, is never
+  // negative (I-FIN-9). Zero on any other line.
+  reserved : Money;
+  committed : Money;
 };
 
 // AllocationRule and TaxPolicy.
@@ -554,7 +559,8 @@ type Invoice = record {
   payment : opt Value;
 };
 
-type TransferStatus = variant { Sending; Pending; Completed; Failed };
+// Scheduled: owed, to be paid by its due date; Cancelled: a scheduled transfer revoked unpaid (I-FIN-10).
+type TransferStatus = variant { Scheduled; Sending; Pending; Completed; Failed; Cancelled };
 
 type Transfer = record {
   id : text;
@@ -567,6 +573,11 @@ type Transfer = record {
   status : TransferStatus;
   at : Timestamp;
   payroll : opt text;
+  // When a scheduled transfer is due.
+  due_at : opt Timestamp;
+  // The budget line it is charged to, and whether it drew on that line's committed money (I-FIN-9).
+  budget : opt text;
+  committed : bool;
 };
 
 type TradeStatus = variant { Pending; Completed; Failed };
@@ -1618,7 +1629,12 @@ type TransferCreateArgs = record {
   description : opt text;
   contract : opt text;
   on_behalf_of : opt principal;
+  // A time after the call: the transfer is Scheduled, owed until transfer_pay pays it (I-FIN-10).
+  due_at : opt Timestamp;
+  // True: it pays money its budget line has committed, not the line's available credit (I-FIN-9).
+  committed : opt bool;
 };
+// A Scheduled transfer is Cancelled; one that is Pending fails, reverted.
 type TransferRevertArgs = record { transfer : text; reason : opt text };
 
 // At least one item, and the items sum to `amount` (InvalidArgument otherwise).
@@ -1652,6 +1668,14 @@ type PeriodOpenArgs = record { period : text; name : opt text; starts_at : Times
 // `category` never names `ledger_fee`, which the GOS books itself (InvalidArgument).
 type BudgetDraftArgs = record { fund : text; period : text; category : text; kind : BudgetKind; planned : Money };
 type BudgetAmendArgs = record { budget : text; planned : Money };
+// Moves an adopted expense line's money between its stages (I-FIN-9): `reserve` and `commit` are added
+// to its reserved and committed amounts; a negative one releases. Committing what was reserved is
+// reserve -x, commit +x. At least one is not zero.
+type BudgetStageArgs = record { budget : text; reserve : SignedMoney; commit : SignedMoney };
+type BudgetListArgs = record { cursor : opt text; limit : opt nat32; fund : opt text; period : opt text };
+type BudgetPage = record { items : vec Budget; next : opt text };
+type TransferListArgs = record { cursor : opt text; limit : opt nat32; fund : opt text; status : opt TransferStatus };
+type TransferPage = record { items : vec Transfer; next : opt text };
 // Proposes the draft lines of the period together: those of `fund`, under its owner's policy, or every
 // fund's, under the root's; they are `proposed` from the filing, by this call or by any proposal that
 // carries it, the execution adopts exactly them, and a proposal that ends otherwise returns them to Draft.
@@ -2321,6 +2345,8 @@ service : {
   ggg_nft_token_register : (NFTTokenRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_transfer_create : (TransferCreateArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_transfer_revert : (TransferRevertArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_transfer_pay : (text) -> (variant { Ok : Transfer; Err : GggError });
+  ggg_transfer_list : (TransferListArgs) -> (variant { Ok : TransferPage; Err : GggError }) query;
   ggg_invoice_create : (InvoiceCreateArgs) -> (variant { Ok : InvoiceCreated; Err : GggError });
   ggg_invoice_check : (InvoiceCheckArgs) -> (variant { Ok : Invoice; Err : GggError });
   ggg_my_invoices : (MyInvoicesArgs) -> (variant { Ok : MyInvoicePage; Err : GggError }) query;
@@ -2336,6 +2362,8 @@ service : {
   // line (Draft lines stand in no way).
   ggg_budget_extend : (text) -> (variant { Ok : nat; Err : GggError });
   ggg_budget_amend : (BudgetAmendArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_budget_stage : (BudgetStageArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_budget_list : (BudgetListArgs) -> (variant { Ok : BudgetPage; Err : GggError }) query;
   ggg_allocation_rule_draft : (AllocationRuleDraftArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_allocation_rule_propose : (text) -> (variant { Ok : Governed; Err : GggError });
   ggg_payroll_run : (PayrollRunArgs) -> (variant { Ok : Governed; Err : GggError });

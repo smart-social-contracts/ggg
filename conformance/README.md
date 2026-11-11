@@ -73,6 +73,9 @@ path.
   before and after with the proposal that carried it, and a terminated contract is never amended.
 - `test/organizations.test.js` runs the fixture with two members and checks organization kinds (model
   I-ORG-9): `other` when none is given, changed only by the organization's admins, and a list by kind.
+- `test/spending.test.js` runs the fixture with one member and checks spending stages (model I-FIN-9,
+  I-FIN-10): a line's reserved and committed money, transfers charged to it and refused past it with
+  a message that names the line and the shortfall, and scheduled transfers paid or cancelled.
 - `test/sync.test.js` runs three fixtures that take legislation from one another and checks the links
   between realms (model I-NEST-1 to 3) and the published record (model §11).
 - `test/codex.test.js` installs codices the fixture holds and checks `codex_revert` (model §11): the one
