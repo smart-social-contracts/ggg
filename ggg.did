@@ -1627,7 +1627,8 @@ type TreasuryConfigureArgs = record {
   anchor_month : opt nat8;
   source_fund : opt text;
   auto_allocate : opt bool;
-  // Replaces the capital's sweep rules; InvalidArgument on a realm that is not a capital (I-FED-5).
+  // Replaces the capital's sweep rules: InvalidArgument on a realm that is not a capital or for two rules on
+  // one fund and symbol, NotFound for an `into` that is not a fund or a symbol that is not a token (I-FED-5).
   sweep : opt vec SweepRule;
 };
 type TokenRegisterArgs = record {
@@ -2008,7 +2009,8 @@ type QuarterDirectory = record {
   sweep : opt SweepConfig;
 };
 
-// A quarter moves its `fund`'s money in `symbol`, all but `keep`, into the capital's fund `into`.
+// A quarter moves its `fund`'s money in `symbol`, all but `keep`, into the capital's fund `into`. A rule is
+// known by its `fund` and `symbol`, which a capital names once (I-FED-5).
 type SweepRule = record { fund : text; symbol : text; into : text; keep : Money };
 // The rules, and the capital's account that receives every sweep.
 type SweepConfig = record { to : Account; rules : vec SweepRule };
@@ -2017,10 +2019,10 @@ type SweepConfig = record { to : Account; rules : vec SweepRule };
 // never sent again (I-FED-6). On the capital a sweep is Booked.
 type SweepStatus = variant { Sending; Sent; Booked; Failed; NeedsCheck };
 // One move of one fund's money from a quarter to the capital. The ledger transfer's memo is `id` (UTF-8) and
-// its created_at_time is `created_at`, both fixed when the sweep is recorded, like `to`, `amount` and `fee` (I-FED-5). On the capital `id` is
-// `<quarter>/<id>`. `epoch` is the start of the quarter's treasury epoch it belongs to; `block` the ledger's
-// block index; `amount` reaches the capital and `fee`, the ledger's, is paid by the quarter; `reason` is the
-// ledger's error when it failed.
+// its created_at_time is `created_at`, both fixed when the sweep is recorded, like `to`, `amount` and `fee`
+// (I-FED-5). On the capital `id` is `<quarter>/<id>`. `epoch` is the start of the quarter's treasury epoch
+// that contains `created_at`; `block` the ledger's block index; `amount` reaches the capital and `fee`, the
+// ledger's, is paid by the quarter; `reason` is the ledger's error when it failed.
 type Sweep = record {
   id : text;
   quarter : text;

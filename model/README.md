@@ -1210,14 +1210,17 @@ vote. If the quarter cannot apply it, the call fails and nothing changes.
 Money paid in a quarter, such as a household's property tax paid in its home quarter, is the
 quarter's until it is swept into the capital's funds, where the realm's budget is. The capital decides
 what is swept: its `SweepRule`s, set by the governed `treasury_configure` with `sweep` (a realm that
-is not a capital refuses them with `InvalidArgument`). `quarter_sync` sends the rules to each quarter,
+is not a capital refuses them with `InvalidArgument`). A rule is known by its `fund` and `symbol`, the
+quarter's fund and token: a capital names each pair once (`InvalidArgument` for two rules on the
+same), `into` is one of the capital's funds and `symbol` one of the tokens it registered (`NotFound`
+otherwise), and the rules given replace the earlier ones. `quarter_sync` sends the rules to each quarter,
 as it sends the zones, together with `to`, the capital's account that receives sweeps; the quarter
 keeps the last ones it received.
 
 A quarter sweeps at the end of each of its treasury epochs (`Treasury.config.epoch`), and whenever
 `quarter_sweep` asks it to. For each rule, it moves to `to` the fund's balance in `symbol`, as its
-books hold it (`Fund.balances`), less `keep` and less the ledger's fee; when that leaves nothing,
-nothing is swept. Each sweep is recorded before any money moves, `sending`, with its `epoch` (the
+books hold it (`Fund.balances`), less `keep` and less the ledger's fee; when that leaves nothing, or the
+quarter has no such fund or token, nothing is swept. Each sweep is recorded before any money moves, `sending`, with its `epoch` (the
 start of the treasury epoch it belongs to) and its `created_at`. Its ledger transfer is an ICRC-1
 `icrc1_transfer` whose `memo` is the sweep's `id` (UTF-8, at most 32 bytes) and whose
 `created_at_time` is its `created_at`, fixed, like its `to`, `amount` and `fee`, when the sweep is
@@ -1275,26 +1278,29 @@ installed whole; and the paths from several sync sources must form one chain in 
   (or the rule's explicit absence policy).
 - I-FED-3: Every quarter runs the same federation codex version as the capital, or is flagged as drifting.
 - I-FED-4: Calls between quarters are accepted only from registered quarter canisters.
-- I-FED-5: A quarter records at most one sweep per rule and treasury epoch, and starts no sweep for
-  a rule while an earlier one of that rule is `sending` or `needs_check`. A sweep's ledger transfer is
-  fixed when it is recorded: every attempt sends the same `icrc1_transfer`, with `memo` its `id` and
-  `created_at_time` its `created_at`, so its money moves at most once. `quarter_sweep` on a realm
-  that is not a quarter is `Conflict`.
+- I-FED-5: A quarter records at most one sweep per rule and treasury epoch, the one that contains
+  the sweep's `created_at`, whether the end-of-epoch timer or `quarter_sweep` asked, and starts no
+  sweep for a rule while an earlier one of that rule is `sending` or `needs_check`. A sweep's ledger
+  transfer is fixed when it is recorded: every attempt sends the same `icrc1_transfer`, with `memo`
+  its `id` and `created_at_time` its `created_at`, so its money moves at most once. `quarter_sweep`
+  on a realm that is not a quarter is `Conflict`.
 - I-FED-6: A quarter sends a sweep's transfer again only until 23 hours after its `created_at`, an
   hour inside the 24-hour window in which an ICRC-1 ledger recognises a repeat (the reference
   ledger's transaction window). A sweep whose outcome is still unknown then, or that the ledger
   answers with `TooOld`, is `needs_check` and is never sent again. `sweep_resolve`, governed by the
   owner of the swept fund, settles only a `needs_check` sweep (`Conflict` otherwise): with the
   `block` found on the ledger it is `sent`, without one `failed`.
-- I-FED-7: A sweep is booked exactly once on each side, linked so the two reconcile: the quarter books
-  it when it is `sent`, `amount` out of `fund` in the category `sweep` and `fee` in `ledger_fee`; the
-  capital books it when it is reported, `amount` into `into` in the category `sweep`. Each entry
-  names the sweep (`LedgerEntry.sweep`), and both sides keep its `block`. `quarter_sweep_report` is
-  accepted only from a registered quarter (I-FED-4, else `Forbidden`) and only for a `sent` sweep
-  with a `block` (else `InvalidArgument`). A second report of a booked sweep returns the capital's
-  record; one that differs from it is `Conflict`. The quarter's and the capital's money together
-  change only by the ledger's fee, and no fund goes below zero: a sweep takes at most what its fund
-  holds above `keep` and the fee.
+- I-FED-7: A sweep is booked exactly once on each side, linked so the two reconcile: the quarter
+  books it when it is `sent`, `amount` out of `fund` in the category `sweep` and `fee` in
+  `ledger_fee`; the capital books it when it is reported, `amount` into `into` in the category
+  `sweep`. Each entry names the sweep (`LedgerEntry.sweep`), and both sides keep its `block`.
+  `quarter_sweep_report` is accepted only from a registered quarter (I-FED-4, else `Forbidden`) and
+  only for a `sent` sweep with a `block` (else `InvalidArgument`) whose `into` is a fund of the
+  capital (else `NotFound`). A second report of a booked sweep returns the capital's record; one
+  that differs from it is `Conflict`. The capital books on the
+  registered quarter's word: it does not look the block up on the ledger, so a quarter's report is
+  what it books. The quarter's and the capital's money together change only by the ledger's fee, and
+  no fund goes below zero: a sweep takes at most what its fund holds above `keep` and the fee.
 - I-NEST-1: A link is active only after both votes, the follower's `sync_source_add` and the source's
   `follower_accept`, in either order; until then it is `requested`. A stand-in record cannot vote, so
   its link is `active` on the follower's vote alone, and a second `sync_source_add` of the same URL
