@@ -403,8 +403,6 @@ module {
     parties : [Ref];
     symbol : Text;
   };
-  /// The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
-  /// links to it are in ggg_proposal_linked_from.
   /// A contract and its amendments a page at a time, oldest first.
   public type ContractDetail = {
     amendments : [ContractAmendment];
@@ -1776,6 +1774,8 @@ module {
     department : ?Text;
     quorum : ?Ratio;
   };
+  /// The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
+  /// links to it are in ggg_proposal_linked_from.
   public type ProposalDetail = {
     votes : [Vote];
     next : ?Text;

@@ -412,6 +412,9 @@ type ContractAmendment = record {
   at : Timestamp;
 };
 
+// A contract and its amendments a page at a time, oldest first.
+type ContractDetail = record { contract : Contract; amendments : vec ContractAmendment; next : opt text };
+
 // ---- §5 Finance
 
 type TreasuryConfig = record {
@@ -1470,9 +1473,6 @@ type OrganizationStatusArgs = record { organization : text; status : Organizatio
 
 // The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
 // links to it are in ggg_proposal_linked_from.
-// A contract and its amendments a page at a time, oldest first.
-type ContractDetail = record { contract : Contract; amendments : vec ContractAmendment; next : opt text };
-
 type ProposalDetail = record { proposal : Proposal; votes : vec Vote; next : opt text; replaced_by : opt text };
 
 // The links of other proposals to one proposal, oldest first.
