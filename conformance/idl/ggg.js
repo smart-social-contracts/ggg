@@ -1936,6 +1936,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Sweep = IDL.Record({
     'id' : IDL.Text,
+    'to' : Account,
     'fee' : Money,
     'status' : SweepStatus,
     'fund' : IDL.Text,

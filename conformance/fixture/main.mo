@@ -24,7 +24,10 @@
 /// line, from its committed money or its available credit, and is refused when that is short;
 /// budget_stage reserves and commits a line's money, a transfer with a due date is scheduled until
 /// transfer_pay, and transfer_revert, with transfer.delete, cancels a scheduled one and gives its money
-/// back (I-FIN-9, I-FIN-10). They make, amend and terminate contracts
+/// back (I-FIN-9, I-FIN-10). They register tokens and quarters, join a capital, set its sweep rules and
+/// sweep a quarter's money into it (treasury.manage, quarter.register, quarter.join_federation): its
+/// money is what its own account holds on the token's ledger, and it sweeps only when quarter_sweep
+/// asks (I-FED-5 to 7). They make, amend and terminate contracts
 /// (contract_create, contract_amend and contract_terminate, with contract.create_under_mandate,
 /// contract.amend and contract.terminate): no mandate or tender exists here, so the root owns every
 /// contract and its direct policy applies an amendment at once, unless a proposal carries it, and
@@ -65,6 +68,7 @@ import Map "mo:core/Map";
 import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
+import Option "mo:core/Option";
 import Principal "mo:core/Principal";
 import Set "mo:core/Set";
 import Text "mo:core/Text";
@@ -109,6 +113,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
   let NO_MORE_BUDGETING = "closes no period and keeps no allocation rules, payroll or loans";
+  let NO_INVOICING = "registers tokens and sweeps money, but issues no NFT, invoice or report";
+  let NO_QUARTER_CHANGES = "registers quarters, but never deregisters or reconfigures one";
   let OUT_OF_SCOPE = "a department's proposal carries only the calls that department, or one below it, governs";
 
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
@@ -202,6 +208,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   /// The ledger's fee, the one entry a GOS books itself and the only one exempt from an adopted budget:
   /// reserved, so no transfer or budget line names it (model §5, D30).
   let FEE_CATEGORY = "ledger_fee";
+  /// A sweep's entries, booked by the realm itself and neither revenue nor spending: reserved too (I-FED-7).
+  let SWEEP_CATEGORY = "sweep";
   let budgets = Map.empty<Nat, T.Budget>();
   var nextBudget = 1;
   // Transfers by id. The realm holds no token here, so a transfer that names none is in REALM.
@@ -310,12 +318,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case "ggg_fund_create" { let a : ?T.FundCreateArgs = from_candid (arg); a != null };
       case "ggg_budget_draft" {
         let a : ?T.BudgetDraftArgs = from_candid (arg);
-        switch (a) { case (?d) { switch (feeReserved(?d.category)) { case (?e) return ?e; case null true } }; case null false };
+        switch (a) { case (?d) { switch (reservedCategory(?d.category)) { case (?e) return ?e; case null true } }; case null false };
       };
       case "ggg_budget_propose" { let a : ?T.BudgetProposeArgs = from_candid (arg); a != null };
       case "ggg_transfer_create" {
         let a : ?T.TransferCreateArgs = from_candid (arg);
-        switch (a) { case (?t) { switch (feeReserved(t.category)) { case (?e) return ?e; case null true } }; case null false };
+        switch (a) { case (?t) { switch (reservedCategory(t.category)) { case (?e) return ?e; case null true } }; case null false };
       };
       case "ggg_codex_install" { let a : ?T.CodexSource = from_candid (arg); a != null };
       case "ggg_codex_revert" {
@@ -330,6 +338,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case "ggg_contract_amend" { let a : ?T.ContractAmendArgs = from_candid (arg); a != null };
       case "ggg_budget_stage" { let a : ?T.BudgetStageArgs = from_candid (arg); a != null };
       case "ggg_transfer_revert" { let a : ?T.TransferRevertArgs = from_candid (arg); a != null };
+      case "ggg_sweep_resolve" { let a : ?T.SweepResolveArgs = from_candid (arg); a != null };
       case _ return ?#InvalidArgument(method # " is not an update method of this canister");
     };
     if (decodes) null else ?#InvalidArgument("arg does not decode as the arguments of " # method);
@@ -400,6 +409,11 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         let ?args : ?T.TransferRevertArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
         let ?transfer = Map.get(transfers, Text.compare, args.transfer) else return #Err(#NotFound);
         switch (fundOwner(transfer.sender.id)) { case (#Err(e)) return #Err(e); case (#Ok(d)) d };
+      };
+      case "ggg_sweep_resolve" {
+        let ?args : ?T.SweepResolveArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
+        let ?sweep = Map.get(sweeps, Text.compare, args.sweep) else return #Err(#NotFound);
+        switch (fundOwner(sweep.fund)) { case (#Err(e)) return #Err(e); case (#Ok(d)) d };
       };
       case "ggg_contract_amend" {
         let ?args : ?T.ContractAmendArgs = from_candid (arg) else return #Err(#InvalidArgument("arg does not decode"));
@@ -689,6 +703,9 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         "transfer.create",
         "transfer.delete",
         "treasury.view",
+        "treasury.manage",
+        "quarter.register",
+        "quarter.join_federation",
         "contract.create_under_mandate",
         "contract.amend",
         "contract.terminate",
@@ -1019,12 +1036,14 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   };
 
   /// `ledger_fee` is reserved for the fee's ledger entry, which the realm books itself (model §5, D30).
-  func feeReserved(category : ?Text) : ?T.GggError {
-    if (category == ?FEE_CATEGORY) ?#InvalidArgument("category " # FEE_CATEGORY # " is reserved for the ledger's fee, which the realm books itself") else null;
+  func reservedCategory(category : ?Text) : ?T.GggError {
+    if (category == ?FEE_CATEGORY) return ?#InvalidArgument("category " # FEE_CATEGORY # " is reserved for the ledger's fee, which the realm books itself");
+    if (category == ?SWEEP_CATEGORY) return ?#InvalidArgument("category " # SWEEP_CATEGORY # " is reserved for sweeps, which the realm books itself");
+    null;
   };
 
   func checkDraft(args : T.BudgetDraftArgs) : ?T.GggError {
-    switch (feeReserved(?args.category)) { case (?e) return ?e; case null {} };
+    switch (reservedCategory(?args.category)) { case (?e) return ?e; case null {} };
     if (otherKindHeld(args.fund, args.period, args.category, args.kind)) {
       return ?#InvalidArgument("category " # args.category # " of " # args.fund # " in " # args.period # " is of the other kind");
     };
@@ -1217,7 +1236,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   /// expense line, and is charged to it; one with no category is the category "transfer" (model §5,
   /// D24). A fund with no adopted budget charges no line.
   func chargedLine(args : T.TransferCreateArgs) : Result<?(Nat, T.Budget)> {
-    switch (feeReserved(args.category)) { case (?e) return #Err(e); case null {} };
+    switch (reservedCategory(args.category)) { case (?e) return #Err(e); case null {} };
     let ?period = currentPeriod() else return #Ok(null);
     let adopted = linesOf(args.fund, period, [#Adopted]);
     if (adopted.size() == 0) return #Ok(null);
@@ -1859,6 +1878,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         let ?args : ?T.TransferRevertArgs = from_candid (arg) else return undecodable();
         cancelTransfer(caller, args.transfer);
       };
+      case "ggg_sweep_resolve" {
+        let ?args : ?T.SweepResolveArgs = from_candid (arg) else return undecodable();
+        resolveSweep(caller, args);
+      };
       case "ggg_codex_install" {
         let ?source : ?T.CodexSource = from_candid (arg) else return undecodable();
         switch (source) {
@@ -2081,12 +2104,19 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public query func ggg_treasury_view(args : T.ListArgs) : async Result<T.TreasuryView> {
     switch (page(Map.values(funds), args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok({ treasury = null; tokens = []; nft_tokens = []; funds = items; next });
+      case (#Ok({ items; next })) {
+        let configured = Option.map<T.TreasuryConfig, T.Treasury>(treasuryConfig, func(config) { { id = "1"; config; debt_outstanding = 0 } });
+        #Ok({ treasury = configured; tokens = Iter.toArray(Map.values(tokens)); nft_tokens = []; funds = items; next });
+      };
     };
   };
 
+  /// The entries this realm books: those of sweeps (I-FED-7).
   public query func ggg_ledger_view(args : T.LedgerArgs) : async Result<T.LedgerPage> {
-    none(args.cursor, args.limit);
+    let wanted = func(e : T.LedgerEntry) : Bool {
+      (args.transaction == null or args.transaction == ?e.transaction) and (args.symbol == null or args.symbol == ?e.symbol) and (args.kind == null or args.kind == ?e.kind) and (args.fund == null or args.fund == e.fund) and (args.period == null or args.period == e.period);
+    };
+    page(Iter.filter<T.LedgerEntry>(List.values(ledgerEntries), wanted), args.cursor, args.limit);
   };
 
   public query func ggg_report_view(args : T.ReportArgs) : async Result<T.ReportPage> {
@@ -2168,14 +2198,399 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   // §10
 
   public query func ggg_quarter_directory(args : T.ListArgs) : async Result<T.QuarterDirectory> {
-    switch (none<T.Quarter>(args.cursor, args.limit)) {
+    let capital = if (isCapital()) ?Principal.toText(me()) else Option.map<Principal, Text>(myCapital, Principal.toText);
+    switch (page(Map.values(quarters), args.cursor, args.limit)) {
       case (#Err(e)) #Err(e);
-      case (#Ok({ items; next })) #Ok({ capital = null; items; next; zones = null });
+      case (#Ok({ items; next })) #Ok({ capital; items; next; zones = null; sweep = null });
     };
   };
 
   public query func ggg_join_targets(_ : ?T.JoinTargetsArgs) : async Result<T.JoinTargets> {
     #Ok({ default = null; targets = []; mode = null });
+  };
+
+  // ---- Treasury, quarters and sweeps (model §5, §10, I-FED-5 to 7). This realm is a capital once it
+  // registers a quarter, and a quarter once it joins a capital. Its money in a token is what its own
+  // account holds on the token's ledger: it keeps no running balance per fund, so a sweep rule's fund
+  // holds all of it. It sweeps only when quarter_sweep asks, after asking its capital for the rules.
+
+  let tokens = Map.empty<Text, T.Token>();
+  var treasuryConfig : ?T.TreasuryConfig = null;
+  let quarters = Map.empty<Text, T.Quarter>();
+  var myCapital : ?Principal = null;
+  // The sweep rules quarter_sync last returned, on a quarter.
+  var sweepConfig : ?T.SweepConfig = null;
+  // This quarter's sweeps by id; on a capital, each quarter's as `<quarter>/<id>`.
+  let sweeps = Map.empty<Text, T.Sweep>();
+  var nextSweep = 1;
+  let ledgerEntries = List.empty<T.LedgerEntry>();
+  var nextTransaction = 1;
+  let DAY : T.Timestamp = 24 * 3600 * 1_000_000_000;
+  // A sweep is sent again only this long after it was recorded: an hour inside the 24-hour window in
+  // which an ICRC-1 ledger recognises a repeat (I-FED-6).
+  let RESEND_LIMIT : T.Timestamp = 23 * 3600 * 1_000_000_000;
+  let DEFAULT_TREASURY : T.TreasuryConfig = { epoch = DAY; anchor_month = 1; source_fund = ""; auto_allocate = false; sweep = [] };
+
+  type Ledger = actor {
+    icrc1_balance_of : shared query T.Account -> async Nat;
+    icrc1_transfer : shared TransferArg -> async { #Ok : Nat; #Err : TransferError };
+  };
+  type TransferArg = { from_subaccount : ?Blob; to : T.Account; amount : Nat; fee : ?Nat; memo : ?Blob; created_at_time : ?Nat64 };
+  type TransferError = {
+    #BadFee : { expected_fee : Nat };
+    #BadBurn : { min_burn_amount : Nat };
+    #InsufficientFunds : { balance : Nat };
+    #TooOld;
+    #CreatedInFuture : { ledger_time : Nat64 };
+    #Duplicate : { duplicate_of : Nat };
+    #TemporarilyUnavailable;
+    #GenericError : { error_code : Nat; message : Text };
+  };
+  /// What a quarter calls on its capital.
+  type Capital = actor {
+    ggg_quarter_sync : shared () -> async Result<T.QuarterDirectory>;
+    ggg_quarter_sweep_report : shared T.Sweep -> async Result<T.Sweep>;
+  };
+  func ledgerOf(token : T.Token) : Ledger = actor (Principal.toText(token.ledger));
+  func capitalAt(p : Principal) : Capital = actor (Principal.toText(p));
+
+  func isCapital() : Bool = Map.size(quarters) > 0;
+  func treasury() : T.TreasuryConfig = switch (treasuryConfig) { case (?c) c; case null DEFAULT_TREASURY };
+  func epochOf(t : T.Timestamp) : T.Timestamp { let e = treasury().epoch; if (e == 0) t else t - t % e };
+
+  /// Governed by the root, whose direct policy applies it at once. Only a capital sets sweep rules.
+  public shared ({ caller }) func ggg_treasury_configure(args : T.TreasuryConfigureArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "treasury.manage")) { case (?e) return #Err(e); case null {} };
+    switch (checkSweepRules(args.sweep)) { case (?e) return #Err(e); case null {} };
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_treasury_configure", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    govern(caller, "treasury_configure", governing, arg, "Configure the treasury", "Changes the treasury's configuration.", func() {
+      let c = treasury();
+      treasuryConfig := ?{
+        epoch = Option.get(args.epoch, c.epoch);
+        anchor_month = Option.get(args.anchor_month, c.anchor_month);
+        source_fund = Option.get(args.source_fund, c.source_fund);
+        auto_allocate = Option.get(args.auto_allocate, c.auto_allocate);
+        sweep = Option.get(args.sweep, c.sweep);
+      };
+      audit("treasury_configure", caller, #Map([]), #Text("ok"));
+      #Ok(null);
+    });
+  };
+
+  /// Sweep rules name a fund of this capital and a token it registered, one rule per quarter fund and token.
+  func checkSweepRules(rules : ?[T.SweepRule]) : ?T.GggError {
+    let ?all = rules else return null;
+    if (not isCapital()) return ?#InvalidArgument("only a capital sets sweep rules");
+    let named = Map.empty<Text, ()>();
+    for (rule in all.vals()) {
+      if (not Map.containsKey(funds, Text.compare, rule.into) or not Map.containsKey(tokens, Text.compare, rule.symbol)) return ?#NotFound;
+      let key = rule.fund # " in " # rule.symbol;
+      if (Map.containsKey(named, Text.compare, key)) return ?#InvalidArgument("two sweep rules for " # key);
+      Map.add(named, Text.compare, key, ());
+    };
+    null;
+  };
+
+  /// Governed by the root, whose direct policy applies it at once.
+  public shared ({ caller }) func ggg_token_register(args : T.TokenRegisterArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "treasury.manage")) { case (?e) return #Err(e); case null {} };
+    if (Map.containsKey(tokens, Text.compare, args.symbol)) return #Err(#Conflict("the token " # args.symbol # " is registered"));
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_token_register", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    govern(caller, "token_register", governing, arg, "Register " # args.symbol, "Registers the token " # args.symbol # ".", func() {
+      let token = { id = args.symbol; ledger = args.ledger; indexer = args.indexer; decimals = Option.get(args.decimals, 8 : Nat8); fee = Option.get(args.fee, 0) };
+      Map.add(tokens, Text.compare, args.symbol, token);
+      audit("token_register", caller, #Map([("symbol", #Text(args.symbol))]), #Text(args.symbol));
+      #Ok(?args.symbol);
+    });
+  };
+
+  /// Governed by the root, whose direct policy applies it at once. A quarter registers no quarters.
+  public shared ({ caller }) func ggg_quarter_register(args : T.QuarterRegisterArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "quarter.register")) { case (?e) return #Err(e); case null {} };
+    let id = Principal.toText(args.canister);
+    if (myCapital != null) return #Err(#Conflict("a quarter registers no quarters"));
+    if (Map.containsKey(quarters, Text.compare, id)) return #Err(#Conflict("the quarter " # id # " is registered"));
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_quarter_register", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    govern(caller, "quarter_register", governing, arg, "Register quarter " # id, "Registers the quarter " # id # ".", func() {
+      let quarter : T.Quarter = {
+        id;
+        name = Option.get(args.name, id);
+        index = Map.size(quarters);
+        status = #Active;
+        population = 0;
+        codex_id = null;
+        codex_version = null;
+        compliance = #Unknown;
+        last_sync = null;
+        last_activity_at = null;
+      };
+      Map.add(quarters, Text.compare, id, quarter);
+      audit("quarter_register", caller, #Map([("quarter", #Text(id))]), #Text(id));
+      #Ok(?id);
+    });
+  };
+
+  /// Governed by the root, whose direct policy applies it at once.
+  public shared ({ caller }) func ggg_quarter_join_federation(args : T.JoinFederationArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "quarter.join_federation")) { case (?e) return #Err(e); case null {} };
+    if (myCapital != null or isCapital()) return #Err(#Conflict("this realm is in a federation already"));
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_quarter_join_federation", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    govern(caller, "quarter_join_federation", governing, arg, "Join a federation", "Joins the federation of " # Principal.toText(args.capital) # ".", func() {
+      myCapital := ?args.capital;
+      audit("quarter_join_federation", caller, #Map([("capital", #Text(Principal.toText(args.capital)))]), #Text("ok"));
+      #Ok(null);
+    });
+  };
+
+  func callingQuarter(caller : Principal) : ?T.Quarter = Map.get(quarters, Text.compare, Principal.toText(caller));
+
+  func notAQuarter(caller : Principal) : T.GggError {
+    if (Principal.isAnonymous(caller)) #Unauthenticated else #Forbidden({ permission = ?"quarter.sync"; message = "Only a registered quarter calls this." });
+  };
+
+  /// From a registered quarter (I-FED-4): the directory, no zones, and the sweep rules with the account
+  /// that receives sweeps.
+  public shared ({ caller }) func ggg_quarter_sync() : async Result<T.QuarterDirectory> {
+    let ?quarter = callingQuarter(caller) else return #Err(notAQuarter(caller));
+    Map.add(quarters, Text.compare, quarter.id, { quarter with last_sync = ?now() });
+    #Ok({
+      capital = ?Principal.toText(me());
+      items = Iter.toArray(Map.values(quarters));
+      next = null;
+      zones = ?[];
+      sweep = ?{ to = { owner = me(); subaccount = null }; rules = treasury().sweep };
+    });
+  };
+
+  /// Sweeps now (I-FED-5). It asks the capital for the rules first, and keeps the last ones it had when
+  /// the capital does not answer; then, rule by rule, it reports the sweeps the capital has not booked,
+  /// sends again a sweep whose outcome is unknown, or records and sends this epoch's.
+  public shared ({ caller }) func ggg_quarter_sweep(args : T.QuarterSweepArgs) : async Result<[T.Sweep]> {
+    switch (requireMember(caller, "treasury.manage")) { case (?e) return #Err(e); case null {} };
+    let ?capital = myCapital else return #Err(#Conflict("only a quarter sweeps"));
+    let synced = try { ?(await (with timeout = CALL_TIMEOUT) capitalAt(capital).ggg_quarter_sync()) } catch (_) { null };
+    switch (synced) { case (?#Ok({ sweep = ?config })) sweepConfig := ?config; case _ {} };
+    let ?config = sweepConfig else return #Ok([]);
+    let touched = List.empty<T.Sweep>();
+    for (rule in config.rules.vals()) {
+      if (args.fund == null or args.fund == ?rule.fund) {
+        List.addAll(touched, (await* sweepRule(capital, config.to, rule)).vals());
+      };
+    };
+    audit("quarter_sweep", caller, #Map([]), #Nat(List.size(touched)));
+    #Ok(List.toArray(touched));
+  };
+
+  func ofRule(s : T.Sweep, rule : T.SweepRule) : Bool = s.quarter == Principal.toText(me()) and s.fund == rule.fund and s.symbol == rule.symbol;
+
+  func sweepsOf(rule : T.SweepRule, wanted : T.Sweep -> Bool) : [T.Sweep] {
+    Iter.toArray(Iter.filter<T.Sweep>(Map.values(sweeps), func(s) { ofRule(s, rule) and wanted(s) }));
+  };
+
+  /// A sweep that stops the rule's next one: its outcome unknown, or waiting for a person (I-FED-5).
+  func blocking(s : T.Sweep) : Bool = s.status == #Sending or s.status == #NeedsCheck;
+
+  func sweepRule(capital : Principal, to : T.Account, rule : T.SweepRule) : async* [T.Sweep] {
+    let touched = List.empty<T.Sweep>();
+    for (sent in sweepsOf(rule, func(s) { s.status == #Sent }).vals()) List.add(touched, await* report(capital, sent));
+    let open = sweepsOf(rule, blocking);
+    if (open.size() > 0) {
+      List.add(touched, await* attempt(capital, open[0]));
+      return List.toArray(touched);
+    };
+    switch (await* newSweep(to, rule)) {
+      case (?recorded) List.add(touched, await* attempt(capital, recorded));
+      case null {};
+    };
+    List.toArray(touched);
+  };
+
+  /// This epoch's sweep of the rule, recorded before any money moves: the fund's money less what it keeps
+  /// and the fee, when that is more than nothing.
+  func newSweep(to : T.Account, rule : T.SweepRule) : async* ?T.Sweep {
+    let epoch = epochOf(now());
+    let sweptAlready = func() : Bool { sweepsOf(rule, func(s) { s.epoch == epoch or blocking(s) }).size() > 0 };
+    if (sweptAlready() or not Map.containsKey(funds, Text.compare, rule.fund)) return null;
+    let ?token = Map.get(tokens, Text.compare, rule.symbol) else return null;
+    let held = try { await (with timeout = CALL_TIMEOUT) ledgerOf(token).icrc1_balance_of({ owner = me(); subaccount = null }) } catch (_) { return null };
+    // Another call may have recorded this epoch's sweep while the balance was read.
+    if (sweptAlready() or held <= rule.keep + token.fee) return null;
+    let id = "SW-" # Nat.toText(nextSweep);
+    nextSweep += 1;
+    let sweep : T.Sweep = {
+      id;
+      quarter = Principal.toText(me());
+      fund = rule.fund;
+      symbol = rule.symbol;
+      into = rule.into;
+      to;
+      epoch;
+      amount = held - rule.keep - token.fee : Nat;
+      fee = token.fee;
+      created_at = now();
+      block = null;
+      status = #Sending;
+      reason = null;
+      reported_at = null;
+    };
+    ?store(sweep);
+  };
+
+  func store(s : T.Sweep) : T.Sweep {
+    Map.add(sweeps, Text.compare, s.id, s);
+    s;
+  };
+
+  /// The sweep as it stands now: a call that awaited may find it moved on by another.
+  func latest(s : T.Sweep) : T.Sweep = switch (Map.get(sweeps, Text.compare, s.id)) { case (?now) now; case null s };
+
+  /// Sends a Sending sweep's transfer, the same one every time (I-FED-5), and only until RESEND_LIMIT
+  /// after it was recorded (I-FED-6); a sweep the ledger gave a block is booked and reported.
+  func attempt(capital : Principal, s : T.Sweep) : async* T.Sweep {
+    if (s.status != #Sending) return s;
+    if (now() >= s.created_at + RESEND_LIMIT) return store({ s with status = #NeedsCheck });
+    let ?token = Map.get(tokens, Text.compare, s.symbol) else return s;
+    let transfer = { from_subaccount = null; to = s.to; amount = s.amount; fee = ?s.fee; memo = ?Text.encodeUtf8(s.id); created_at_time = ?s.created_at };
+    let answer = try { ?(await (with timeout = CALL_TIMEOUT) ledgerOf(token).icrc1_transfer(transfer)) } catch (_) { null };
+    let current = latest(s);
+    if (current.status != #Sending) return current;
+    switch (answer) {
+      case null current; // the outcome is unknown: the same transfer is sent again at the next sweep
+      case (?#Ok(block)) await* sent(capital, current, block);
+      case (?#Err(#Duplicate({ duplicate_of }))) await* sent(capital, current, duplicate_of);
+      case (?#Err(#TooOld)) store({ current with status = #NeedsCheck });
+      case (?#Err(e)) store({ current with status = #Failed; reason = ?debug_show (e) });
+    };
+  };
+
+  func sent(capital : Principal, s : T.Sweep, block : Nat) : async* T.Sweep {
+    let recorded = store({ s with status = #Sent; block = ?block });
+    bookSweepOut(recorded);
+    await* report(capital, recorded);
+  };
+
+  /// Tells the capital about a Sent sweep; it is Booked once the capital answers that it booked it.
+  func report(capital : Principal, s : T.Sweep) : async* T.Sweep {
+    let answer = try { ?(await (with timeout = CALL_TIMEOUT) capitalAt(capital).ggg_quarter_sweep_report(s)) } catch (_) { null };
+    let current = latest(s);
+    switch (answer) {
+      case (?#Ok(_)) { if (current.status == #Sent) store({ current with status = #Booked; reported_at = ?now() }) else current };
+      case _ current;
+    };
+  };
+
+  /// From a registered quarter: books a Sent sweep into its `into` fund, once (I-FED-7).
+  public shared ({ caller }) func ggg_quarter_sweep_report(s : T.Sweep) : async Result<T.Sweep> {
+    let ?quarter = callingQuarter(caller) else return #Err(notAQuarter(caller));
+    if (s.status != #Sent or s.block == null) return #Err(#InvalidArgument("only a sent sweep, with its block, is reported"));
+    let booked = { s with id = quarter.id # "/" # s.id; quarter = quarter.id; status = #Booked; reported_at = ?now() };
+    switch (Map.get(sweeps, Text.compare, booked.id)) {
+      case (?earlier) {
+        if (sameMove(earlier, booked)) return #Ok(earlier);
+        return #Err(#Conflict("the sweep " # booked.id # " was booked with other figures"));
+      };
+      case null {};
+    };
+    if (not Map.containsKey(funds, Text.compare, s.into)) return #Err(#NotFound);
+    ignore store(booked);
+    bookSweepIn(booked);
+    audit("quarter_sweep_report", caller, #Map([("sweep", #Text(booked.id))]), #Text(booked.id));
+    #Ok(booked);
+  };
+
+  func sameMove(a : T.Sweep, b : T.Sweep) : Bool {
+    a.fund == b.fund and a.symbol == b.symbol and a.into == b.into and a.to == b.to and a.epoch == b.epoch and a.amount == b.amount and a.fee == b.fee and a.created_at == b.created_at and a.block == b.block;
+  };
+
+  /// Governed by the owner of the swept fund. Settles a NeedsCheck sweep from what the ledger shows (I-FED-6).
+  public shared ({ caller }) func ggg_sweep_resolve(args : T.SweepResolveArgs) : async Result<T.Governed> {
+    switch (requireMember(caller, "treasury.manage")) { case (?e) return #Err(e); case null {} };
+    switch (needingCheck(args.sweep)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    let arg = to_candid (args);
+    let governing = switch (governingDepartment("ggg_sweep_resolve", arg)) { case (#Err(e)) return #Err(e); case (#Ok(g)) g };
+    govern(caller, "sweep_resolve", governing, arg, "Resolve sweep " # args.sweep, "Settles the sweep " # args.sweep # " from what the ledger shows.", func() {
+      resolveSweep(caller, args);
+    });
+  };
+
+  func needingCheck(id : Text) : Result<T.Sweep> {
+    let ?s = Map.get(sweeps, Text.compare, id) else return #Err(#NotFound);
+    if (s.status != #NeedsCheck) return #Err(#Conflict("only a sweep that needs checking is resolved"));
+    #Ok(s);
+  };
+
+  /// A block found makes the sweep Sent, booked here and reported at the next sweep; none makes it Failed.
+  func resolveSweep(caller : Principal, args : T.SweepResolveArgs) : Result<?Text> {
+    let s = switch (needingCheck(args.sweep)) { case (#Err(e)) return #Err(e); case (#Ok(s)) s };
+    switch (args.block) {
+      case (?block) bookSweepOut(store({ s with status = #Sent; block = ?block }));
+      case null ignore store({ s with status = #Failed; reason = ?"resolved: the ledger holds no such transfer" });
+    };
+    audit("sweep_resolve", caller, #Map([("sweep", #Text(s.id))]), #Text(s.id));
+    #Ok(null);
+  };
+
+  public query func ggg_sweep_list(args : T.SweepListArgs) : async Result<T.SweepPage> {
+    let wanted = func(s : T.Sweep) : Bool {
+      let quarterMatches = switch (args.quarter) { case (?q) s.quarter == q; case null true };
+      let statusMatches = switch (args.status) { case (?st) s.status == st; case null true };
+      quarterMatches and statusMatches;
+    };
+    page(Iter.filter<T.Sweep>(Map.values(sweeps), wanted), args.cursor, args.limit);
+  };
+
+  // ---- The books of sweeps (I-FED-7): money moved between the realm's quarter and its capital, neither
+  // revenue nor spending, in the reserved category `sweep`, with the ledger's fee in `ledger_fee`.
+
+  /// On the quarter: `amount` and the fee out of the fund's cash, to `sweep` and `ledger_fee`.
+  func bookSweepOut(s : T.Sweep) {
+    let tx = newTransaction();
+    book(tx, s, s.fund, #Asset, "cash", 0, s.amount + s.fee, s.id);
+    book(tx, s, s.fund, #Equity, SWEEP_CATEGORY, s.amount, 0, s.id);
+    book(tx, s, s.fund, #Expense, FEE_CATEGORY, s.fee, 0, s.id);
+  };
+
+  /// On the capital: `amount` into the `into` fund's cash, from `sweep`.
+  func bookSweepIn(s : T.Sweep) {
+    let tx = newTransaction();
+    book(tx, s, s.into, #Asset, "cash", s.amount, 0, s.id);
+    book(tx, s, s.into, #Equity, SWEEP_CATEGORY, 0, s.amount, s.id);
+  };
+
+  func newTransaction() : Text {
+    let tx = "TX-" # Nat.toText(nextTransaction);
+    nextTransaction += 1;
+    tx;
+  };
+
+  func book(transaction : Text, s : T.Sweep, fund : Text, kind : T.LedgerKind, category : Text, debit : T.Money, credit : T.Money, sweep : Text) {
+    if (debit == 0 and credit == 0) return;
+    List.add(ledgerEntries, {
+      id = "LE-" # Nat.toText(List.size(ledgerEntries) + 1);
+      transaction;
+      kind;
+      category;
+      debit;
+      credit;
+      symbol = s.symbol;
+      fund = ?fund;
+      period = currentPeriod();
+      transfer = null;
+      invoice = null;
+      user = null;
+      organization = null;
+      contract = null;
+      case_ = null;
+      penalty = null;
+      appeal = null;
+      sweep = ?sweep;
+      at = now();
+      description = "Sweep " # sweep # " (block " # debug_show (s.block) # ")";
+    });
   };
 
   // ---- Links between realms (I-NEST-1 to 3)
@@ -2727,8 +3142,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       treasury = null;
       accounting_currency = null;
       accounting_currency_decimals = null;
-      is_quarter = false;
-      is_capital = false;
+      is_quarter = myCapital != null;
+      is_capital = isCapital();
       federation_realm_id = null;
       federation_codex = null;
       quarter_join_mode = null;
@@ -2791,13 +3206,11 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_organization_set_status(_ : T.OrganizationStatusArgs) : async Result<T.Governed> { nobody(caller, "organization.delete") };
 
   // §5
-  public shared ({ caller }) func ggg_treasury_configure(_ : T.TreasuryConfigureArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
-  public shared ({ caller }) func ggg_token_register(_ : T.TokenRegisterArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
-  public shared ({ caller }) func ggg_nft_token_register(_ : T.NFTTokenRegisterArgs) : async Result<T.Governed> { nobody(caller, "treasury.manage") };
-  public shared ({ caller }) func ggg_invoice_create(_ : T.InvoiceCreateArgs) : async Result<T.InvoiceCreated> { nobody(caller, "treasury.manage") };
+  public shared ({ caller }) func ggg_nft_token_register(_ : T.NFTTokenRegisterArgs) : async Result<T.Governed> { notHere(caller, "treasury.manage", NO_INVOICING) };
+  public shared ({ caller }) func ggg_invoice_create(_ : T.InvoiceCreateArgs) : async Result<T.InvoiceCreated> { notHere(caller, "treasury.manage", NO_INVOICING) };
   public shared ({ caller }) func ggg_invoice_check(_ : T.InvoiceCheckArgs) : async Result<T.Invoice> { nobody(caller, "self.invoice_refresh") };
   public shared ({ caller }) func ggg_invoice_refresh(_ : T.InvoiceRefreshArgs) : async Result<T.InvoicePage> { nobody(caller, "invoice.refresh") };
-  public shared ({ caller }) func ggg_invoice_item_add(_ : T.InvoiceItemAddArgs) : async Result<T.Invoice> { nobody(caller, "treasury.manage") };
+  public shared ({ caller }) func ggg_invoice_item_add(_ : T.InvoiceItemAddArgs) : async Result<T.Invoice> { notHere(caller, "treasury.manage", NO_INVOICING) };
   public shared ({ caller }) func ggg_period_close(_ : Text) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_budget_amend(_ : T.BudgetAmendArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_allocation_rule_draft(_ : T.AllocationRuleDraftArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
@@ -2805,7 +3218,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_payroll_run(_ : T.PayrollRunArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_loan_create(_ : T.LoanCreateArgs) : async Result<T.Governed> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
   public shared ({ caller }) func ggg_loan_repay(_ : T.LoanRepayArgs) : async Result<T.Loan> { notHere(caller, "org.manage_budget", NO_MORE_BUDGETING) };
-  public shared ({ caller }) func ggg_report_issue(_ : T.ReportIssueArgs) : async Result<T.FinancialReport> { nobody(caller, "treasury.manage") };
+  public shared ({ caller }) func ggg_report_issue(_ : T.ReportIssueArgs) : async Result<T.FinancialReport> { notHere(caller, "treasury.manage", NO_INVOICING) };
   public shared ({ caller }) func ggg_tax_policy_draft(_ : T.TaxPolicyDraftArgs) : async Result<T.Governed> { nobody(caller, "tax.manage") };
   public shared ({ caller }) func ggg_tax_policy_propose(_ : Text) : async Result<T.Governed> { nobody(caller, "tax.manage") };
   public shared ({ caller }) func ggg_tax_assess(_ : T.TaxAssessArgs) : async Result<T.TaxAssessPage> { nobody(caller, "tax.assess") };
@@ -2875,17 +3288,14 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_tender_notice(_ : T.TenderNoticeArgs) : async Result<T.Tender> { nobody(caller, "tender.manage") };
 
   // §10
-  public shared ({ caller }) func ggg_quarter_register(_ : T.QuarterRegisterArgs) : async Result<T.Governed> { nobody(caller, "quarter.register") };
-  public shared ({ caller }) func ggg_quarter_deregister(_ : Text) : async Result<T.Governed> { nobody(caller, "quarter.register") };
-  public shared ({ caller }) func ggg_quarter_configure(_ : T.QuarterConfigureArgs) : async Result<T.Governed> { nobody(caller, "quarter.register") };
+  public shared ({ caller }) func ggg_quarter_deregister(_ : Text) : async Result<T.Governed> { notHere(caller, "quarter.register", NO_QUARTER_CHANGES) };
+  public shared ({ caller }) func ggg_quarter_configure(_ : T.QuarterConfigureArgs) : async Result<T.Governed> { notHere(caller, "quarter.register", NO_QUARTER_CHANGES) };
   public shared ({ caller }) func ggg_quarter_secede() : async Result<T.Governed> { nobody(caller, "quarter.secede") };
-  public shared ({ caller }) func ggg_quarter_join_federation(_ : T.JoinFederationArgs) : async Result<T.Governed> { nobody(caller, "quarter.join_federation") };
   public shared ({ caller }) func ggg_self_change_quarter(_ : T.ChangeQuarterArgs) : async Result<T.Forward> { nobody(caller, "self.change_quarter") };
   public shared ({ caller }) func ggg_federal_vote_propose(_ : T.FederalVoteProposeArgs) : async Result<T.FederalVote> { nobody(caller, "federal_vote.propose") };
   public shared ({ caller }) func ggg_federal_vote_cancel(_ : Text) : async Result<T.Governed> { nobody(caller, "federal_vote.manage") };
   public shared func ggg_federal_vote_finalize(_ : Text) : async Result<T.FederalVote> { #Err(#NotFound) };
   public shared ({ caller }) func ggg_federation_message(_ : T.FederationMessageArgs) : async Result<?T.Value> { nobody(caller, "quarter.sync") };
-  public shared ({ caller }) func ggg_quarter_sync() : async Result<T.QuarterDirectory> { nobody(caller, "quarter.sync") };
   public shared ({ caller }) func ggg_quarter_report(_ : T.QuarterReportArgs) : async Result<T.QuarterReport> { nobody(caller, "quarter.sync") };
 
   // §11

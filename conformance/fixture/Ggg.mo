@@ -191,7 +191,7 @@ module {
     proposal : ?Text;
   };
   public type BudgetAmendArgs = { planned : Money; budget : Text };
-  /// `category` never names `ledger_fee`, which the GOS books itself (InvalidArgument).
+  /// `category` never names `ledger_fee` or `sweep`, entries the GOS books itself (InvalidArgument).
   public type BudgetDraftArgs = {
     period : Text;
     fund : Text;
@@ -2115,12 +2115,13 @@ module {
   /// One line of the realm's own description of the call.
   public type SummaryLine = { value : Text; label_ : Text };
   /// One move of one fund's money from a quarter to the capital. The ledger transfer's memo is `id` (UTF-8) and
-  /// its created_at_time is `created_at`, both fixed when the sweep is recorded (I-FED-5). On the capital `id` is
+  /// its created_at_time is `created_at`, both fixed when the sweep is recorded, like `to`, `amount` and `fee` (I-FED-5). On the capital `id` is
   /// `<quarter>/<id>`. `epoch` is the start of the quarter's treasury epoch it belongs to; `block` the ledger's
   /// block index; `amount` reaches the capital and `fee`, the ledger's, is paid by the quarter; `reason` is the
   /// ledger's error when it failed.
   public type Sweep = {
     id : Text;
+    to : Account;
     fee : Money;
     status : SweepStatus;
     fund : Text;
@@ -2388,7 +2389,7 @@ module {
     payroll : ?Text;
   };
   /// The fund must also cover the ledger fee. `symbol` defaults to the accounting currency. `category`
-  /// never names `ledger_fee`, the fee's own entry, which the GOS books itself (InvalidArgument).
+  /// never names `ledger_fee` or `sweep`, entries the GOS books itself (InvalidArgument).
   public type TransferCreateArgs = {
     to : Ref;
     contract : ?Text;

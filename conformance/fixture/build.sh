@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds fixture/ggg_fixture.wasm and checks its interface against ggg.did.
+# Builds fixture/ggg_fixture.wasm and checks its interface against ggg.did, and the test ledger fixture/ledger.wasm.
 # MOC, MOTOKO_CORE and DIDC default to the copies that ship with dfx and a didc on PATH.
 set -eu
 cd "$(dirname "$0")"
@@ -12,6 +12,7 @@ didc="${DIDC:-didc}"
 "$moc" --package core "$core" --idl -o ggg_fixture.did main.mo
 "$moc" --package core "$core" -o ggg_fixture.wasm main.mo
 "$moc" --package core "$core" -o broken.wasm broken.mo
+"$moc" --package core "$core" -o ledger.wasm ledger.mo
 
 if command -v "$didc" >/dev/null 2>&1; then
   "$didc" check ggg_fixture.did ../../ggg.did

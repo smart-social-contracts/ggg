@@ -263,6 +263,7 @@ function listTable(actor) {
     list('ggg_loan_list', () => (a) => actor.ggg_loan_list({ ...a, status: [] })),
     list('ggg_budget_list', () => (a) => actor.ggg_budget_list({ ...a, fund: [], period: [] })),
     list('ggg_transfer_list', () => (a) => actor.ggg_transfer_list({ ...a, fund: [], status: [] })),
+    list('ggg_sweep_list', () => (a) => actor.ggg_sweep_list({ ...a, quarter: [], status: [] })),
     list('ggg_my_invoices', () => (a) => actor.ggg_my_invoices({ ...a, on_behalf_of: [] })),
     list('ggg_land_list', () => (a) => actor.ggg_land_list({ ...a, owner: [] })),
     list('ggg_land_map (zones)', () => (a) => actor.ggg_land_map({ ...a, x: 0n, y: 0n, w: 32n, h: 32n }), 'zones'),
@@ -463,6 +464,16 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     for (const t of walked.items) {
       assert(tag(t.status) === 'Scheduled', `transfer ${t.id} is ${tag(t.status)}, listed as Scheduled`);
       assert(opt(t.due_at) !== null, `scheduled transfer ${t.id} has no due date`);
+    }
+    return detail;
+  });
+
+  await check('GGG', 'S1', 'a sweep that reached the ledger names its block, and one that did not names none', async () => {
+    const walked = await walk((a) => reader.ggg_sweep_list({ ...a, quarter: [], status: [] }), (s) => s.id);
+    const detail = checkWalk(walked, 'ggg_sweep_list');
+    for (const s of walked.items) {
+      const moved = ['Sent', 'Booked'].includes(tag(s.status));
+      assert(moved === (opt(s.block) !== null), `sweep ${s.id} is ${tag(s.status)} with block ${show(s.block)}`);
     }
     return detail;
   });
@@ -1018,6 +1029,13 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     const result = await mine.ggg_transfer_pay(UNKNOWN);
     if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not pay transfers');
     err(result, ['NotFound'], 'ggg_transfer_pay(unknown transfer)');
+  });
+
+  await check('GGG', 'W31', 'resolving an unknown sweep returns NotFound', async () => {
+    needMember();
+    const result = await mine.ggg_sweep_resolve({ sweep: UNKNOWN, block: [] });
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not resolve sweeps');
+    err(result, ['NotFound'], 'ggg_sweep_resolve(unknown sweep)');
   });
 
   await check('GGG', 'W29', 'amending an unknown contract returns NotFound', async () => {

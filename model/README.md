@@ -1104,7 +1104,7 @@ takes legislation from other realms, its sync sources, over links both sides vot
 | `Follower` | `id` (the follower's capital, as text), `capital`, `status`, `layers` (each a `ReportedLayer`), `compliance`, `population`, `reported_at` | On a sync source: a realm that takes legislation from it, with the link's status and the follower's last report. | València on CV: `active`; reported Spain's 2.4.0 and CV's 1.1.0, compliant, population 800,000, on 3 Nov |
 | `ReportedLayer` | `version`, `checksum` | One layer a follower runs, as it reports it. It names no source: the sync source finds the layer by its checksum in its own record. | Spain's 2.4.0, `sha256:…` |
 | `SweepRule` | `fund`, `symbol`, `into` → `Fund`, `keep` | On the capital, in `Treasury.config.sweep`: each quarter moves its `fund`'s money in `symbol`, all but `keep`, into the capital's fund `into` ([sweeps](#sweeps)). | Every quarter's `GENERAL` REALM into the capital's `GENERAL`, keeping 5,000 |
-| `Sweep` | `id`, `quarter`, `fund`, `symbol`, `into`, `epoch`, `amount`, `fee`, `created_at`, `block`, `status`, `reason`, `reported_at` | One move of one fund's money from a quarter to the capital, kept by both: on the quarter as `id`, on the capital as `<quarter>/<id>`. `block` is the ledger's block index; `amount` reaches the capital, `fee` is the ledger's, paid by the quarter. | North's `SW-14`: 182,400 REALM of `GENERAL` for November into the capital's `GENERAL`, block 90,113, `booked` |
+| `Sweep` | `id`, `quarter`, `fund`, `symbol`, `into`, `to`, `epoch`, `amount`, `fee`, `created_at`, `block`, `status`, `reason`, `reported_at` | One move of one fund's money from a quarter to the capital, kept by both: on the quarter as `id`, on the capital as `<quarter>/<id>`. `to` is the capital's account it is sent to and `block` the ledger's block index; `amount` reaches the capital, `fee` is the ledger's, paid by the quarter. | North's `SW-14`: 182,400 REALM of `GENERAL` for November into the capital's `GENERAL`, block 90,113, `booked` |
 
 There is no central user-to-quarter directory. A user's home quarter is found from their own client
 pointer, the quarter index, or a broadcast search, so no canister grows with the population of the
@@ -1187,9 +1187,9 @@ books hold it (`Fund.balances`), less `keep` and less the ledger's fee; when tha
 nothing is swept. Each sweep is recorded before any money moves, `sending`, with its `epoch` (the
 start of the treasury epoch it belongs to) and its `created_at`. Its ledger transfer is an ICRC-1
 `icrc1_transfer` whose `memo` is the sweep's `id` (UTF-8, at most 32 bytes) and whose
-`created_at_time` is its `created_at`, both fixed when the sweep is recorded. Every attempt sends
-exactly that transfer, so a ledger that has already applied it answers with the block it applied
-it in (`Duplicate`), and the money moves once (I-FED-5).
+`created_at_time` is its `created_at`, fixed, like its `to`, `amount` and `fee`, when the sweep is
+recorded. Every attempt sends exactly that transfer, so a ledger that has already applied it answers
+with the block it applied it in (`Duplicate`), and the money moves once (I-FED-5).
 
 - **The ledger gives a block:** the sweep is `sent`. The quarter books it and reports it to the
   capital with `quarter_sweep_report`; the capital books it into `into`, once, and the sweep is

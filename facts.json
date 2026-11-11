@@ -4998,6 +4998,18 @@
         "into": {
           "type": "text"
         },
+        "to": {
+          "type": "Account",
+          "fields": {
+            "owner": {
+              "type": "principal"
+            },
+            "subaccount": {
+              "type": "blob",
+              "optional": true
+            }
+          }
+        },
         "epoch": {
           "type": "nat64",
           "kind": "timestamp",
