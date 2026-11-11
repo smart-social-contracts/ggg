@@ -2345,6 +2345,7 @@ export const idlFactory = ({ IDL }) => {
     'id' : IDL.Text,
     'to' : Ref,
     'status' : TransferStatus,
+    'contract' : IDL.Opt(IDL.Text),
     'invoice' : IDL.Opt(IDL.Text),
     'sender' : Ref,
     'committed' : IDL.Bool,

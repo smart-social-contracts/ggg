@@ -2327,6 +2327,8 @@ module {
     id : Text;
     to : Ref;
     status : TransferStatus;
+    /// The contract it pays: the payments on a contract never exceed its value (I-FIN-11).
+    contract : ?Text;
     invoice : ?Text;
     sender : Ref;
     committed : Bool;
@@ -2343,6 +2345,8 @@ module {
   /// never names `ledger_fee`, the fee's own entry, which the GOS books itself (InvalidArgument).
   public type TransferCreateArgs = {
     to : Ref;
+    /// The contract it pays: NotFound if there is none, InvalidArgument in another symbol than the
+    /// contract's, Conflict past the contract's value (I-FIN-11).
     contract : ?Text;
     fund : Text;
     description : ?Text;
