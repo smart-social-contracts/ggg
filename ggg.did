@@ -419,6 +419,8 @@ type TreasuryConfig = record {
   anchor_month : nat8;
   source_fund : text;
   auto_allocate : bool;
+  // On a capital, what its quarters sweep into its funds (I-FED-5); empty elsewhere.
+  sweep : vec SweepRule;
 };
 
 type Treasury = record {
@@ -509,7 +511,7 @@ type AllocationRule = record {
 
 type LedgerKind = variant { Asset; Liability; Equity; Revenue; Expense };
 
-// At most one of the source references (transfer … appeal) is set.
+// At most one of the source references (transfer … sweep) is set.
 type LedgerEntry = record {
   id : text;
   transaction : text;
@@ -528,6 +530,8 @@ type LedgerEntry = record {
   case : opt text;
   penalty : opt text;
   appeal : opt text;
+  // The sweep it books (I-FED-7): its id on a quarter, `<quarter>/<id>` on the capital.
+  sweep : opt text;
   at : Timestamp;
   description : text;
 };
@@ -1600,6 +1604,8 @@ type TreasuryConfigureArgs = record {
   anchor_month : opt nat8;
   source_fund : opt text;
   auto_allocate : opt bool;
+  // Replaces the capital's sweep rules; InvalidArgument on a realm that is not a capital (I-FED-5).
+  sweep : opt vec SweepRule;
 };
 type TokenRegisterArgs = record {
   symbol : text;
@@ -1959,7 +1965,49 @@ type TenderNoticeArgs = record { tender : text; journal : text; ref : opt text; 
 
 // `zones` is filled by quarter_sync alone: the zones the realm defines, as zone_define takes them, for the quarter to
 // define the same (the capital is where the realm's codex defines its districts). Null in quarter_directory.
-type QuarterDirectory = record { capital : opt text; items : vec Quarter; next : opt text; zones : opt vec ZoneDefineArgs };
+// `sweep` too is filled by quarter_sync alone: the capital's sweep rules, which the quarter keeps (I-FED-5).
+type QuarterDirectory = record {
+  capital : opt text;
+  items : vec Quarter;
+  next : opt text;
+  zones : opt vec ZoneDefineArgs;
+  sweep : opt SweepConfig;
+};
+
+// A quarter moves its `fund`'s money in `symbol`, all but `keep`, into the capital's fund `into`.
+type SweepRule = record { fund : text; symbol : text; into : text; keep : Money };
+// The rules, and the capital's account that receives every sweep.
+type SweepConfig = record { to : Account; rules : vec SweepRule };
+// Sending: in flight, or its outcome unknown; Sent: the ledger gave its block; Booked: the capital booked it;
+// Failed: the ledger refused it, nothing moved; NeedsCheck: no answer within the ledger's deduplication window,
+// never sent again (I-FED-6). On the capital a sweep is Booked.
+type SweepStatus = variant { Sending; Sent; Booked; Failed; NeedsCheck };
+// One move of one fund's money from a quarter to the capital. The ledger transfer's memo is `id` (UTF-8) and
+// its created_at_time is `created_at`, both fixed when the sweep is recorded (I-FED-5). On the capital `id` is
+// `<quarter>/<id>`. `epoch` is the start of the quarter's treasury epoch it belongs to; `block` the ledger's
+// block index; `amount` reaches the capital and `fee`, the ledger's, is paid by the quarter; `reason` is the
+// ledger's error when it failed.
+type Sweep = record {
+  id : text;
+  quarter : text;
+  fund : text;
+  symbol : text;
+  into : text;
+  epoch : Timestamp;
+  amount : Money;
+  fee : Money;
+  created_at : Timestamp;
+  block : opt nat;
+  status : SweepStatus;
+  reason : opt text;
+  reported_at : opt Timestamp;
+};
+type SweepPage = record { items : vec Sweep; next : opt text };
+// Sweeps now, by the rules `quarter_sync` last returned: the rule of `fund`, or every rule.
+type QuarterSweepArgs = record { fund : opt text };
+// Settles a NeedsCheck sweep: the block found on the ledger makes it Sent, none makes it Failed (I-FED-6).
+type SweepResolveArgs = record { sweep : text; block : opt nat };
+type SweepListArgs = record { cursor : opt text; limit : opt nat32; quarter : opt text; status : opt SweepStatus };
 // The zone a joiner states as their home, which a codex may use to keep neighbours together; it places them and
 // nothing else.
 type JoinTargetsArgs = record { home_zone : opt text };
@@ -2456,6 +2504,12 @@ service : {
   ggg_join_targets : (opt JoinTargetsArgs) -> (variant { Ok : JoinTargets; Err : GggError }) query;
   ggg_quarter_sync : () -> (variant { Ok : QuarterDirectory; Err : GggError });
   ggg_quarter_report : (QuarterReportArgs) -> (variant { Ok : QuarterReport; Err : GggError });
+  // The sweeps this call recorded, sent or reported.
+  ggg_quarter_sweep : (QuarterSweepArgs) -> (variant { Ok : vec Sweep; Err : GggError });
+  // From a registered quarter: books a Sent sweep once and returns the capital's record (I-FED-7).
+  ggg_quarter_sweep_report : (Sweep) -> (variant { Ok : Sweep; Err : GggError });
+  ggg_sweep_resolve : (SweepResolveArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_sweep_list : (SweepListArgs) -> (variant { Ok : SweepPage; Err : GggError }) query;
   ggg_quarter_register : (QuarterRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_quarter_deregister : (text) -> (variant { Ok : Governed; Err : GggError });
   ggg_quarter_configure : (QuarterConfigureArgs) -> (variant { Ok : Governed; Err : GggError });

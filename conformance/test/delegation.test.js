@@ -13,7 +13,7 @@ const GROUPS = ['see', 'profile', 'vote', 'propose', 'filings', 'justice', 'mone
 const DAY = 24 * 3600;
 const YEAR = 365 * DAY;
 // Calls between canisters: never a member's act.
-const BETWEEN_CANISTERS = ['quarter_sync', 'quarter_report', 'federation_message', 'link_notify', 'follower_report'];
+const BETWEEN_CANISTERS = ['quarter_sync', 'quarter_report', 'quarter_sweep_report', 'federation_message', 'link_notify', 'follower_report'];
 // The reads of third parties' personal data: the only reads that ask each time.
 const CONFIRM_READS = ['attribute_pending_list'];
 

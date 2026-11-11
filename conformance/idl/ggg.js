@@ -1307,6 +1307,7 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Opt(IDL.Principal),
     'description' : IDL.Text,
     'credit' : Money,
+    'sweep' : IDL.Opt(IDL.Text),
     'appeal' : IDL.Opt(IDL.Text),
     'category' : IDL.Text,
     'organization' : IDL.Opt(IDL.Text),
@@ -1854,6 +1855,16 @@ export const idlFactory = ({ IDL }) => {
     'quarter_join_mode' : IDL.Opt(IDL.Text),
     'welcome_message' : IDL.Opt(IDL.Text),
   });
+  const SweepRule = IDL.Record({
+    'fund' : IDL.Text,
+    'into' : IDL.Text,
+    'keep' : Money,
+    'symbol' : IDL.Text,
+  });
+  const SweepConfig = IDL.Record({
+    'to' : Account,
+    'rules' : IDL.Vec(SweepRule),
+  });
   const ZoneDefineArgs = IDL.Record({
     'kind' : IDL.Text,
     'name' : IDL.Text,
@@ -1873,6 +1884,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const QuarterDirectory = IDL.Record({
     'next' : IDL.Opt(IDL.Text),
+    'sweep' : IDL.Opt(SweepConfig),
     'zones' : IDL.Opt(IDL.Vec(ZoneDefineArgs)),
     'capital' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(Quarter),
@@ -1913,6 +1925,29 @@ export const idlFactory = ({ IDL }) => {
   const QuarterReport = IDL.Record({
     'quarter' : IDL.Text,
     'drifting' : IDL.Bool,
+  });
+  const QuarterSweepArgs = IDL.Record({ 'fund' : IDL.Opt(IDL.Text) });
+  const SweepStatus = IDL.Variant({
+    'Failed' : IDL.Null,
+    'Sent' : IDL.Null,
+    'NeedsCheck' : IDL.Null,
+    'Sending' : IDL.Null,
+    'Booked' : IDL.Null,
+  });
+  const Sweep = IDL.Record({
+    'id' : IDL.Text,
+    'fee' : Money,
+    'status' : SweepStatus,
+    'fund' : IDL.Text,
+    'into' : IDL.Text,
+    'quarter' : IDL.Text,
+    'created_at' : Timestamp,
+    'epoch' : Timestamp,
+    'reported_at' : IDL.Opt(Timestamp),
+    'block' : IDL.Opt(IDL.Nat),
+    'amount' : Money,
+    'symbol' : IDL.Text,
+    'reason' : IDL.Opt(IDL.Text),
   });
   const ReadForArgs = IDL.Record({
     'arg' : IDL.Vec(IDL.Nat8),
@@ -2135,6 +2170,20 @@ export const idlFactory = ({ IDL }) => {
     'Realm' : RealmConfigureArgs,
     'Branding' : BrandingArgs,
     'Tokens' : TokensArgs,
+  });
+  const SweepListArgs = IDL.Record({
+    'status' : IDL.Opt(SweepStatus),
+    'cursor' : IDL.Opt(IDL.Text),
+    'quarter' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+  });
+  const SweepPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Sweep),
+  });
+  const SweepResolveArgs = IDL.Record({
+    'sweep' : IDL.Text,
+    'block' : IDL.Opt(IDL.Nat),
   });
   const SyncSourceAddArgs = IDL.Record({
     'source' : SyncSourceRef,
@@ -2366,6 +2415,7 @@ export const idlFactory = ({ IDL }) => {
   const TreasuryConfigureArgs = IDL.Record({
     'auto_allocate' : IDL.Opt(IDL.Bool),
     'epoch' : IDL.Opt(Duration),
+    'sweep' : IDL.Opt(IDL.Vec(SweepRule)),
     'source_fund' : IDL.Opt(IDL.Text),
     'anchor_month' : IDL.Opt(IDL.Nat8),
   });
@@ -2398,6 +2448,7 @@ export const idlFactory = ({ IDL }) => {
   const TreasuryConfig = IDL.Record({
     'auto_allocate' : IDL.Bool,
     'epoch' : Duration,
+    'sweep' : IDL.Vec(SweepRule),
     'source_fund' : IDL.Text,
     'anchor_month' : IDL.Nat8,
   });
@@ -3409,6 +3460,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
+    'ggg_quarter_sweep' : IDL.Func(
+        [QuarterSweepArgs],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Sweep), 'Err' : GggError })],
+        [],
+      ),
+    'ggg_quarter_sweep_report' : IDL.Func(
+        [Sweep],
+        [IDL.Variant({ 'Ok' : Sweep, 'Err' : GggError })],
+        [],
+      ),
     'ggg_quarter_sync' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : QuarterDirectory, 'Err' : GggError })],
@@ -3538,6 +3599,16 @@ export const idlFactory = ({ IDL }) => {
     'ggg_setup_step' : IDL.Func(
         [SetupStep],
         [IDL.Variant({ 'Ok' : SetupState, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_sweep_list' : IDL.Func(
+        [SweepListArgs],
+        [IDL.Variant({ 'Ok' : SweepPage, 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_sweep_resolve' : IDL.Func(
+        [SweepResolveArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
     'ggg_sync_source_add' : IDL.Func(
