@@ -395,7 +395,19 @@ type Contract = record {
   split : vec PeriodAmount;
   // The lot of the tender it was awarded under, when the tender has lots (I-PRC-5).
   lot : opt text;
+  // The framework agreement it is a call-off under, held by another body (I-PRC-6).
+  framework : opt Framework;
 };
+
+// Where a framework agreement is held: an External of this realm (a province, a ministry), or another
+// realm, by its capital (I-PRC-6).
+type FrameworkHolder = variant { External : text; Realm : principal };
+
+// A framework agreement a contract is a call-off under (I-PRC-6). `reference` is the agreement's number or
+// title where the holder keeps it, or the tender's id when the holder is a realm; 1 to 128 code points.
+// `winners` are the organizations the agreement was awarded to, at most 32, empty when the realm does not
+// know them.
+type Framework = record { holder : FrameworkHolder; reference : text; winners : vec text };
 
 // An amount for one fiscal period, named as a budget line names it; the period need not be open yet.
 type PeriodAmount = record { period : text; amount : Money };
@@ -1574,6 +1586,9 @@ type ContractCreateArgs = record {
   split : opt vec PeriodAmount;
   // The awarded lot of `tender` it is made from, named when the tender has lots (I-PRC-5).
   lot : opt text;
+  // The framework agreement it is a call-off under: an External that is not known is NotFound, a realm that
+  // is this one InvalidArgument, and so are winners none of the parties is among (I-PRC-6).
+  framework : opt Framework;
 };
 
 // Each term given replaces the contract's; absent keeps it. At least one is given (I-GOV-16).

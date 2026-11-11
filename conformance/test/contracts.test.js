@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { after, before, test } from 'node:test';
 import { IDL } from '@icp-sdk/core/candid';
 import { Ed25519KeyIdentity } from '@icp-sdk/core/identity';
+import { Principal } from '@icp-sdk/core/principal';
 import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { idlFactory } from '../idl/ggg.js';
 
@@ -15,12 +16,13 @@ const bob = Ed25519KeyIdentity.generate();
 
 let server;
 let pic;
+let canisterId;
 let as;
 
 before(async () => {
   server = await PocketIcServer.start();
   pic = await PocketIc.create(server.getUrl());
-  const canisterId = await pic.createCanister();
+  canisterId = await pic.createCanister();
   const wasm = readFileSync(new URL('../fixture/ggg_fixture.wasm', import.meta.url));
   const arg = IDL.encode([IDL.Vec(IDL.Principal), IDL.Vec(IDL.Tuple(IDL.Text, IDL.Vec(IDL.Nat8)))], [[alice.getPrincipal(), bob.getPrincipal()], []]);
   await pic.installCode({ canisterId, wasm, arg });
@@ -64,6 +66,7 @@ const create = (overrides = {}) =>
     ends_at: [JAN_2026 + 90n * DAY],
     split: [spread(['FY2026', 30_000n], ['FY2027', 20_000n])],
     lot: [],
+    framework: [],
     ...overrides,
   });
 const amendArgs = (contract, terms) => ({ contract, value: [], split: [], starts_at: [], ends_at: [], ...terms });
@@ -93,6 +96,24 @@ test('an amendment re-spreads a contract and moves its end, keeping its id, and 
   assert.deepEqual(amendment.before.ends_at, [JAN_2026 + 90n * DAY]);
   assert.deepEqual([amendment.after.split, amendment.after.ends_at], [contract.split, [later]]);
   assert.deepEqual(amendment.proposal, [], 'the root decided directly, so no proposal carried it');
+});
+
+const framework = (overrides = {}) => [{ holder: { Realm: Principal.fromText('aaaaa-aa') }, reference: 'T-12', winners: [], ...overrides }];
+
+test("a contract may be a call-off under another realm's framework, whose winners include a party (I-PRC-6)", async () => {
+  const called = ok(await create({ framework: framework({ winners: ['buildco', 'roadco'] }) }));
+  assert.equal(called.framework[0].reference, 'T-12');
+  assert.deepEqual((await detail(called.id)).contract.framework, called.framework);
+  refusedWith(await create({ framework: framework({ winners: ['roadco'] }) }), 'InvalidArgument');
+  ok(await create({ framework: framework() }));
+});
+
+test("a framework names a holder this realm knows and a reference of the right size (I-PRC-6)", async () => {
+  refusedWith(await create({ framework: framework({ holder: { External: 'province' } }) }), 'NotFound');
+  refusedWith(await create({ framework: framework({ holder: { Realm: canisterId } }) }), 'InvalidArgument');
+  refusedWith(await create({ framework: framework({ reference: '' }) }), 'InvalidArgument');
+  refusedWith(await create({ framework: framework({ reference: 'x'.repeat(129) }) }), 'InvalidArgument');
+  refusedWith(await create({ framework: framework({ winners: Array.from({ length: 33 }, (_, i) => `w${i}`) }) }), 'InvalidArgument');
 });
 
 test('a lot is named only with the tender it belongs to (I-PRC-5)', async () => {

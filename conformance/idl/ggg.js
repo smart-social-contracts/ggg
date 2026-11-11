@@ -352,6 +352,15 @@ export const idlFactory = ({ IDL }) => {
     'ends_at' : IDL.Opt(Timestamp),
     'split' : IDL.Opt(IDL.Vec(PeriodAmount)),
   });
+  const FrameworkHolder = IDL.Variant({
+    'Realm' : IDL.Principal,
+    'External' : IDL.Text,
+  });
+  const Framework = IDL.Record({
+    'reference' : IDL.Text,
+    'holder' : FrameworkHolder,
+    'winners' : IDL.Vec(IDL.Text),
+  });
   const ContractCreateArgs = IDL.Record({
     'lot' : IDL.Opt(IDL.Text),
     'title' : IDL.Text,
@@ -360,6 +369,7 @@ export const idlFactory = ({ IDL }) => {
     'value' : Money,
     'ends_at' : IDL.Opt(Timestamp),
     'kind' : IDL.Opt(IDL.Text),
+    'framework' : IDL.Opt(Framework),
     'terms_hash' : IDL.Text,
     'split' : IDL.Opt(IDL.Vec(PeriodAmount)),
     'terms_ref' : IDL.Text,
@@ -385,6 +395,7 @@ export const idlFactory = ({ IDL }) => {
     'value' : Money,
     'ends_at' : IDL.Opt(Timestamp),
     'kind' : IDL.Opt(IDL.Text),
+    'framework' : IDL.Opt(Framework),
     'terms_hash' : IDL.Text,
     'split' : IDL.Vec(PeriodAmount),
     'terms_ref' : IDL.Text,

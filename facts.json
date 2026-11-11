@@ -1783,6 +1783,36 @@
         "lot": {
           "type": "text",
           "optional": true
+        },
+        "framework": {
+          "type": "Framework",
+          "fields": {
+            "holder": {
+              "type": "FrameworkHolder",
+              "values": [
+                "External",
+                "Realm"
+              ],
+              "cases": {
+                "External": {
+                  "type": "text"
+                },
+                "Realm": {
+                  "type": "principal"
+                }
+              }
+            },
+            "reference": {
+              "type": "text"
+            },
+            "winners": {
+              "type": "vec",
+              "element": {
+                "type": "text"
+              }
+            }
+          },
+          "optional": true
         }
       },
       "lists": {

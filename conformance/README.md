@@ -71,8 +71,9 @@ path.
 - `test/contracts.test.js` runs the fixture with two members and checks contract amendments (model
   I-GOV-16, I-FIN-11): a split adds up to the value, an amendment keeps the contract's id and records
   its terms before and after with the proposal that carried it, a terminated contract is never
-  amended, payments never exceed a contract's value, no amendment sets it below what was paid, and a
-  lot is named only with a tender (I-PRC-5).
+  amended, payments never exceed a contract's value, no amendment sets it below what was paid, a lot
+  is named only with a tender (I-PRC-5), and a framework names a known holder, a reference of the
+  right size and winners that include a party (I-PRC-6).
 - `test/organizations.test.js` runs the fixture with two members and checks organization kinds (model
   I-ORG-9): `other` when none is given, changed only by the organization's admins, and a list by kind.
 - `test/spending.test.js` runs the fixture with one member and checks spending stages (model I-FIN-9,

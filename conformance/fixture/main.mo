@@ -2016,10 +2016,31 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     null;
   };
 
+  let MAX_FRAMEWORK_REFERENCE = 128; // code points
+  let MAX_FRAMEWORK_WINNERS = 32;
+
+  /// The framework a contract is a call-off under: a reference and winners of the right size, a holder this
+  /// realm knows, and, when winners are listed, one of them among the contract's parties (I-PRC-6). No
+  /// External exists here, so an External holder is never known.
+  func checkFramework(args : T.ContractCreateArgs) : ?T.GggError {
+    let ?framework = args.framework else return null;
+    let size = Text.size(framework.reference);
+    if (size == 0 or size > MAX_FRAMEWORK_REFERENCE) return ?#InvalidArgument("a framework's reference is 1 to 128 code points");
+    if (framework.winners.size() > MAX_FRAMEWORK_WINNERS) return ?#InvalidArgument("a framework lists at most 32 winners");
+    switch (framework.holder) {
+      case (#External(_)) return ?#NotFound;
+      case (#Realm(realm)) { if (realm == me()) return ?#InvalidArgument("a tender of this realm is named by the contract's tender") };
+    };
+    if (framework.winners.size() == 0) return null;
+    let isWinner = func(party : T.Ref) : Bool = party.kind == "Organization" and Array.any<Text>(framework.winners, func(w) { w == party.id });
+    if (Array.any<T.Ref>(args.parties, isWinner)) null else ?#InvalidArgument("none of the contract's parties is a winner of its framework");
+  };
+
   public shared ({ caller }) func ggg_contract_create(args : T.ContractCreateArgs) : async Result<T.Contract> {
     switch (requireMember(caller, "contract.create_under_mandate")) { case (?e) return #Err(e); case null {} };
     if (args.mandate != null or args.tender != null) return #Err(#NotFound);
     if (args.lot != null) return #Err(#InvalidArgument("a lot is named only with the tender it belongs to"));
+    switch (checkFramework(args)) { case (?e) return #Err(e); case null {} };
     if (Text.size(args.title) == 0) return #Err(#InvalidArgument("title is empty"));
     let split = switch (args.split) { case (?s) s; case null [] };
     switch (checkTerms({ value = args.value; split; starts_at = args.starts_at; ends_at = args.ends_at })) {

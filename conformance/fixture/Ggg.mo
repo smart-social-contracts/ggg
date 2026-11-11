@@ -365,6 +365,8 @@ module {
     /// What is contracted (works, supplies, services), by which procedure, and the tender it came from, which
     /// gave it its kind and procedure.
     kind : ?Text;
+    /// The framework agreement it is a call-off under, held by another body (I-PRC-6).
+    framework : ?Framework;
     terms_hash : Text;
     /// How `value` is spread over fiscal periods, each named once, adding up to it; empty when it is not
     /// spread (I-GOV-16).
@@ -402,6 +404,9 @@ module {
     value : Money;
     ends_at : ?Timestamp;
     kind : ?Text;
+    /// The framework agreement it is a call-off under: an External that is not known is NotFound, a realm that
+    /// is this one InvalidArgument, and so are winners none of the parties is among (I-PRC-6).
+    framework : ?Framework;
     terms_hash : Text;
     /// Absent means not spread over periods (I-GOV-16).
     split : ?[PeriodAmount];
@@ -936,6 +941,18 @@ module {
     origin : Text;
     moved_at : Timestamp;
   };
+  /// A framework agreement a contract is a call-off under (I-PRC-6). `reference` is the agreement's number or
+  /// title where the holder keeps it, or the tender's id when the holder is a realm; 1 to 128 code points.
+  /// `winners` are the organizations the agreement was awarded to, at most 32, empty when the realm does not
+  /// know them.
+  public type Framework = {
+    reference : Text;
+    holder : FrameworkHolder;
+    winners : [Text];
+  };
+  /// Where a framework agreement is held: an External of this realm (a province, a ministry), or another
+  /// realm, by its capital (I-PRC-6).
+  public type FrameworkHolder = { #Realm : Principal; #External : Text };
   public type FreezeArgs = {
     account : Principal;
     frozen : Bool;
