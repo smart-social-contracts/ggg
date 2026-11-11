@@ -1,6 +1,7 @@
 // Contract amendments on PocketIC (model I-GOV-16): what a contract's terms may become, what each
-// amendment records, and that a proposal carrying an amendment is named in it. The suite's W29 and G1
-// cover the refusals any GOS can show.
+// amendment records, and that a proposal carrying an amendment is named in it; and the payments on a
+// contract, which never exceed its value, so that no amendment sets it below them (I-FIN-11). The
+// suite's W29, G1 and T2 cover what any GOS can show.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, before, test } from 'node:test';
@@ -36,9 +37,10 @@ const ok = (result) => {
   if ('Err' in result) assert.fail(`expected Ok, got Err ${tag(result.Err)}: ${JSON.stringify(Object.values(result.Err)[0])}`);
   return result.Ok;
 };
-const refusedWith = (result, error) => {
+const refusedWith = (result, error, message) => {
   assert.ok('Err' in result, 'expected Err, got Ok');
   assert.equal(tag(result.Err), error);
+  if (message) assert.match(result.Err[error], message);
 };
 
 const DAY = 24n * 3600n * 1_000_000_000n;
@@ -155,6 +157,66 @@ test('a terminated contract is never amended, not by a proposal filed before it 
   refusedWith(await amend(id, { value: [40_000n], split: [[]] }), 'Conflict');
   assert.equal(await carry(proposal), 'Failed');
   assert.deepEqual((await detail(id)).amendments, []);
+});
+
+const now = async () => BigInt(await pic.getTime()) * 1_000_000n;
+
+/** A fund of the root with no budget, so a transfer from it is charged to no line. */
+const makeFund = async (fund) => ok(await as(alice).ggg_fund_create({ fund, name: [], kind: [], department: [] }));
+
+/** Pays `amount` for `contract` from `fund`, at once or, with a due date, as a scheduled transfer. */
+const payFor = (fund, contract, amount, { symbol = [], due_at = [] } = {}) =>
+  as(alice).ggg_transfer_create({
+    fund,
+    to: { kind: 'Organization', id: 'buildco' },
+    amount,
+    symbol,
+    category: [],
+    description: [],
+    contract: [contract],
+    on_behalf_of: [],
+    due_at,
+    committed: [],
+  });
+const transfersOf = async (fund) => ok(await as(alice).ggg_transfer_list({ cursor: [], limit: [], fund: [fund], status: [] })).items;
+
+test('payments on a contract never exceed its value; a scheduled one is owed and counts, a cancelled one does not', async () => {
+  const { id } = ok(await create({ value: 1_000n, split: [[]] }));
+  await makeFund('WORKS');
+  ok(await payFor('WORKS', id, 600n));
+  const due = (await now()) + 30n * DAY;
+  const owed = ok(await payFor('WORKS', id, 300n, { due_at: [due] })).Done[0];
+  refusedWith(await payFor('WORKS', id, 200n), 'Conflict', new RegExp(`contract ${id} has 100 left of its value; the transfer of 200 is 100 over`));
+
+  ok(await as(alice).ggg_transfer_revert({ transfer: owed, reason: [] }));
+  ok(await payFor('WORKS', id, 400n));
+  refusedWith(await payFor('WORKS', id, 1n), 'Conflict');
+  assert.deepEqual((await transfersOf('WORKS')).map((t) => t.contract), [[id], [id], [id]]);
+});
+
+test('a transfer for a contract names one that exists and is in its symbol', async () => {
+  const { id } = ok(await create({ value: 1_000n, split: [[]], symbol: 'USDC' }));
+  await makeFund('SCHOOLS');
+  refusedWith(await payFor('SCHOOLS', 'no-such-contract', 1n), 'NotFound');
+  refusedWith(await payFor('SCHOOLS', id, 1n), 'InvalidArgument');
+  ok(await payFor('SCHOOLS', id, 1n, { symbol: ['USDC'] }));
+});
+
+test("an amendment never sets a contract's value below what has been paid on it, not one a proposal carries later either", async () => {
+  const { id } = ok(await create({ value: 1_000n, split: [[]] }));
+  await makeFund('PARKS');
+  ok(await payFor('PARKS', id, 800n));
+  ok(await payFor('PARKS', id, 100n, { due_at: [(await now()) + 30n * DAY] }));
+  refusedWith(await amend(id, { value: [850n] }), 'Conflict', /below the 900 paid on the contract/);
+  ok(await amend(id, { value: [900n] }));
+  ok(await amend(id, { value: [1_000n] }));
+
+  const proposal = await proposeAmendment(id, { value: [950n] });
+  ok(await payFor('PARKS', id, 100n));
+  assert.equal(await carry(proposal), 'Failed');
+  const { contract, amendments } = await detail(id);
+  assert.equal(contract.value, 1_000n);
+  assert.equal(amendments.length, 2);
 });
 
 /** ContractAmendArgs, as the fixture decodes a proposal's call. */

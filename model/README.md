@@ -710,9 +710,8 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   `ends_at` within its term (I-GOV-4). An amendment that breaks them, or changes no term, is refused
   with `InvalidArgument`. A `terminated` or `fulfilled` contract is never amended, and neither is its
   `value` set below what has been paid on it (both `Conflict`), each checked again when a proposal
-  executes the call. What has been paid on a contract is the sum of the amounts of the transfers filed
-  for it (`transfer_create`'s `contract`), those that failed excepted. Its governing department is
-  the contract's owner (§1). Each amendment is recorded as a `ContractAmendment`, with the terms
+  executes the call. What has been paid on a contract is defined in I-FIN-11. Its governing
+  department is the contract's owner (§1). Each amendment is recorded as a `ContractAmendment`, with the terms
   before and after, the proposal that carried it (absent when the call applied at once) and when it
   applied; amendments are never edited or removed, and `contract_get` lists them oldest first, a
   page at a time.
@@ -728,11 +727,11 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 | `NFTToken` | `id` (symbol), `canister`, `name`, `description`, `transferable`, `required_license` (licence type or empty), `supply_cap`, `total_supply` | An NFT ledger (ICRC-7) the realm mints into. | `LAND` (transferable); `CRED` (non-transferable, minting needs a licence) |
 | `Fund` | `id` (code), `name`, `kind` (general, special revenue, …), `department` → `Department`, `balances` (Json: running balance per token), `allocation_rule` → `AllocationRule` | | `ROADS`: special revenue, owned by Infrastructure |
 | `FiscalPeriod` | `id`, `name`, `starts_at`, `ends_at`, `status`, `statements` (Json: running totals), `source_hash` (chained over its entries) | | `FY2026`: 2026-01-01 to 2026-12-31, `open` |
-| `Budget` | `id`, `fund` → `Fund`, `period` → `FiscalPeriod`, `category`, `kind` (`revenue` or `expense`), `planned`, `actual`, `status`, `proposal` → `Proposal` | One line of a period's budget: `category` is the realm's word for what (capital, salaries, property tax), `kind` whether the money comes in or goes out. | Roads FY2026, expense, capital: planned 300,000, actual 120,500, `adopted` |
+| `Budget` | `id`, `fund` → `Fund`, `period` → `FiscalPeriod`, `category`, `kind` (`revenue` or `expense`), `planned`, `actual`, `status`, `proposal` → `Proposal`, `reserved`, `committed` | One line of a period's budget: `category` is the realm's word for what (capital, salaries, property tax), `kind` whether the money comes in or goes out. An adopted expense line's `reserved` and `committed` money and its `actual` leave its available credit, `planned - reserved - committed - actual`, never negative (I-FIN-9). | Roads FY2026, expense, capital: planned 300,000, reserved 40,000, committed 90,000, actual 120,500, so 49,500 available, `adopted` |
 | `AllocationRule` | `id`, `source_fund`, `rules` (Json: fund and `share`), `status`, `proposal` → `Proposal` | How revenue is split between funds. Shares are in hundred-millionths and add up to at most 100 000 000. | From `ROOT`: 30% `WELFARE`, 20% `ROADS`, 50% `GENERAL` |
 | `LedgerEntry` | `id`, `transaction`, `kind` (asset, liability, equity, revenue, expense), `category`, `debit`, `credit`, `symbol`, `fund` → `Fund`, `period` → `FiscalPeriod`, `transfer` → `Transfer`, `invoice` → `Invoice`, `user` → `User`, `organization` → `Organization`, `contract` → `Contract`, `case` → `Case`, `penalty` → `Penalty`, `appeal` → `Appeal`, `at`, `description` | Double entry. At most one of the source references is set. | Tx `T-88`: debit `ROADS` capital expense 50,000, credit cash 50,000, contract `C-9` |
 | `Invoice` | `id`, `payer` (`Entity:id`), `amount`, `symbol`, `items` (lines, each an `InvoiceItem`: `concept`, `amount` (signed: a discount is negative), `quantity`, `unit`, `legislation`), `facts` (Json), `due_at`, `status`, `reason` (`Entity:id`), `paid_at`, `payment` (Json) | Paid into the subaccount derived from its `id`. At least one item, and the items sum to `amount`, which is never negative; `facts` is what legislation reads about the invoice beyond its items. | `INV-301`: Alice owes 120 REALM property tax, due 2026-12-31, `pending`: lines `property_tax` 150 and `large_family_bonus` −30 |
-| `Transfer` | `id`, `sender`, `to`, `symbol`, `amount`, `ledger_tx`, `invoice` → `Invoice`, `status`, `at`, `payroll` (the payroll run) | | 50,000 REALM from `ROADS` to BuildCo, ledger tx 18234, `completed` |
+| `Transfer` | `id`, `sender`, `to`, `symbol`, `amount`, `ledger_tx`, `invoice` → `Invoice`, `status`, `at`, `payroll` (the payroll run), `due_at`, `budget` → `Budget`, `committed`, `contract` → `Contract` | `budget` is the line it is charged to, `committed` whether it drew on that line's committed money (I-FIN-9). A `scheduled` transfer is owed by its `due_at` (I-FIN-10). `contract` is the contract it pays, whose value the payments never exceed (I-FIN-11). | 50,000 REALM from `ROADS` to BuildCo, ledger tx 18234, `completed`; 12,000 REALM to BuildCo for its January certificate, `scheduled`, due 2026-03-15, charged to Roads FY2026 capital from its committed money |
 | `Trade` | `id`, `contract` → `Contract`, `leg_a` → `Transfer`, `leg_b` → `Transfer`, `status` | An exchange of two transfers. | `C-9` milestone: realm pays 10,000 REALM, BuildCo hands over the road deed NFT |
 | `PaymentAccount` | `id`, `owner` (`Entity:id`), `network`, `address`, `symbol`, `label`, `verified` | External accounts for payouts. | Bob's ckBTC payout address, verified |
 | `FinancialReport` | `id`, `kind`, `period` → `FiscalPeriod`, `as_of`, `statements` (Json), `source_hash`, `issued_by`, `supersedes` → `FinancialReport` | Frozen statements. | FY2025 closing statements issued by Finance, `sha256:77d0…` |
@@ -746,7 +745,7 @@ There is no balance entity: the ledgers are the source of truth.
 
 - `Invoice.status`: `pending` → `paid` | `overdue` | `cancelled`; `overdue` → `paid` | `cancelled`.
 - `Trade.status`: `pending` → `completed` | `failed`.
-- `Transfer.status`: `sending` (ledger call in flight) → `completed` | `failed`; `sending` → `pending` (ledger refused) → `failed` (reverted).
+- `Transfer.status`: `sending` (ledger call in flight) → `completed` | `failed`; `sending` → `pending` (ledger refused) → `failed` (reverted); `scheduled` (owed) → `sending` (`transfer_pay`) | `cancelled` (`transfer_revert`).
 - `Budget.status`: `draft` → `proposed` → `adopted` → `amended` (replaced by a later adopted line of
   its fund, period and category: `budget_amend` or a later budget) | `closed`; `extended` (copied
   from the previous period by `budget_extend`) → `amended` (replaced by the fund's adopted budget) |
@@ -763,7 +762,9 @@ There is no balance entity: the ledgers are the source of truth.
 | `treasury_view`, `ledger_view`, `report_view` | `treasury.view` | read, delegable | Finance sees `ROOT` 1.2M, `ROADS` 180k REALM |
 | `treasury_configure`, `token_register`, `nft_token_register` | `treasury.manage` | governed, delegable | Quarterly allocation epochs; register ckUSDC |
 | `transfer_create` (from a fund) | `transfer.create` | delegable, governed | `{fund: "ROADS", to: "buildco", amount: 50000}` → proposal under Infrastructure's policy |
-| `transfer_revert` | `transfer.delete` | governed, delegable | Cancel a duplicate pending payment |
+| `transfer_revert` | `transfer.delete` | governed, delegable | Cancel a duplicate pending payment; cancel a scheduled one, unpaid |
+| `transfer_pay` | `transfer.create` | delegable | Pay BuildCo's scheduled 12,000 REALM on 10 March, before it is due |
+| `transfer_list` | `treasury.view` | read, delegable | What Roads owes: 3 scheduled transfers, 31,000 REALM, the first due 15 March |
 | `invoice_create` | `treasury.manage` | delegable | Registration fee: 10 REALM for new member Bob |
 | `invoice_item_add` | `treasury.manage` | delegable | The sanitation charge joins Alice's pending water invoice as a second line |
 | `invoice_check` (own) | `self.invoice_refresh` | delegable | Alice paid `INV-301` → `paid` |
@@ -771,6 +772,8 @@ There is no balance entity: the ledgers are the source of truth.
 | `my_invoices` | `self.data_view` | read, delegable | Alice: `INV-301`, 120 REALM, due 31 Dec |
 | `fund_create`, `period_open`, `period_close` | `org.manage_budget` | governed, delegable | Create fund `WELFARE`; close `FY2025` |
 | `budget_draft`, `budget_propose` (the draft lines of a period together: a fund's, or every fund's), `budget_amend` | `org.manage_budget` | governed, delegable | FY2027's lines drafted, then proposed as one budget → proposal |
+| `budget_stage` | `org.manage_budget` | governed, delegable | Reserve 40,000 of Roads' capital line for the resurfacing tender; on award, commit 38,500 of it and release 1,500 (`reserve: -40000, commit: 38500`) |
+| `budget_list` | `treasury.view` | read, delegable | Roads' FY2026 lines, each with planned, reserved, committed and actual |
 | `budget_extend` | `org.manage_budget` | delegable | FY2027 opens: FY2026's adopted lines carry over as `extended`, fund by fund, for the funds with no extended, proposed or adopted line in FY2027 yet; `Conflict` when none is left |
 | `allocation_rule_draft`, `allocation_rule_propose` | `org.manage_budget` | governed, delegable | Welfare share from 30% to 35% → proposal |
 | `payroll_run` | `org.manage_budget` | governed, delegable | November salaries: 23 seats, 51,200 REALM |
@@ -848,6 +851,44 @@ the new period already holds as the other kind. A `budget_propose` whose derived
   line joins only a `pending` invoice.
 - I-FIN-8: `Treasury.debt_outstanding` is the sum of the active loans' `outstanding`; a repayment never
   exceeds a loan's.
+- I-FIN-9: An adopted `expense` line's money is in four stages: `reserved`, set aside for a spending
+  not yet committed; `committed`, promised to a third party and not yet charged; `actual`, charged; and
+  its available credit, `planned - reserved - committed - actual`, which is never negative. Every other
+  line holds nothing reserved or committed. `budget_stage`, governed by the owner of the line's fund,
+  adds its `reserve` and `commit` to the line's reserved and committed money, a negative one releasing
+  it; it is refused with `Conflict` when either would fall below zero or the available credit would,
+  and with `InvalidArgument` when both are zero or the line is not an adopted expense line. Where the
+  fund's adopted budget governs its spending (above), a `transfer_create` is charged to the line of its
+  category when it is created, whether it is paid at once or `scheduled`: with `committed`, the line's
+  committed money pays it, else its available credit does, and when that holds less than the
+  transfer's amount the transfer is refused with `Conflict`, with a message that names the line and
+  says by how much it is short. So no transfer takes a line above `planned`: spending without
+  available credit is refused, not recorded. It is checked when the transfer is filed and again when
+  it applies. A transfer that ends `cancelled` or `failed` gives back what it charged, to the stage it
+  came from. Where no adopted budget governs the fund's spending, a transfer is charged to no line, as
+  before, and its `committed` is recorded false. An adopted line that replaces an earlier one carries its reserved, committed and actual
+  money, and is refused with `Conflict`, with the budget that adopts it, when they would take it above
+  its `planned`; `budget_amend` never sets `planned` below what a line holds; `budget_extend` copies
+  lines with nothing reserved or committed.
+- I-FIN-10: A transfer created with a `due_at`, which must lie after the call (`InvalidArgument`), is
+  `scheduled`: the realm owes it and no money moves. `transfer_pay` pays it, early or late, taking it
+  to `sending` and on as any transfer; it is not governed, since the governed `transfer_create`
+  decided the payment, and any status but `scheduled` is `Conflict`. `transfer_revert`, governed by the
+  owner of the transfer's fund, cancels a scheduled transfer, which ends `cancelled`, unpaid. A
+  transfer's `due_at` never moves. `transfer_list` lists the realm's transfers by fund and status, so
+  its `scheduled` transfers and their due dates are what the realm owes and when.
+- I-FIN-11: The payments on a contract never exceed its `value`. What has been paid on it is the sum of
+  the amounts of the transfers that name it (`transfer_create`'s `contract`, kept as
+  `Transfer.contract`), those that ended `failed` or `cancelled` excepted. A `scheduled` transfer is
+  owed and counts, as it counts against a budget line (I-FIN-9), so a payment that falls due never
+  takes the contract above its value. A `transfer_create` that names no such contract is `NotFound`;
+  one in another `symbol` than the contract's is `InvalidArgument`, since the amounts cannot be
+  compared; one that would take the payments above the value is `Conflict`, with a message that names
+  the contract and says by how much the transfer is over. It is checked when the transfer is filed and
+  again when it applies, so two proposals that together overpay cannot both execute. `contract_amend`
+  meets the same sum from the other side: it never sets `value` below what has been paid (I-GOV-16).
+  The realm counts only the transfers that name the contract: a payment made outside the realm, or
+  filed without it, is not checked.
 
 ## 6. Assets: land and NFTs
 
@@ -1559,5 +1600,6 @@ There is no permission for raw database writes: everything is an operation.
 | D30 | What the fee exemption covers, and what a second adopted line does | Decided 8 Nov 2026: only the fee's ledger entry, which the GOS books itself in the category `ledger_fee`, is exempt from an adopted budget; `ledger_fee` is reserved, a `transfer_create` or `budget_draft` naming it `InvalidArgument`, budget or not, so no proposal or extension carries one; a later adopted line of the same fund, period and category amends the earlier one, within one adoption too, where the line drafted later stands, so one line stands per fund, period and category, `budget_extend` carries the newest and the spending booked against the earlier one carries over (§5) |
 | D31 | A department that decides by a majority of the votes cast | Decided 10 Nov 2026: a department's policy may count the votes cast (`Policy.threshold_of` `cast`): the yes votes must exceed the no votes, abstentions counting towards the quorum only, with the policy's quorum of its n; a tie gets a second vote on the same proposal, and a tie in that one is decided by the casting vote of the department's `head`, its chair, copied when the vote opens, so a chair who proposed keeps it and an absent chair's tie rejects. The rule is the department's, never legislation's arithmetic: no hook computes it. A proposer may only tighten it: a higher threshold of the votes cast or quorum, or `eligible`, which adds that the yes votes reach the threshold of n (an absolute majority) and keeps the majority of the votes cast and its tie procedure, so no stated rule passes what the default rejects or would put to a second vote. Amends D15 and D20 (I-GOV-3, I-GOV-14) |
 | D32 | How proposals are grouped and found | Decided 10 Nov 2026: by `tags`, free text in the realm's own words, at most 16 of 1 to 64 code points each, compared exactly and never normalised (clients send NFC), set at creation and replaced while a draft; `proposal_list` filters by any of them. No fixed vocabulary: `kind` and `matter` stay one value each (I-GOV-15) |
-| D33 | How a contract changes after it is made | Decided 10 Nov 2026: `contract_amend`, governed by the contract's owner (its mandate's executor, else its tender's requester, else the root), replaces its value, its split over fiscal periods and its dates, keeping its id and everything else; each amendment is a `ContractAmendment` with the terms before and after, the proposal that carried it and when; a terminated or fulfilled contract is not amended, nor its value set below what has been paid on it, and `contract_get` reads a contract with its amendments (I-GOV-16) |
+| D33 | How a contract changes after it is made | Decided 10 Nov 2026: `contract_amend`, governed by the contract's owner (its mandate's executor, else its tender's requester, else the root), replaces its value, its split over fiscal periods and its dates, keeping its id and everything else; each amendment is a `ContractAmendment` with the terms before and after, the proposal that carried it and when; a terminated or fulfilled contract is not amended, nor its value set below what has been paid on it, no payment takes a contract above its value (I-FIN-11), and `contract_get` reads a contract with its amendments (I-GOV-16) |
 | D34 | How a party is told apart from a company | Decided 10 Nov 2026: `Organization.kind`, one of `company`, `party`, `union`, `association` and `other`; no class of its own for a party. `other` is needed: a foundation, a cooperative or a public body is none of the four, and a kind added to the list later would break every reader of `Organization`. Set at registration, changed by `organization_edit`, `other` when absent or older (I-ORG-9) |
+| D35 | How spending moves through its stages | Decided 10 Nov 2026: two facts, no new class. A budget line's `reserved` and `committed` money beside `planned` and `actual`, moved by the governed `budget_stage`, with its available credit, `planned - reserved - committed - actual`, never negative: a transfer that would take a line above `planned` is refused, since spending without available credit is void. A transfer is charged when the obligation is recognised, and may be `scheduled`, owed by a due date, paid later with `transfer_pay` and cancelled only by the governed `transfer_revert`. `budget_list` and `transfer_list` read them (I-FIN-9, I-FIN-10) |

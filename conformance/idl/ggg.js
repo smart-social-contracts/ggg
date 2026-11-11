@@ -228,10 +228,47 @@ export const idlFactory = ({ IDL }) => {
     'planned' : Money,
     'category' : IDL.Text,
   });
+  const BudgetListArgs = IDL.Record({
+    'period' : IDL.Opt(IDL.Text),
+    'cursor' : IDL.Opt(IDL.Text),
+    'fund' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+  });
+  const BudgetStatus = IDL.Variant({
+    'Closed' : IDL.Null,
+    'Draft' : IDL.Null,
+    'Proposed' : IDL.Null,
+    'Amended' : IDL.Null,
+    'Extended' : IDL.Null,
+    'Adopted' : IDL.Null,
+  });
+  const Budget = IDL.Record({
+    'id' : IDL.Text,
+    'status' : BudgetStatus,
+    'actual' : Money,
+    'period' : IDL.Text,
+    'fund' : IDL.Text,
+    'kind' : BudgetKind,
+    'reserved' : Money,
+    'committed' : Money,
+    'planned' : Money,
+    'category' : IDL.Text,
+    'proposal' : IDL.Opt(IDL.Text),
+  });
+  const BudgetPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Budget),
+  });
   const BudgetProposeArgs = IDL.Record({
     'period' : IDL.Text,
     'fund' : IDL.Opt(IDL.Text),
     'years' : IDL.Opt(IDL.Nat),
+  });
+  const SignedMoney = IDL.Int;
+  const BudgetStageArgs = IDL.Record({
+    'reserve' : SignedMoney,
+    'commit' : SignedMoney,
+    'budget' : IDL.Text,
   });
   const CallForArgs = IDL.Record({
     'arg' : IDL.Vec(IDL.Nat8),
@@ -1096,7 +1133,6 @@ export const idlFactory = ({ IDL }) => {
     'Cancelled' : IDL.Null,
     'Pending' : IDL.Null,
   });
-  const SignedMoney = IDL.Int;
   const InvoiceItem = IDL.Record({
     'concept' : IDL.Text,
     'unit' : IDL.Opt(IDL.Text),
@@ -2283,10 +2319,46 @@ export const idlFactory = ({ IDL }) => {
     'contract' : IDL.Opt(IDL.Text),
     'fund' : IDL.Text,
     'description' : IDL.Opt(IDL.Text),
+    'committed' : IDL.Opt(IDL.Bool),
+    'due_at' : IDL.Opt(Timestamp),
     'category' : IDL.Opt(IDL.Text),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'amount' : Money,
     'symbol' : IDL.Opt(IDL.Text),
+  });
+  const TransferStatus = IDL.Variant({
+    'Failed' : IDL.Null,
+    'Sending' : IDL.Null,
+    'Scheduled' : IDL.Null,
+    'Cancelled' : IDL.Null,
+    'Completed' : IDL.Null,
+    'Pending' : IDL.Null,
+  });
+  const TransferListArgs = IDL.Record({
+    'status' : IDL.Opt(TransferStatus),
+    'cursor' : IDL.Opt(IDL.Text),
+    'fund' : IDL.Opt(IDL.Text),
+    'limit' : IDL.Opt(IDL.Nat32),
+  });
+  const Transfer = IDL.Record({
+    'at' : Timestamp,
+    'id' : IDL.Text,
+    'to' : Ref,
+    'status' : TransferStatus,
+    'contract' : IDL.Opt(IDL.Text),
+    'invoice' : IDL.Opt(IDL.Text),
+    'sender' : Ref,
+    'committed' : IDL.Bool,
+    'ledger_tx' : IDL.Opt(IDL.Nat),
+    'due_at' : IDL.Opt(Timestamp),
+    'budget' : IDL.Opt(IDL.Text),
+    'amount' : Money,
+    'symbol' : IDL.Text,
+    'payroll' : IDL.Opt(IDL.Text),
+  });
+  const TransferPage = IDL.Record({
+    'next' : IDL.Opt(IDL.Text),
+    'items' : IDL.Vec(Transfer),
   });
   const TransferRevertArgs = IDL.Record({
     'transfer' : IDL.Text,
@@ -2533,8 +2605,18 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : GggError })],
         [],
       ),
+    'ggg_budget_list' : IDL.Func(
+        [BudgetListArgs],
+        [IDL.Variant({ 'Ok' : BudgetPage, 'Err' : GggError })],
+        ['query'],
+      ),
     'ggg_budget_propose' : IDL.Func(
         [BudgetProposeArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_budget_stage' : IDL.Func(
+        [BudgetStageArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
@@ -3567,6 +3649,16 @@ export const idlFactory = ({ IDL }) => {
     'ggg_transfer_create' : IDL.Func(
         [TransferCreateArgs],
         [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_transfer_list' : IDL.Func(
+        [TransferListArgs],
+        [IDL.Variant({ 'Ok' : TransferPage, 'Err' : GggError })],
+        ['query'],
+      ),
+    'ggg_transfer_pay' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Transfer, 'Err' : GggError })],
         [],
       ),
     'ggg_transfer_revert' : IDL.Func(

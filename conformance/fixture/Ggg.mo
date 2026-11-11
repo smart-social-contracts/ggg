@@ -181,6 +181,11 @@ module {
     period : Text;
     fund : Text;
     kind : BudgetKind;
+    /// Of an adopted expense line: money set aside for a spending not yet committed, and money committed to
+    /// a third party not yet charged. What is left, planned - reserved - committed - actual, is never
+    /// negative (I-FIN-9). Zero on any other line.
+    reserved : Money;
+    committed : Money;
     planned : Money;
     category : Text;
     proposal : ?Text;
@@ -196,6 +201,13 @@ module {
   };
   /// Whether a line plans money coming in or going out; `category` is the realm's word for what.
   public type BudgetKind = { #Revenue; #Expense };
+  public type BudgetListArgs = {
+    period : ?Text;
+    cursor : ?Text;
+    fund : ?Text;
+    limit : ?Nat32;
+  };
+  public type BudgetPage = { next : ?Text; items : [Budget] };
   /// Proposes the draft lines of the period together: those of `fund`, under its owner's policy, or every
   /// fund's, under the root's; they are `proposed` from the filing, by this call or by any proposal that
   /// carries it, the execution adopts exactly them, and a proposal that ends otherwise returns them to Draft.
@@ -204,6 +216,14 @@ module {
   /// `fund` tells the two forms apart), as facts of the call; a total out of Money's range is
   /// InvalidArgument, like any other fact.
   public type BudgetProposeArgs = { period : Text; fund : ?Text; years : ?Nat };
+  /// Moves an adopted expense line's money between its stages (I-FIN-9): `reserve` and `commit` are added
+  /// to its reserved and committed amounts; a negative one releases. Committing what was reserved is
+  /// reserve -x, commit +x. At least one is not zero.
+  public type BudgetStageArgs = {
+    reserve : SignedMoney;
+    commit : SignedMoney;
+    budget : Text;
+  };
   /// Proposed: filed with a proposal, which adopts exactly these lines. Extended: copied, fund by fund,
   /// from the previous period's adopted budget by budget_extend, in force until an adopted budget of that
   /// fund replaces it.
@@ -2307,9 +2327,16 @@ module {
     id : Text;
     to : Ref;
     status : TransferStatus;
+    /// The contract it pays: the payments on a contract never exceed its value (I-FIN-11).
+    contract : ?Text;
     invoice : ?Text;
     sender : Ref;
+    committed : Bool;
     ledger_tx : ?Nat;
+    /// When a scheduled transfer is due.
+    due_at : ?Timestamp;
+    /// The budget line it is charged to, and whether it drew on that line's committed money (I-FIN-9).
+    budget : ?Text;
     amount : Money;
     symbol : Text;
     payroll : ?Text;
@@ -2318,16 +2345,38 @@ module {
   /// never names `ledger_fee`, the fee's own entry, which the GOS books itself (InvalidArgument).
   public type TransferCreateArgs = {
     to : Ref;
+    /// The contract it pays: NotFound if there is none, InvalidArgument in another symbol than the
+    /// contract's, Conflict past the contract's value (I-FIN-11).
     contract : ?Text;
     fund : Text;
     description : ?Text;
+    /// True: it pays money its budget line has committed, not the line's available credit (I-FIN-9).
+    committed : ?Bool;
+    /// A time after the call: the transfer is Scheduled, owed until transfer_pay pays it (I-FIN-10).
+    due_at : ?Timestamp;
     category : ?Text;
     on_behalf_of : ?Principal;
     amount : Money;
     symbol : ?Text;
   };
+  public type TransferListArgs = {
+    status : ?TransferStatus;
+    cursor : ?Text;
+    fund : ?Text;
+    limit : ?Nat32;
+  };
+  public type TransferPage = { next : ?Text; items : [Transfer] };
+  /// A Scheduled transfer is Cancelled; one that is Pending fails, reverted.
   public type TransferRevertArgs = { transfer : Text; reason : ?Text };
-  public type TransferStatus = { #Failed; #Sending; #Completed; #Pending };
+  /// Scheduled: owed, to be paid by its due date; Cancelled: a scheduled transfer revoked unpaid (I-FIN-10).
+  public type TransferStatus = {
+    #Failed;
+    #Sending;
+    #Scheduled;
+    #Cancelled;
+    #Completed;
+    #Pending;
+  };
   /// A title and body in one language, for a notice sent in several.
   public type Translation = { title : Text; body : ?Text; language : Text };
   public type Treasury = {
@@ -2575,7 +2624,15 @@ module {
     /// and replies how many lines it copied; Conflict once the period has an Extended, Proposed or Adopted
     /// line (Draft lines stand in no way).
     ggg_budget_extend : shared Text -> async { #Ok : Nat; #Err : GggError };
+    ggg_budget_list : shared query BudgetListArgs -> async {
+        #Ok : BudgetPage;
+        #Err : GggError;
+      };
     ggg_budget_propose : shared BudgetProposeArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
+    ggg_budget_stage : shared BudgetStageArgs -> async {
         #Ok : Governed;
         #Err : GggError;
       };
@@ -3380,6 +3437,11 @@ module {
         #Ok : Governed;
         #Err : GggError;
       };
+    ggg_transfer_list : shared query TransferListArgs -> async {
+        #Ok : TransferPage;
+        #Err : GggError;
+      };
+    ggg_transfer_pay : shared Text -> async { #Ok : Transfer; #Err : GggError };
     ggg_transfer_revert : shared TransferRevertArgs -> async {
         #Ok : Governed;
         #Err : GggError;

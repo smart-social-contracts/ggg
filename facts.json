@@ -2191,6 +2191,17 @@
           "type": "principal",
           "optional": true
         },
+        "due_at": {
+          "type": "nat64",
+          "kind": "timestamp",
+          "min": 0,
+          "max": "9223372036854775807",
+          "optional": true
+        },
+        "committed": {
+          "type": "bool",
+          "optional": true
+        },
         "follower_compliance": {
           "type": "Compliance",
           "values": [
@@ -2232,6 +2243,46 @@
           "optional": true
         }
       }
+    },
+    "transfer_pay": {
+      "operation": "ggg_transfer_pay",
+      "facts": {
+        "id": {
+          "type": "text"
+        }
+      }
+    },
+    "transfer_list": {
+      "operation": "ggg_transfer_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "fund": {
+          "type": "text",
+          "optional": true
+        },
+        "status": {
+          "type": "TransferStatus",
+          "values": [
+            "Scheduled",
+            "Sending",
+            "Pending",
+            "Completed",
+            "Failed",
+            "Cancelled"
+          ],
+          "optional": true
+        }
+      },
+      "read": true
     },
     "invoice_create": {
       "operation": "ggg_invoice_create",
@@ -2571,6 +2622,50 @@
           "max": 9007199254740991
         }
       }
+    },
+    "budget_stage": {
+      "operation": "ggg_budget_stage",
+      "facts": {
+        "budget": {
+          "type": "text"
+        },
+        "reserve": {
+          "type": "int",
+          "kind": "money",
+          "min": -9007199254740991,
+          "max": 9007199254740991
+        },
+        "commit": {
+          "type": "int",
+          "kind": "money",
+          "min": -9007199254740991,
+          "max": 9007199254740991
+        }
+      }
+    },
+    "budget_list": {
+      "operation": "ggg_budget_list",
+      "facts": {
+        "cursor": {
+          "type": "text",
+          "optional": true
+        },
+        "limit": {
+          "type": "nat32",
+          "min": 0,
+          "max": 4294967295,
+          "optional": true
+        },
+        "fund": {
+          "type": "text",
+          "optional": true
+        },
+        "period": {
+          "type": "text",
+          "optional": true
+        }
+      },
+      "read": true
     },
     "allocation_rule_draft": {
       "operation": "ggg_allocation_rule_draft",
