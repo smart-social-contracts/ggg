@@ -491,7 +491,8 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   every organization that is none of the four. `organization_register` sets it, `other` when none is
   given, and `organization_edit` changes it like the organization's other fields. An organization
   registered before kinds existed reads `other` until an edit sets it. `organization_list` filters by
-  it.
+  it. The kind is what the organization declares; the realm does not check it, so legislation that
+  treats a party differently should not take it as proof.
 
 ## 4. Governance
 
