@@ -900,8 +900,8 @@ the new period already holds as the other kind. A `budget_propose` whose derived
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Land` | `id`, `x`, `y`, `width`, `height`, `kind`, `owner` (`Entity:id`), `status`, `token_id`, `registered_by`, `assessed_value`, `area` (square metres), `assessed_at`, `assessment_ref`, `metadata` (Json) | A parcel, at most 16×16 cells. What an assessor set for taxes based on it, signing for it: its value in the accounting currency and its area, when, and under which reference in the assessor's register. | `L-17`: 3×2 cells at (12, 40), residential, owner `alice`, `LAND` #4412, assessed at 95,000 REALM and 120 m² |
-| `Zone` | `id`, `name`, `kind`, `land` → `Land`, `user` → `User`, `population`, `metadata` (Json) | Either a member's own home cell, an h3 index set with `zone_set` and tied to that `user`, or a zone the realm defines with `zone_define`, such as a district without a canister of its own, named by its id: members name it as their `home_zone`, and `population` counts them. | Cell `871f1d489ffffff`, Alice's home cell; `riverside` "Riverside", a district, population 1,240 |
+| `Land` | `id`, `x`, `y`, `width`, `height`, `kind`, `owner` (`Entity:id`), `status`, `token_id`, `registered_by`, `assessed_value`, `area` (square metres), `assessed_at`, `assessment_ref`, `metadata` (Json), `zones` → `Zone`* | A parcel, at most 16×16 cells. `zones` are the zones it lies in, such as a planning area (I-AST-6). What an assessor set for taxes based on it, signing for it: its value in the accounting currency and its area, when, and under which reference in the assessor's register. | `L-17`: 3×2 cells at (12, 40), residential, owner `alice`, `LAND` #4412, assessed at 95,000 REALM and 120 m² |
+| `Zone` | `id`, `name`, `kind`, `land` → `Land`, `user` → `User`, `population`, `metadata` (Json) | Either a member's own home cell, an h3 index set with `zone_set` and tied to that `user`, or a zone the realm defines with `zone_define`, such as a district without a canister of its own, or a planning area, named by its id: members name a district as their `home_zone`, and `population` counts them; a parcel lies in a planning area by its `zones` (I-AST-6). | Cell `871f1d489ffffff`, Alice's home cell; `riverside` "Riverside", a district, population 1,240 |
 
 Certificates (prescriptions, diplomas, permits, titles) are NFTs, not realm entities: the ledger is
 the source of truth, and the token's `ggg:` header carries what the realm knows about it. Every NFT the
@@ -937,6 +937,7 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
 | `land_register` | `nft.mint` | governed, delegable | Register `L-17` for Alice after the survey |
+| `land_zone_set` | `realm.configure` | governed, delegable | Put `L-17`, and the parcels around it, in the Seafront planning area |
 | `land_transfer` | `nft.force_transfer` | signing, governed, confirm | Court orders `L-17` moved from Mallory to Alice (normal sales use the ledger) |
 | `land_assess` | `land.assess` | signing, confirm | The assessor sets `L-17`'s value at 95,000 REALM and its area at 120 m² |
 | `land_list`, `land_map` (a viewport of at most 32×32 cells) | `realm.data_view` | read, delegable | Map of quarter North's parcels |
@@ -957,6 +958,11 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 - I-AST-3: Revoking a licence stops new mints under it; existing credential NFTs follow the codex rule.
 - I-AST-4: NFT metadata never contains personal data in clear text.
 - I-AST-5: A parcel has exactly one owner.
+- I-AST-6: A parcel lies in at most 8 zones, each one the realm defines (`zone_define`) and named once.
+  `land_zone_set` replaces the list (`NotFound` for an unknown parcel or zone, `InvalidArgument` for
+  more than 8 or a zone named twice), so a plan's area is the parcels that list its zone, and a new
+  plan reaches the parcels it covers without touching a licence. A `Zone` has no list of parcels: the
+  boundary of a plan is the registry's, and GGG keeps only which parcels it was told lie inside.
 
 ## 7. Licensing, procedures and requests
 
@@ -964,7 +970,7 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `License` | `id`, `kind` (court, business, professional, health, education, …), `holder` (`Entity:id`: organization or user), `issued_by` → `Department`, `status`, `applied_at`, `decision_due`, `issued_at`, `expires_at`, `evidence_ref`, `conditions` (Json) | Many licences per holder. An application is a licence in `applied`; `decision_due` comes from the `Procedure` of its kind, when one is defined. | `LIC-12`: health, holder Clinic B, issued by Health, active until 2028-10-25 |
+| `License` | `id`, `kind` (court, business, professional, health, education, …), `holder` (`Entity:id`: organization or user), `issued_by` → `Department`, `status`, `applied_at`, `decision_due`, `issued_at`, `expires_at`, `evidence_ref`, `conditions` (Json), `land` → `Land` | Many licences per holder. An application is a licence in `applied`; `decision_due` comes from the `Procedure` of its kind, when one is defined. `land` is the parcel it is for, when it is for one (I-LIC-4). | `LIC-12`: health, holder Clinic B, issued by Health, active until 2028-10-25 |
 | `Procedure` | `id` (the licence kind it governs), `initiated_by`, `matter`, `decision_deadline` (a Period), `silence` (`positive` grants, `negative` refuses), `legislation`, `facts` (Json) | How applications of one kind are decided. Legislation acts on the silence, with a task (§11). | `health`: initiated by the applicant, decided within 3 months, silence positive |
 | `Request` | `id`, `kind`, `by` (`Entity:id`), `body` (Json), `filed_at`, `due_at`, `extension_limit`, `status`, `decision`, `reply`, `decided_at` | A request to the realm by a person or a body: a petition, a complaint, a request for information or for one's personal data. The kinds are the realm's; legislation sets `due_at` and says what silence means, recording it as a decision. A `body` or `reply` that holds personal data is an encrypted `Document` reference (I-PRV-1). | `REQ-14`: Bob asks for last year's minor contracts, due in one month, `filed` |
 
@@ -978,7 +984,7 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 
 | Operation | Permission | Flags | Example |
 |---|---|---|---|
-| `license_apply`, `license_renew` | `license.apply` | delegable | Clinic B applies for a health licence with its dossier |
+| `license_apply`, `license_renew` | `license.apply` | delegable | Clinic B applies for a health licence with its dossier; Alice applies for a building licence for `L-17` |
 | `license_decide` | `license.issue` | signing, confirm | A Health officer approves → `LIC-12` active for 2 years |
 | `license_suspend`, `license_revoke` | `license.revoke` | signing, confirm | Suspend `LIC-12` pending an inspection |
 | `license_list`, `license_verify` | — (public) | read | A patient checks Clinic B: licence active |
@@ -995,6 +1001,11 @@ licence is gone (I-AST-3). The ICRC-7 ledger has no burn, so a revoked credentia
 - I-LIC-2: Only `active`, unexpired licences authorize anything.
 - I-LIC-3: A request's `extension_limit` is set once; its `due_at` never moves past it, and a decided
   request is final.
+- I-LIC-4: A licence may be for a parcel: `license_apply` names the `land`, which must exist
+  (`NotFound`), and a licence's `land` never changes. The decision on it sees the parcel's `zones` as
+  the derived fact `zones` of `license_decide` (none when it names no parcel), so legislation of the
+  `planning` domain can refuse or condition the decisions on a plan's parcels, for as long as the plan
+  says (its dates are the chapter's), and `license_suspend` and `license_revoke` stay as they are.
 
 `license_apply` sets the licence's `decision_due` from the `Procedure` of its kind, when one is defined.
 What silence past a deadline means is legislation's: a procedure says it, and a task (§11) scheduled for
@@ -1712,3 +1723,4 @@ There is no permission for raw database writes: everything is an operation.
 | D36 | How money paid in a quarter reaches the capital's funds | Decided 10 Nov 2026: the quarter pushes it. The capital sets the sweep rules by vote (`treasury_configure`: a quarter's fund and token, the capital's fund, what the quarter keeps) and sends them with `quarter_sync`; each quarter sweeps at the end of its treasury epochs, or on `quarter_sweep`, one recorded sweep per rule and epoch whose ICRC-1 `memo` and `created_at_time` are fixed, so a retry never moves money twice; it reports each sweep to the capital (`quarter_sweep_report`), which books it once; both keep its block. An outcome still unknown 23 hours after it was sent, inside the ledger's 24-hour deduplication window, is never resent: the sweep is `needs_check` until a person resolves it (`sweep_resolve`). The capital pulling from each quarter was rejected: it makes the capital call every quarter each epoch, where quarters already push with `quarter_sync` (I-FED-5 to I-FED-7) |
 | D37 | How a tender is divided into lots | Decided 11 Nov 2026: a tender may name lots (`Tender.lots`, each with an id the realm chooses, a title and an estimated value); a bid prices one lot (`Bid.lot`), each lot is awarded on its own (`tender_award` names it) or left void (`tender_lot_void`), and each awarded lot yields its own contract (`Contract.lot`), so one tender yields several contracts, to different vendors if the bids say so. Lots are only lots: the model stays neutral about jurisdictions and holds no CPV, portal or other register field; a realm that needs one keeps it in an extension (I-PRC-5) |
 | D38 | How a contract is a call-off under another body's framework agreement | Decided 11 Nov 2026: `Contract.framework` names the holder of the agreement (an `External` of the realm, or another realm by its capital), its reference there and, when known, the organizations it was awarded to. The realm checks only what it holds: the holder is known, is not the realm itself, and a party of the contract is among the winners listed; whether the agreement exists, is in force or covers the purchase is the holder's, so the field is the realm's claim for a reader or a guard to weigh (I-PRC-6) |
+| D39 | How planning legislation reaches a licence | Decided 11 Nov 2026: the domain `planning` (urban planning), and the least GGG needs for a plan's suspension of licences: a parcel's `zones` (`land_zone_set`, a plan's area being a `Zone` the realm defines), the parcel a licence is for (`License.land`), and the derived fact `zones` of `license_decide`. No plan, boundary or suspension entity: the plan and its dates are the chapter's, GGG keeps which parcels lie in which zone (I-AST-6, I-LIC-4) |

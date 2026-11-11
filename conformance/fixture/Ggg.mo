@@ -1169,6 +1169,8 @@ module {
     area : ?Area;
     kind : Text;
     assessment_ref : ?Text;
+    /// The zones the parcel lies in, such as a planning area, at most 8, each a zone the realm defines (I-AST-6).
+    zones : [Text];
     /// What an assessor set for taxes based on the parcel, its value in the accounting currency and its area
     /// in square metres, when, and under which reference in the assessor's register.
     assessed_value : ?Money;
@@ -1212,6 +1214,8 @@ module {
   public type LandStatus = { #Disputed; #Active; #Revoked };
   /// Under a court order: an issued or final verdict in a case about the parcel, with `to` a party.
   public type LandTransferArgs = { to : Ref; order : Text; land : Text };
+  /// Replaces the zones a parcel lies in: at most 8, each defined with zone_define and named once (I-AST-6).
+  public type LandZoneSetArgs = { land : Text; zones : [Text] };
   public type LedgerArgs = {
     period : ?Text;
     cursor : ?Text;
@@ -1267,14 +1271,19 @@ module {
     /// When a decision is due, from the Procedure of the licence's kind.
     decision_due : ?Timestamp;
     kind : Text;
+    /// The parcel the licence is for, when it is for one (I-LIC-4).
+    land : ?Text;
     conditions : Value;
     holder : Ref;
     expires_at : ?Timestamp;
   };
   /// For the caller, or an organization they administer.
+  /// `land` names the parcel the licence is for, which must exist (NotFound), so that legislation on the
+  /// parcel's zones reaches the decision (I-LIC-4).
   public type LicenseApplyArgs = {
     evidence_ref : ?Text;
     kind : Text;
+    land : ?Text;
     on_behalf_of : ?Principal;
     conditions : ?Value;
     department : ?Text;
@@ -3114,6 +3123,10 @@ module {
         #Err : GggError;
       };
     ggg_land_unfreeze : shared Text -> async { #Ok : Land; #Err : GggError };
+    ggg_land_zone_set : shared LandZoneSetArgs -> async {
+        #Ok : Governed;
+        #Err : GggError;
+      };
     ggg_ledger_view : shared query LedgerArgs -> async {
         #Ok : LedgerPage;
         #Err : GggError;

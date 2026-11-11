@@ -63,6 +63,9 @@ const DERIVED = {
   tender_award: {
     published_in: { type: { vec: { name: 'text' } }, derived: "the journals of the tender's notices" },
   },
+  license_decide: {
+    zones: { type: { vec: { name: 'text' } }, derived: "the zones of the parcel the licence is for; none when it names no parcel" },
+  },
   budget_propose: {
     revenue: { type: { name: 'Money' }, derived: "the sum of planned over the Revenue lines it proposes: the fund's, or every fund's" },
     expense: { type: { name: 'Money' }, derived: "the sum of planned over the Expense lines it proposes: the fund's, or every fund's" },

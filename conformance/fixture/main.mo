@@ -3279,6 +3279,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
 
   // §6
   public shared ({ caller }) func ggg_land_register(_ : T.LandRegisterArgs) : async Result<T.Governed> { nobody(caller, "nft.mint") };
+  public shared ({ caller }) func ggg_land_zone_set(_ : T.LandZoneSetArgs) : async Result<T.Governed> { nobody(caller, "realm.configure") };
   public shared ({ caller }) func ggg_land_transfer(_ : T.LandTransferArgs) : async Result<T.Governed> { nobody(caller, "nft.force_transfer") };
   public shared ({ caller }) func ggg_land_mint_nft(_ : T.LandMintArgs) : async Result<Nat> { nobody(caller, "nft.mint") };
   public shared ({ caller }) func ggg_land_assess(_ : T.LandAssessArgs) : async Result<T.Land> { nobody(caller, "land.assess") };

@@ -1234,6 +1234,7 @@ export const idlFactory = ({ IDL }) => {
     'area' : IDL.Opt(Area),
     'kind' : IDL.Text,
     'assessment_ref' : IDL.Opt(IDL.Text),
+    'zones' : IDL.Vec(IDL.Text),
     'assessed_value' : IDL.Opt(Money),
     'assessed_at' : IDL.Opt(Timestamp),
     'width' : IDL.Nat,
@@ -1291,6 +1292,10 @@ export const idlFactory = ({ IDL }) => {
     'to' : Ref,
     'order' : IDL.Text,
     'land' : IDL.Text,
+  });
+  const LandZoneSetArgs = IDL.Record({
+    'land' : IDL.Text,
+    'zones' : IDL.Vec(IDL.Text),
   });
   const LedgerKind = IDL.Variant({
     'Asset' : IDL.Null,
@@ -1361,6 +1366,7 @@ export const idlFactory = ({ IDL }) => {
   const LicenseApplyArgs = IDL.Record({
     'evidence_ref' : IDL.Opt(IDL.Text),
     'kind' : IDL.Text,
+    'land' : IDL.Opt(IDL.Text),
     'on_behalf_of' : IDL.Opt(IDL.Principal),
     'conditions' : IDL.Opt(Value),
     'department' : IDL.Opt(IDL.Text),
@@ -1383,6 +1389,7 @@ export const idlFactory = ({ IDL }) => {
     'applied_at' : Timestamp,
     'decision_due' : IDL.Opt(Timestamp),
     'kind' : IDL.Text,
+    'land' : IDL.Opt(IDL.Text),
     'conditions' : Value,
     'holder' : Ref,
     'expires_at' : IDL.Opt(Timestamp),
@@ -3191,6 +3198,11 @@ export const idlFactory = ({ IDL }) => {
     'ggg_land_unfreeze' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Land, 'Err' : GggError })],
+        [],
+      ),
+    'ggg_land_zone_set' : IDL.Func(
+        [LandZoneSetArgs],
+        [IDL.Variant({ 'Ok' : Governed, 'Err' : GggError })],
         [],
       ),
     'ggg_ledger_view' : IDL.Func(
