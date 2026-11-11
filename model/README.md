@@ -503,7 +503,7 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 | `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `prepared_by` (the delegate, when the proposer approved it from a pending action, §2), `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `majority_of_cast`, `tally` (Json), `first_vote` (Json), `result` (Json), `links`, `tags` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of`, `casting_vote` and `majority_of_cast` are the rule that decides it (I-GOV-3), fixed when the vote opens; the casting vote is the scope's, the realm's for a realm-wide proposal or the head of a department that counts the votes cast, never the proposer's. `first_vote` is the count of a first vote that tied, when a second one followed (I-GOV-14). A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. `tags` are the realm's own words for grouping proposals (an area, a district, a kind of act), set at creation and replaced while a draft; `proposal_list` filters by them (I-GOV-15). | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of Infrastructure's 3 policy seats, tags `mobility`, `district-3` |
 | `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the vote ends. A second vote (I-GOV-14) starts with none: the first vote's are in the audit log. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
-| `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `kind`, `procedure`, `tender` → `Tender`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at`, `split` (Json list of `period`, `amount`) | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`; `split` spreads it over fiscal periods (I-GOV-16). `kind` (works, supplies, services) and `procedure` are the realm's words; a contract made from a tender names it and takes its kind and procedure. `contract_amend` changes its value, split and dates and keeps its id, each change recorded as a `ContractAmendment`. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, from tender `T-5`, terms `sha256:4be1…`, 30,000 in FY2026 and 20,000 in FY2027 |
+| `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `kind`, `procedure`, `tender` → `Tender`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at`, `split` (Json list of `period`, `amount`), `lot` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`; `split` spreads it over fiscal periods (I-GOV-16). `kind` (works, supplies, services) and `procedure` are the realm's words; a contract made from a tender names it and takes its kind and procedure, and, when the tender has lots, the `lot` it was awarded under (I-PRC-5). `contract_amend` changes its value, split and dates and keeps its id, each change recorded as a `ContractAmendment`. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, from tender `T-5`, terms `sha256:4be1…`, 30,000 in FY2026 and 20,000 in FY2027 |
 | `ContractAmendment` | `id`, `contract` → `Contract`, `before` (Json: `value`, `split`, `starts_at`, `ends_at`), `after` (Json, the same), `proposal` → `Proposal`, `at` | One amendment of a contract, never edited or removed (I-GOV-16). `proposal` is the one that carried it, absent when the governing department decided directly. | `C-9` re-spread by `P-31` on 23 Jan: 10,000 in FY2026 and 40,000 in FY2027 |
 
 ### Lifecycles
@@ -1065,8 +1065,9 @@ codex-defined credential NFTs; GGG has no report entity.
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Tender` | `id`, `title`, `description`, `requester` → `Department`, `kind`, `procedure`, `estimated_value`, `status`, `opens_at`, `closes_at`, `rubric` (Json: criterion and `weight`), `notices` (each a `Notice`: `journal`, `published_at`, `ref`), `winner` → `Bid`, `contract` → `Contract` | Weights are in hundred-millionths and add up to 100 000 000. `kind` (works, supplies, services) and `procedure` are the realm's words. `notices` records where the tender was published, and legislation reads `published_in`, the journals of the notices, as a fact of `tender_award`. | `T-5` Bike lane works, by Infrastructure, works by open procedure, 600,000 REALM estimated, open 1–30 Nov, rubric: price 60%, quality 40%, noticed in the realm's journal |
-| `Bid` | `id`, `tender` → `Tender`, `vendor` → `Organization`, `submitted_at`, `sealed`, `payload_ref`, `payload_hash` (`sha256:` of `price:nonce`), `price` (set at the reveal), `score` | Content is encrypted until the reveal. | BuildCo's bid on `T-5`, sealed until 30 Nov |
+| `Tender` | `id`, `title`, `description`, `requester` → `Department`, `kind`, `procedure`, `estimated_value`, `status`, `opens_at`, `closes_at`, `rubric` (Json: criterion and `weight`), `notices` (each a `Notice`: `journal`, `published_at`, `ref`), `lots` (each a `Lot`), `winner` → `Bid`, `contract` → `Contract` | Weights are in hundred-millionths and add up to 100 000 000. `kind` (works, supplies, services) and `procedure` are the realm's words. `notices` records where the tender was published, and legislation reads `published_in`, the journals of the notices, as a fact of `tender_award`. A tender with `lots` is awarded lot by lot; its `winner` and `contract` are then empty, and each lot has its own (I-PRC-5). | `T-5` Bike lane works, by Infrastructure, works by open procedure, 600,000 REALM estimated, open 1–30 Nov, rubric: price 60%, quality 40%, noticed in the realm's journal |
+| `Lot` | `id`, `title`, `estimated_value`, `status` (`open`, `awarded`, `void`), `winner` → `Bid`, `contract` → `Contract` | One part of a tender, awarded on its own, kept in the tender's `lots`. `id` is the realm's own word for it (`1`, `A`, `north`), named once in the tender; the model gives a lot no classification of its own, since what a lot is belongs to its `title` and to the legislation that reads it. | `T-5`'s lot `2`, the bike racks, 40,000 REALM estimated, awarded to BuildCo, contract `C-10` |
+| `Bid` | `id`, `tender` → `Tender`, `vendor` → `Organization`, `submitted_at`, `sealed`, `payload_ref`, `payload_hash` (`sha256:` of `price:nonce`), `price` (set at the reveal), `score`, `lot` | Content is encrypted until the reveal. A bid prices one lot, when the tender has lots (I-PRC-5). | BuildCo's bid on `T-5`, sealed until 30 Nov; on `T-6`, its bid for lot `2` |
 | `BidScore` | `id`, `bid` → `Bid`, `evaluator` → `User`, `criterion`, `score`, `scored_at` | | Carla scores BuildCo's quality 8/10 |
 
 The `Event` log records a tender's transitions, and a vendor's record is derived from the tenders
@@ -1075,7 +1076,9 @@ it was awarded.
 ### Lifecycle
 
 `Tender.status`: `draft` → `open` → `closed` → `evaluation` → `awarded` → `contracted`;
-`draft` | `open` → `cancelled`.
+`draft` | `open` → `cancelled`; a tender with lots goes from `evaluation` to `awarded` or `cancelled`
+once no lot is `open`, and on to `contracted` as its awarded lots are contracted (I-PRC-5).
+`Lot.status`: `open` → `awarded` | `void`.
 
 ### Operations
 
@@ -1087,7 +1090,8 @@ it was awarded.
 | `bid_submit`, `bid_withdraw` | `bid.submit` | delegable | BuildCo's agent submits an encrypted bid on `T-5` |
 | `bids_reveal` | `tender.manage` | governed, delegable | After 30 Nov the 4 bids are decrypted |
 | `bid_score` | `bid.evaluate` | signing, confirm | Carla and two colleagues score each bid |
-| `tender_award` | `tender.manage` | signing, governed, confirm | Award `T-5` to BuildCo (score 86) → contract `C-9` |
+| `tender_award` | `tender.manage` | signing, governed, confirm | Award `T-5` to BuildCo (score 86) → contract `C-9`; award lot `2` of `T-6` to its best-scored bid |
+| `tender_lot_void` | `tender.manage` | governed, delegable | Lot `3` of `T-6` drew no acceptable bid: it is left void |
 
 ### Invariants
 
@@ -1097,6 +1101,22 @@ it was awarded.
 - I-PRC-3: The award goes to the best-scored bid under the published rubric, or the deviation is
   justified and recorded.
 - I-PRC-4: Bids are accepted only between `opens_at` and `closes_at`.
+- I-PRC-5: A tender is one procurement, or is divided into lots, which `tender_create` names in
+  `lots`: at most 64, each with an `id` named once in the tender, a `title` and an optional
+  `estimated_value` (`InvalidArgument` otherwise). A bid prices one lot, so a vendor bidding on
+  three lots submits three bids: `bid_submit` names the `lot` when the tender has lots and names
+  none when it has none (`InvalidArgument`). Each lot is awarded on its own: `tender_award` names
+  the lot and, as I-PRC-3 says, goes to the best-scored revealed bid of that lot, so lots of one
+  tender may go to different vendors; a `bid` it names must be a bid of that lot
+  (`InvalidArgument`). `tender_lot_void` leaves a lot with no award, for lack of a bid or of an
+  acceptable one. Both need the tender in `evaluation` and the lot `open`, else `Conflict`. A lot's
+  contract may be made once the lot is `awarded`: `contract_create` names the tender and the `lot`
+  (`Conflict` for a lot that is not awarded, or for a second contract), and names a lot only with
+  its tender (`InvalidArgument`). Once no lot is `open`, the tender is `cancelled` if every lot is
+  `void`, else `awarded`, and `contracted` once every awarded lot has its contract. With lots, the
+  tender's own `winner` and `contract` stay empty and each `Lot` holds its own. The model holds no
+  classification code or portal field of a lot: a realm that needs one keeps it in an extension,
+  keyed by the lot.
 
 ## 10. Quarters and federation
 
@@ -1675,3 +1695,4 @@ There is no permission for raw database writes: everything is an operation.
 | D34 | How a party is told apart from a company | Decided 10 Nov 2026: `Organization.kind`, one of `company`, `party`, `union`, `association` and `other`; no class of its own for a party. `other` is needed: a foundation, a cooperative or a public body is none of the four, and a kind added to the list later would break every reader of `Organization`. Set at registration, changed by `organization_edit`, `other` when absent or older (I-ORG-9) |
 | D35 | How spending moves through its stages | Decided 10 Nov 2026: two facts, no new class. A budget line's `reserved` and `committed` money beside `planned` and `actual`, moved by the governed `budget_stage`, with its available credit, `planned - reserved - committed - actual`, never negative: a transfer that would take a line above `planned` is refused, since spending without available credit is void. A transfer is charged when the obligation is recognised, and may be `scheduled`, owed by a due date, paid later with `transfer_pay` and cancelled only by the governed `transfer_revert`. `budget_list` and `transfer_list` read them (I-FIN-9, I-FIN-10) |
 | D36 | How money paid in a quarter reaches the capital's funds | Decided 10 Nov 2026: the quarter pushes it. The capital sets the sweep rules by vote (`treasury_configure`: a quarter's fund and token, the capital's fund, what the quarter keeps) and sends them with `quarter_sync`; each quarter sweeps at the end of its treasury epochs, or on `quarter_sweep`, one recorded sweep per rule and epoch whose ICRC-1 `memo` and `created_at_time` are fixed, so a retry never moves money twice; it reports each sweep to the capital (`quarter_sweep_report`), which books it once; both keep its block. An outcome still unknown 23 hours after it was sent, inside the ledger's 24-hour deduplication window, is never resent: the sweep is `needs_check` until a person resolves it (`sweep_resolve`). The capital pulling from each quarter was rejected: it makes the capital call every quarter each epoch, where quarters already push with `quarter_sync` (I-FED-5 to I-FED-7) |
+| D37 | How a tender is divided into lots | Decided 11 Nov 2026: a tender may name lots (`Tender.lots`, each with an id the realm chooses, a title and an estimated value); a bid prices one lot (`Bid.lot`), each lot is awarded on its own (`tender_award` names it) or left void (`tender_lot_void`), and each awarded lot yields its own contract (`Contract.lot`), so one tender yields several contracts, to different vendors if the bids say so. Lots are only lots: the model stays neutral about jurisdictions and holds no CPV, portal or other register field; a realm that needs one keeps it in an extension (I-PRC-5) |

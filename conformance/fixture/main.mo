@@ -2019,6 +2019,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_contract_create(args : T.ContractCreateArgs) : async Result<T.Contract> {
     switch (requireMember(caller, "contract.create_under_mandate")) { case (?e) return #Err(e); case null {} };
     if (args.mandate != null or args.tender != null) return #Err(#NotFound);
+    if (args.lot != null) return #Err(#InvalidArgument("a lot is named only with the tender it belongs to"));
     if (Text.size(args.title) == 0) return #Err(#InvalidArgument("title is empty"));
     let split = switch (args.split) { case (?s) s; case null [] };
     switch (checkTerms({ value = args.value; split; starts_at = args.starts_at; ends_at = args.ends_at })) {
@@ -3312,6 +3313,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_bids_reveal(_ : T.BidsRevealArgs) : async Result<T.Governed> { nobody(caller, "tender.manage") };
   public shared ({ caller }) func ggg_bid_score(_ : T.BidScoreArgs) : async Result<T.Bid> { nobody(caller, "bid.evaluate") };
   public shared ({ caller }) func ggg_tender_award(_ : T.TenderAwardArgs) : async Result<T.Governed> { nobody(caller, "tender.manage") };
+  public shared ({ caller }) func ggg_tender_lot_void(_ : T.TenderLotVoidArgs) : async Result<T.Governed> { nobody(caller, "tender.manage") };
   public shared ({ caller }) func ggg_tender_notice(_ : T.TenderNoticeArgs) : async Result<T.Tender> { nobody(caller, "tender.manage") };
 
   // §10

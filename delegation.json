@@ -340,6 +340,7 @@
     "bids_reveal": { "tier": "direct", "group": "office" },
     "bid_score": { "tier": "confirm", "group": "sign" },
     "tender_award": { "tier": "confirm", "group": "sign" },
+    "tender_lot_void": { "tier": "direct", "group": "office" },
     "tender_notice": { "tier": "direct", "group": "office" },
 
     "quarter_directory": { "tier": "none" },

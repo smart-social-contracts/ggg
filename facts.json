@@ -1779,6 +1779,10 @@
             }
           },
           "optional": true
+        },
+        "lot": {
+          "type": "text",
+          "optional": true
         }
       },
       "lists": {
@@ -4616,10 +4620,33 @@
               }
             }
           }
+        },
+        "lots": {
+          "type": "vec",
+          "element": {
+            "type": "LotArgs",
+            "fields": {
+              "id": {
+                "type": "text"
+              },
+              "title": {
+                "type": "text"
+              },
+              "estimated_value": {
+                "type": "nat",
+                "kind": "money",
+                "min": 0,
+                "max": 9007199254740991,
+                "optional": true
+              }
+            }
+          },
+          "optional": true
         }
       },
       "lists": {
-        "rubric": "tender_create.rubric"
+        "rubric": "tender_create.rubric",
+        "lots": "tender_create.lots"
       }
     },
     "tender_create.rubric": {
@@ -4638,6 +4665,29 @@
           "kind": "ratio",
           "min": 0,
           "max": 100000000
+        }
+      }
+    },
+    "tender_create.lots": {
+      "operation": "ggg_tender_create",
+      "list": {
+        "field": "lots",
+        "of": "the argument",
+        "element": "LotArgs"
+      },
+      "facts": {
+        "id": {
+          "type": "text"
+        },
+        "title": {
+          "type": "text"
+        },
+        "estimated_value": {
+          "type": "nat",
+          "kind": "money",
+          "min": 0,
+          "max": 9007199254740991,
+          "optional": true
         }
       }
     },
@@ -4682,6 +4732,10 @@
         },
         "on_behalf_of": {
           "type": "principal",
+          "optional": true
+        },
+        "lot": {
+          "type": "text",
           "optional": true
         }
       }
@@ -4789,12 +4843,31 @@
           "type": "text",
           "optional": true
         },
+        "lot": {
+          "type": "text",
+          "optional": true
+        },
         "published_in": {
           "type": "vec",
           "element": {
             "type": "text"
           },
           "derived": "the journals of the tender's notices"
+        }
+      }
+    },
+    "tender_lot_void": {
+      "operation": "ggg_tender_lot_void",
+      "facts": {
+        "tender": {
+          "type": "text"
+        },
+        "lot": {
+          "type": "text"
+        },
+        "reason": {
+          "type": "text",
+          "optional": true
         }
       }
     },

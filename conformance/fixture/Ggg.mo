@@ -140,6 +140,8 @@ module {
   public type Balance = { amount : Money; symbol : Text };
   public type Bid = {
     id : Text;
+    /// The lot it prices, when the tender has lots (I-PRC-5).
+    lot : ?Text;
     sealed : Bool;
     score : ?Nat;
     vendor : Text;
@@ -163,8 +165,10 @@ module {
     bid : Text;
     scores : [{ score : Nat; criterion : Text }];
   };
-  /// For a vendor the caller represents. `payload_hash` is the sha256 of `price:nonce`.
+  /// For a vendor the caller represents. `payload_hash` is the sha256 of `price:nonce`. `lot` names the one lot
+  /// the bid prices: required when the tender has lots, refused when it has none (I-PRC-5).
   public type BidSubmitArgs = {
+    lot : ?Text;
     vendor : Text;
     on_behalf_of : ?Principal;
     payload_ref : Text;
@@ -350,6 +354,8 @@ module {
   };
   public type Contract = {
     id : Text;
+    /// The lot of the tender it was awarded under, when the tender has lots (I-PRC-5).
+    lot : ?Text;
     status : ContractStatus;
     title : Text;
     mandate : ?Text;
@@ -388,6 +394,8 @@ module {
     proposal : ?Text;
   };
   public type ContractCreateArgs = {
+    /// The awarded lot of `tender` it is made from, named when the tender has lots (I-PRC-5).
+    lot : ?Text;
     title : Text;
     mandate : ?Text;
     starts_at : ?Timestamp;
@@ -1331,6 +1339,19 @@ module {
   public type LoanPage = { next : ?Text; items : [Loan] };
   public type LoanRepayArgs = { loan : Text; amount : Money; reason : ?Text };
   public type LoanStatus = { #Repaid; #Active };
+  /// One part of a tender, awarded on its own (I-PRC-5). `id` is the realm's own word for it, named once in the
+  /// tender. `winner` is the awarded bid and `contract` the contract made from it.
+  public type Lot = {
+    id : Text;
+    status : LotStatus;
+    title : Text;
+    estimated_value : ?Money;
+    contract : ?Text;
+    winner : ?Text;
+  };
+  /// A lot of a tender being created (I-PRC-5).
+  public type LotArgs = { id : Text; title : Text; estimated_value : ?Money };
+  public type LotStatus = { #Open; #Void; #Awarded };
   public type Mandate = {
     id : Text;
     status : MandateStatus;
@@ -2286,18 +2307,23 @@ module {
     contract : ?Text;
     /// What is tendered (works, supplies, services), by which procedure, and for how much.
     kind : ?Text;
+    lots : [Lot];
     notices : [Notice];
+    /// The award and its contract when the tender has no lots; with lots, each lot has its own (I-PRC-5).
     winner : ?Text;
     description : Text;
     procedure : ?Text;
   };
-  /// `bid` defaults to the best-scored revealed bid; a lower-scored one needs a justification.
+  /// `bid` defaults to the best-scored revealed bid, of the lot when there are lots; a lower-scored one needs a
+  /// justification, and a named one must be a bid of the lot (InvalidArgument). `lot` is required when the
+  /// tender has lots and refused when it has none (I-PRC-5).
   public type TenderAwardArgs = {
     bid : ?Text;
+    lot : ?Text;
     justification : ?Text;
     tender : Text;
   };
-  /// Weights add up to 100 000 000 (100 %).
+  /// Weights add up to 100 000 000 (100 %). `lots` is absent or empty for a tender that is not divided.
   public type TenderCreateArgs = {
     opens_at : ?Timestamp;
     title : Text;
@@ -2306,6 +2332,7 @@ module {
     closes_at : ?Timestamp;
     rubric : [Criterion];
     kind : ?Text;
+    lots : ?[LotArgs];
     description : ?Text;
     procedure : ?Text;
   };
@@ -2316,6 +2343,8 @@ module {
     cursor : ?Text;
     limit : ?Nat32;
   };
+  /// Leaves a lot with no award, for lack of a bid or of an acceptable one (I-PRC-5).
+  public type TenderLotVoidArgs = { lot : Text; tender : Text; reason : ?Text };
   /// Records that a notice of the tender appeared in `journal`: an External of kind `journal`, or `realm` for
   /// the realm's own journal. `at` defaults to now and is never in the future.
   public type TenderNoticeArgs = {
@@ -3487,6 +3516,10 @@ module {
     /// §9
     ggg_tender_list : shared query TenderListArgs -> async {
         #Ok : TenderPage;
+        #Err : GggError;
+      };
+    ggg_tender_lot_void : shared TenderLotVoidArgs -> async {
+        #Ok : Governed;
         #Err : GggError;
       };
     ggg_tender_notice : shared TenderNoticeArgs -> async {

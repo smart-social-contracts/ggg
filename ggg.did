@@ -393,6 +393,8 @@ type Contract = record {
   // How `value` is spread over fiscal periods, each named once, adding up to it; empty when it is not
   // spread (I-GOV-16).
   split : vec PeriodAmount;
+  // The lot of the tender it was awarded under, when the tender has lots (I-PRC-5).
+  lot : opt text;
 };
 
 // An amount for one fiscal period, named as a budget line names it; the period need not be open yet.
@@ -885,6 +887,19 @@ type Criterion = record { criterion : text; weight : Ratio };
 // A notice of the tender published in a journal, recorded with tender_notice.
 type Notice = record { journal : text; published_at : Timestamp; ref : opt text };
 
+type LotStatus = variant { Open; Awarded; Void };
+
+// One part of a tender, awarded on its own (I-PRC-5). `id` is the realm's own word for it, named once in the
+// tender. `winner` is the awarded bid and `contract` the contract made from it.
+type Lot = record {
+  id : text;
+  title : text;
+  estimated_value : opt Money;
+  status : LotStatus;
+  winner : opt text;
+  contract : opt text;
+};
+
 type Tender = record {
   id : text;
   title : text;
@@ -898,9 +913,11 @@ type Tender = record {
   opens_at : opt Timestamp;
   closes_at : opt Timestamp;
   rubric : vec Criterion;
+  // The award and its contract when the tender has no lots; with lots, each lot has its own (I-PRC-5).
   winner : opt text;
   contract : opt text;
   notices : vec Notice;
+  lots : vec Lot;
 };
 
 type Bid = record {
@@ -913,6 +930,8 @@ type Bid = record {
   payload_hash : text;
   price : opt Money;
   score : opt nat;
+  // The lot it prices, when the tender has lots (I-PRC-5).
+  lot : opt text;
 };
 
 type BidScore = record {
@@ -1553,6 +1572,8 @@ type ContractCreateArgs = record {
   ends_at : opt Timestamp;
   // Absent means not spread over periods (I-GOV-16).
   split : opt vec PeriodAmount;
+  // The awarded lot of `tender` it is made from, named when the tender has lots (I-PRC-5).
+  lot : opt text;
 };
 
 // Each term given replaces the contract's; absent keeps it. At least one is given (I-GOV-16).
@@ -1935,7 +1956,10 @@ type TenderPage = record { items : vec Tender; next : opt text };
 // A sealed bid shows no price or score.
 type TenderDetail = record { tender : Tender; bids : vec Bid; next : opt text };
 
-// Weights add up to 100 000 000 (100 %).
+// A lot of a tender being created (I-PRC-5).
+type LotArgs = record { id : text; title : text; estimated_value : opt Money };
+
+// Weights add up to 100 000 000 (100 %). `lots` is absent or empty for a tender that is not divided.
 type TenderCreateArgs = record {
   requester : text;
   title : text;
@@ -1946,22 +1970,29 @@ type TenderCreateArgs = record {
   opens_at : opt Timestamp;
   closes_at : opt Timestamp;
   rubric : vec Criterion;
+  lots : opt vec LotArgs;
 };
-// For a vendor the caller represents. `payload_hash` is the sha256 of `price:nonce`.
+// For a vendor the caller represents. `payload_hash` is the sha256 of `price:nonce`. `lot` names the one lot
+// the bid prices: required when the tender has lots, refused when it has none (I-PRC-5).
 type BidSubmitArgs = record {
   tender : text;
   vendor : text;
   payload_ref : text;
   payload_hash : text;
   on_behalf_of : opt principal;
+  lot : opt text;
 };
 type BidWithdrawArgs = record { bid : text; on_behalf_of : opt principal };
 type BidOpening = record { bid : text; price : Money; nonce : text };
 type BidsRevealArgs = record { tender : text; openings : vec BidOpening };
 // Marks from 0 to 10 per rubric criterion; scoring again replaces the caller's marks.
 type BidScoreArgs = record { bid : text; scores : vec record { criterion : text; score : nat } };
-// `bid` defaults to the best-scored revealed bid; a lower-scored one needs a justification.
-type TenderAwardArgs = record { tender : text; bid : opt text; justification : opt text };
+// `bid` defaults to the best-scored revealed bid, of the lot when there are lots; a lower-scored one needs a
+// justification, and a named one must be a bid of the lot (InvalidArgument). `lot` is required when the
+// tender has lots and refused when it has none (I-PRC-5).
+type TenderAwardArgs = record { tender : text; bid : opt text; justification : opt text; lot : opt text };
+// Leaves a lot with no award, for lack of a bid or of an acceptable one (I-PRC-5).
+type TenderLotVoidArgs = record { tender : text; lot : text; reason : opt text };
 // Records that a notice of the tender appeared in `journal`: an External of kind `journal`, or `realm` for
 // the realm's own journal. `at` defaults to now and is never in the future.
 type TenderNoticeArgs = record { tender : text; journal : text; ref : opt text; at : opt Timestamp };
@@ -2504,6 +2535,7 @@ service : {
   ggg_bids_reveal : (BidsRevealArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_bid_score : (BidScoreArgs) -> (variant { Ok : Bid; Err : GggError });
   ggg_tender_award : (TenderAwardArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_tender_lot_void : (TenderLotVoidArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_tender_notice : (TenderNoticeArgs) -> (variant { Ok : Tender; Err : GggError });
 
   // §10
