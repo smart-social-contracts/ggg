@@ -2315,7 +2315,8 @@ module {
     procedure : ?Text;
   };
   /// `bid` defaults to the best-scored revealed bid, of the lot when there are lots; a lower-scored one needs a
-  /// justification. `lot` is required when the tender has lots and refused when it has none (I-PRC-5).
+  /// justification, and a named one must be a bid of the lot (InvalidArgument). `lot` is required when the
+  /// tender has lots and refused when it has none (I-PRC-5).
   public type TenderAwardArgs = {
     bid : ?Text;
     lot : ?Text;

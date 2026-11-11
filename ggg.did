@@ -1988,7 +1988,8 @@ type BidsRevealArgs = record { tender : text; openings : vec BidOpening };
 // Marks from 0 to 10 per rubric criterion; scoring again replaces the caller's marks.
 type BidScoreArgs = record { bid : text; scores : vec record { criterion : text; score : nat } };
 // `bid` defaults to the best-scored revealed bid, of the lot when there are lots; a lower-scored one needs a
-// justification. `lot` is required when the tender has lots and refused when it has none (I-PRC-5).
+// justification, and a named one must be a bid of the lot (InvalidArgument). `lot` is required when the
+// tender has lots and refused when it has none (I-PRC-5).
 type TenderAwardArgs = record { tender : text; bid : opt text; justification : opt text; lot : opt text };
 // Leaves a lot with no award, for lack of a bid or of an acceptable one (I-PRC-5).
 type TenderLotVoidArgs = record { tender : text; lot : text; reason : opt text };
