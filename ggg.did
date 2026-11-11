@@ -405,8 +405,8 @@ type FrameworkHolder = variant { External : text; Realm : principal };
 
 // A framework agreement a contract is a call-off under (I-PRC-6). `reference` is the agreement's number or
 // title where the holder keeps it, or the tender's id when the holder is a realm; 1 to 128 code points.
-// `winners` are the organizations the agreement was awarded to, at most 32, empty when the realm does not
-// know them.
+// `winners` are the ids of this realm's organizations the agreement was awarded to, at most 32, empty when the
+// realm does not know them.
 type Framework = record { holder : FrameworkHolder; reference : text; winners : vec text };
 
 // An amount for one fiscal period, named as a budget line names it; the period need not be open yet.

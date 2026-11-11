@@ -943,8 +943,8 @@ module {
   };
   /// A framework agreement a contract is a call-off under (I-PRC-6). `reference` is the agreement's number or
   /// title where the holder keeps it, or the tender's id when the holder is a realm; 1 to 128 code points.
-  /// `winners` are the organizations the agreement was awarded to, at most 32, empty when the realm does not
-  /// know them.
+  /// `winners` are the ids of this realm's organizations the agreement was awarded to, at most 32, empty when the
+  /// realm does not know them.
   public type Framework = {
     reference : Text;
     holder : FrameworkHolder;

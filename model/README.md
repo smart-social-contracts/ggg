@@ -1120,17 +1120,18 @@ once no lot is `open`, and on to `contracted` as its awarded lots are contracted
 - I-PRC-6: A contract may be a call-off under a framework agreement that another body holds, so that
   a realm buys under an agreement it did not tender: `framework` on `contract_create` names a
   `holder`, an `External` of this realm (a province, a ministry) or another realm, by its capital; a
-  `reference`, the agreement's number or title in the holder's own words or, for a realm, the tender's
-  id there (1 to 128 code points); and its `winners`, the organizations it was awarded to, at most 32,
-  when the realm knows them. The realm checks what it holds, each `InvalidArgument` but the first: that
-  an `External` holder is one it knows (`NotFound`); that a realm holder is not the realm itself,
-  whose own tender is the contract's `tender`; and, when `winners` is not empty, that one of the
-  contract's parties is an organization among them. It does not check, and cannot, what only the
-  holder knows: that the agreement exists, that it is in force and covers this purchase, that its
-  ceiling is not reached, that the winners listed are the holder's. `framework` is the claim of the
-  realm that made the contract, which a reader or a codex guard weighs against the holder's own
-  records. It adds no payment rule: the contract's `value` bounds its payments (I-FIN-11). The
-  framework is set when the contract is made and `contract_amend` never changes it.
+  `reference`, the agreement's number or title in the holder's own words or, for a realm, the
+  tender's id there (1 to 128 code points, else `InvalidArgument`); and its `winners`, the ids of
+  this realm's organizations that the agreement was awarded to, at most 32 (`InvalidArgument` for
+  more), empty when the realm does not know them. The realm checks what it holds: an `External`
+  holder is one it knows (`NotFound` otherwise); a realm holder is not the realm itself, whose own
+  tender is the contract's `tender` (`InvalidArgument`); and, when `winners` is not empty, one of
+  the contract's parties is an organization among them (`InvalidArgument`). It does not check, and
+  cannot, what only the holder knows: that the agreement exists, that it is in force and covers this
+  purchase, that its ceiling is not reached, that the winners listed are the holder's. `framework`
+  is the claim of the realm that made the contract, which a reader or a codex guard weighs against
+  the holder's own records. It adds no payment rule: the contract's `value` bounds its payments
+  (I-FIN-11). The framework is set when the contract is made and `contract_amend` never changes it.
 
 ## 10. Quarters and federation
 
