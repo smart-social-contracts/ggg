@@ -334,7 +334,8 @@ type Proposal = record {
   result : opt ProposalResult;
   links : vec ProposalLink;
   // The realm's own words for grouping proposals (an area, a district, a kind of act), at most 16,
-  // each 1 to 64 characters and named once (I-GOV-15).
+  // each 1 to 64 code points, not padded with whitespace, without control characters, named once and
+  // compared exactly, never normalised (I-GOV-15).
   tags : vec text;
   // True when the department's policy counted the votes cast as the vote opened (I-GOV-3): the quorum
   // counts over `tally.seats`, a tie over the votes cast gets a second vote, where the casting vote

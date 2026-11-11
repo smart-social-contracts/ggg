@@ -53,6 +53,7 @@
 /// holds makes that checksum the active codex, keeping the history, and codex_revert restores the one
 /// it replaced, or any earlier one by checksum; the fixture runs no codex.
 import Array "mo:core/Array";
+import Char "mo:core/Char";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
 import List "mo:core/List";
@@ -497,12 +498,27 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     switch (p.on_behalf_of) { case (?grantor) grantor; case null p.proposer };
   };
 
-  /// Refuses tags that break I-GOV-15: too many, empty or too long, or one named twice.
+  /// Unicode's control characters (category Cc): U+0000 to U+001F and U+007F to U+009F.
+  func isControl(c : Char) : Bool {
+    let code = Char.toNat32(c);
+    code < 0x20 or (code >= 0x7F and code <= 0x9F);
+  };
+
+  /// Whether a tag has a control character anywhere, or whitespace at either end (I-GOV-15).
+  func badTagCharacters(t : Text) : Bool {
+    let chars = Text.toArray(t);
+    if (chars.size() == 0) return false;
+    Char.isWhitespace(chars[0]) or Char.isWhitespace(chars[chars.size() - 1]) or Array.any<Char>(chars, isControl);
+  };
+
+  /// Refuses tags that break I-GOV-15: too many, empty or too long (in code points, which Text.size
+  /// counts), padded with whitespace or holding a control character, or one named twice.
   func checkTags(tags : [Text]) : ?T.GggError {
     if (tags.size() > MAX_TAGS) return ?#InvalidArgument("a proposal has at most 16 tags");
     let named = Map.empty<Text, ()>();
     for (t in tags.vals()) {
       if (Text.size(t) == 0 or Text.size(t) > MAX_TAG_SIZE) return ?#InvalidArgument("a tag is 1 to 64 characters");
+      if (badTagCharacters(t)) return ?#InvalidArgument("a tag has no control characters and no whitespace at either end");
       if (Map.containsKey(named, Text.compare, t)) return ?#InvalidArgument("the tags name " # t # " twice");
       Map.add(named, Text.compare, t, ());
     };
