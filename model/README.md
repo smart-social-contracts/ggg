@@ -433,7 +433,7 @@ Two kinds of body:
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Department` | `id` (name), `description`, `kind`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals]}`, quorum in hundred-millionths (50 % = 50 000 000); `n` is what a proposal's threshold is measured against, not the seats filled: Civil Registry decides 2 of 3 though it seats seven (I-GOV-3). Exactly one root department per realm. `kind` says what the body is (the realm's plenary, a committee), so legislation from another source can address a kind without naming a department. | Civil Registry: under Administration, 2-of-3 policy, head `dana`; the Council: kind `plenary` |
+| `Department` | `id` (name), `description`, `kind`, `parent` → `Department`, `is_root`, `head` → `User`, `policy` (Json), `target_policy` (Json), `fund` → `Fund` | `policy` = `{m, n, quorum, veto: [principals], threshold_of}`, quorum in hundred-millionths (50 % = 50 000 000); `n` is what a proposal's threshold is measured against, not the seats filled: Civil Registry decides 2 of 3 though it seats seven (I-GOV-3). `threshold_of` `cast` makes the department decide by a majority of the votes cast instead, the usual rule of a council or a parliament, with its quorum of n and its `head` as chair, whose casting vote decides a tie in a second vote; `m` is then not used. Absent, or `eligible`, it decides m of n. Exactly one root department per realm. `kind` says what the body is (the realm's plenary, a committee), so legislation from another source can address a kind without naming a department. | Civil Registry: under Administration, 2-of-3 policy, head `dana`; the Council: kind `plenary`, a majority of the votes cast of its 33 seats with a third of them voting, chaired by its head |
 | `Organization` | `id` (name), `description`, `status`, `admins` → `User`* | An external party. Its admins manage its representatives. | Clinic B: `active`, admin `dr-ana` |
 | `Position` | `id` (key), `department` → `Department` or `organization` → `Organization`, `title`, `profile` → `UserProfile`, `headcount`, `salary` (int), `salary_period`, `status`, `inherit_from_capital` | A seat in a department, or a representative seat in an organization. | `civil-registry.clerk`: 4 seats, 2,000 REALM/month, profile `clerk`; `clinic-b.physician`: 3 seats |
 | `Appointment` | `id`, `position` → `Position`, `user` → `User`, `kind` (`substantive`, `acting`), `agent` (bool), `supervisor` → `User`, `started_at`, `ended_at`, `status`, `source_quarter` | One user holding one seat. Agents are users with `agent = true`. | Bob holds a clerk seat since 2026-05-01; `records-bot` holds `records_agent` at Clinic B, agent, supervisor `dr-ana` |
@@ -451,7 +451,7 @@ Two kinds of body:
 |---|---|---|---|
 | `department_create` | `org.create` | governed, delegable | Create department Health under the root → proposal `P-12` |
 | `department_edit`, `department_delete` | `org.set_policy` | governed, delegable | Move Roads under Infrastructure; make `dana` head of Civil Registry; mark the Council as the `plenary`. During setup `department_edit` asks each time when it names a head |
-| `department_set_policy` | `org.set_policy` | governed, delegable | Infrastructure goes from 1-of-1 to 2-of-3 with 50% quorum. During setup it asks each time when the policy names veto holders |
+| `department_set_policy` | `org.set_policy` | governed, delegable | Infrastructure goes from 1-of-1 to 2-of-3 with 50% quorum; the Council decides by a majority of the votes cast. During setup it asks each time when the policy names veto holders |
 | `department_get`, `department_list`, `department_chart` | `realm.data_view` | read, delegable | Civil Registry's chart: 3 positions, 7 of 9 seats filled |
 | `position_create`, `position_edit`, `position_close` | `org.manage_members` | governed, delegable | Open 2 `inspector` seats in Infrastructure at 2,400 REALM/month |
 | `appoint`, `appoint_acting`, `appointment_end` | `org.appoint` | governed, delegable | Appoint Carla planning officer; Bob acts as head while Dana is on leave. During setup an appointment asks each time |
@@ -494,8 +494,8 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 
 | Entity | Fields | Notes | Example |
 |---|---|---|---|
-| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `prepared_by` (the delegate, when the proposer approved it from a pending action, §2), `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `tally` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of` and `casting_vote` are the rule that decides it (I-GOV-3), fixed when the vote opens; the casting vote is the realm's, for a realm-wide proposal only, never the proposer's. A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of Infrastructure's 3 policy seats |
-| `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the vote ends. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
+| `Proposal` | `id`, `title`, `description`, `proposer` → `User`, `on_behalf_of`, `prepared_by` (the delegate, when the proposer approved it from a pending action, §2), `department` → `Department` (scope; root = realm-wide), `kind`, `matter`, `action` (nothing for a motion; one operation call with its arguments; or codex code ref + checksum), `status`, `opens_at`, `deadline`, `effective_at`, `threshold`, `quorum` (both in hundred-millionths), `threshold_of` (`cast` or `eligible`), `casting_vote` → `User`, `majority_of_cast`, `tally` (Json), `first_vote` (Json), `result` (Json), `links` | `kind` and `matter` say what the proposal is (a change of legislation, a budget) and what it decides, in the realm's own words, for legislation to read. `threshold`, `quorum`, `threshold_of`, `casting_vote` and `majority_of_cast` are the rule that decides it (I-GOV-3), fixed when the vote opens; the casting vote is the scope's, the realm's for a realm-wide proposal or the head of a department that counts the votes cast, never the proposer's. `first_vote` is the count of a first vote that tied, when a second one followed (I-GOV-14). A link is `replaces` or `relates to` another proposal, fixed at creation. `links` is optional in `proposal_create`: absent means none. | `P-7` Bike lane on Main St, scope Infrastructure, action `transfer_create` 50,000 REALM to BuildCo, `voting` until 8 Nov, threshold 2/3 of Infrastructure's 3 policy seats |
+| `Vote` | `id`, `proposal` → `Proposal`, `voter` → `User`, `cast_by`, `choice` (`yes`, `no`, `abstain`), `cast_at` | One per voter per proposal; may be replaced until the vote ends. A second vote (I-GOV-14) starts with none: the first vote's are in the audit log. | Alice votes `yes` on `P-7`, cast by `claude-conn` |
 | `Mandate` | `id`, `title`, `scope` (Json), `max_value`, `symbol`, `executor` → `Department`, `proposal` → `Proposal`, `status`, `expires_at` | An authorization to act, granted by governance. Contracts under it are worth at most `max_value` in `symbol`, when set. | Infrastructure may contract road works up to 200,000 REALM until 2027-06-30 (from `P-4`) |
 | `Contract` | `id`, `title`, `parties` (Json list of `Entity:id`), `mandate` → `Mandate`, `kind`, `procedure`, `tender` → `Tender`, `value`, `symbol`, `terms_ref`, `terms_hash`, `status`, `starts_at`, `ends_at` | Agreement between parties, possibly under a mandate. `value` is what the realm commits, in `symbol`. `kind` (works, supplies, services) and `procedure` are the realm's words; a contract made from a tender names it and takes its kind and procedure. | `C-9`: Agora × BuildCo, bike lane works, 50,000 REALM, Dec–Mar, from tender `T-5`, terms `sha256:4be1…` |
 
@@ -504,7 +504,9 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 - `Proposal.status`: `draft` → `voting` → `accepted` | `rejected` | `expired`; `accepted` →
   `executed` | `failed`; `draft` | `voting` → `withdrawn`. A proposal with an action that is accepted
   with an `effective_at` still ahead goes straight on to `execution_scheduled`, then `executed` |
-  `failed` | `withdrawn`. A motion has nothing to execute, so it stays `accepted`. A GOS that runs
+  `failed` | `withdrawn`. A motion has nothing to execute, so it stays `accepted`. A department's
+  first vote that ties under a majority of the votes cast leaves the proposal `voting`, for a second
+  vote (I-GOV-14). A GOS that runs
   the action itself takes a proposal with an action from `voting` straight to `executed` or `failed`
   (I-GOV-12).
 - `Mandate.status`: `active` → `completed` | `revoked` | `expired`.
@@ -518,7 +520,7 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 | `proposal_create` | `proposal.create` | delegable | `{title: "Bike lane on Main St", department: "infrastructure", action: {…}}` → `P-7`. Under a grant a motion is direct; a proposal that carries an action asks each time |
 | `proposal_withdraw` | `proposal.create` (own) | delegable | Bob withdraws his draft `P-8` |
 | `proposal_vote` | `proposal.vote` | delegable | `{proposal: "P-7", choice: "yes", on_behalf_of: "alice"}` → `V-31` |
-| `proposal_open`, `proposal_finalize`, `proposal_execute` | `proposal.manage` | delegable | After the deadline: 412 yes, 120 no, quorum met → `accepted`; execute pays BuildCo |
+| `proposal_open`, `proposal_finalize`, `proposal_execute` | `proposal.manage` | delegable | After the deadline: 412 yes, 120 no, quorum met → `accepted`; execute pays BuildCo. The Council's 15 yes, 15 no and 3 abstentions are a tie: finalizing opens its second vote |
 | `proposal_stop` | `proposal.manage` | governed, delegable | `P-12`, scoped to Infrastructure, is scheduled for 1 Dec; under Infrastructure's policy a vote (`P-15`) calls `proposal_stop` on it and it ends `withdrawn` |
 | `proposal_get`, `proposal_list` | `realm.data_view` | read, delegable | Open proposals in quarter North |
 | `proposal_linked_from` | `realm.data_view` | read, delegable | The proposals that link to `P-7`: `P-9` replaces it, `P-11` and `P-12` relate to it |
@@ -533,16 +535,18 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
 - I-GOV-1: A replayed proposal executes exactly the `action` that was voted on, and only once.
 - I-GOV-2: Votes count only from users eligible for the proposal's scope when they vote.
 - I-GOV-3: A proposal is accepted only if its quorum and threshold are met when its vote ends. Its rule,
-  `threshold`, `quorum`, `threshold_of` and `casting_vote`, states the one that decides it, and that rule
-  is applied; it is fixed when the vote opens, together with `tally.eligible` and `tally.seats`: at
-  creation for a proposal filed open, at `proposal_open` for a draft, which then takes, for each of
-  threshold, quorum and basis, the stricter of the rule it stated and the scope's default of that
-  moment, never a weaker one; after that it never moves, like the action. One comparison per scope:
+  `threshold`, `quorum`, `threshold_of`, `casting_vote` and `majority_of_cast`, states the one that
+  decides it, and that rule is applied; it is fixed when the vote opens, together with `tally.eligible`
+  and `tally.seats`: at creation for a proposal filed open, at `proposal_open` for a draft, which then
+  takes, for each of threshold, quorum and basis, the stricter of the rule it stated and the scope's
+  default of that moment, never a weaker one, and the scope's casting vote and `majority_of_cast` of
+  that moment; after that it never moves, like the action. One comparison per scope and policy:
   - A **realm-wide** proposal takes the realm's `voting_threshold` and `voting_quorum`, over the votes
     `cast`: it is accepted when the votes cast reach the quorum of the eligible voters and the yes votes
     *exceed* `threshold` of the yes and no votes. Over the `eligible` voters, the yes votes must exceed
     `threshold` of them all, so 50 % over the eligible is more than half of the members.
-  - A **department's** proposal under an m-of-n policy takes `threshold` m/n, in hundred-millionths
+  - A **department's** proposal under an **m-of-n** policy (`Policy.threshold_of` absent or
+    `eligible`) takes `threshold` m/n, in hundred-millionths
     rounded down (2 of 3 is 66 666 666, shown as 66.666666 %), over the policy's n (`tally.seats`), not
     over the seats filled, and the policy's quorum; its `threshold_of` is `eligible`, which for a
     department means its policy's n, and `cast` is weaker and refused. It is accepted when the yes
@@ -551,18 +555,43 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
     (I-GOV-7). A direct policy (1 of 1) needs one yes. The eligible voters are the department's seated
     members (`tally.eligible`): they drive the quorum and the end at which everyone has voted, never
     the threshold, so a vacancy never makes a vote easier.
-  - Under `cast`, when the yes votes stand exactly at `threshold` of the yes and no votes (a tie at 50 %),
-    the `casting_vote` member's yes accepts; without one, or if that member did not vote yes, the tie
-    rejects. The casting vote is part of the realm's default rule, set by governed configuration:
-    `Realm.casting_vote` (`governance_update`, an active member). A realm-wide proposal copies it
-    when its vote opens; the proposer never sets it, and a department's proposals have none, since
-    they count over the seats, where no tie arises. If the member later leaves, new proposals still
-    copy them, their vote does not count on those (I-GOV-2) and ties reject, until
-    `governance_update` names another or clears it.
+  - A **department's** proposal under a policy that counts the **votes cast** (`Policy.threshold_of`
+    `cast`, the usual rule of a council or a parliament) takes a majority of them, `threshold` 50 %
+    over the votes `cast`, the policy's quorum, and the department's `head`, its chair, as
+    `casting_vote`; it has `majority_of_cast`. It is accepted when the votes cast reach the quorum of the
+    policy's n (`tally.seats`) and the yes votes *exceed* `threshold` of the yes and no votes: an
+    abstention counts towards the quorum, never towards the majority. The quorum counts over n, not
+    the seats filled, so here too a vacancy never makes a vote easier; the policy's m is not used. A
+    veto holder's `no` rejects it whatever the count (I-GOV-7). A tie in its first vote is put to a
+    second vote (I-GOV-14), and a tie in the second vote is decided by the casting vote.
+  - Under `cast`, a vote is a tie when at least one yes or no was cast and the yes votes are exactly
+    `threshold` of the yes and no votes together (at 50 %: as many yes as no). The `casting_vote`
+    member's yes accepts a tie; without one, or if that member did not vote yes, the tie rejects, so a
+    tie never passes on its own. A realm-wide tie is decided at once; a department's under
+    `majority_of_cast` only in its second vote.
+    The casting vote is part of the scope's default rule, never the proposer's: for a realm-wide
+    proposal the realm's, set by governed configuration, `Realm.casting_vote` (`governance_update`, an
+    active member); for a department's, its `head` (`department_edit`). A proposal copies it when its
+    vote opens: a chair who filed the proposal keeps it, and a later change moves no open proposal. A
+    department under an m-of-n policy has none, since it counts over the seats, where no tie arises.
+    A department's casting vote belongs to whoever `department_edit` has made its `head` when the vote
+    opens; an acting appointment (`appoint_acting`) to a seat does not count, since it never changes
+    `Department.head`. With no head a tie rejects. A head who holds no seat in the department cannot
+    vote (I-GOV-2), so its ties reject too. If the realm's casting member leaves the
+    realm, new proposals still copy them but their vote does not count (I-GOV-2), so realm-wide ties
+    reject until `governance_update` names another member or clears it.
   - The proposer may state a stricter rule when creating the proposal, never a weaker one
     (`InvalidArgument`): a higher threshold or quorum, or `eligible` where the default is `cast`. Each
     change narrows what the default accepts, so legislation's guards, which may require them, only ever
-    tighten.
+    tighten. A stricter threshold t over the votes cast has its own tie, the yes votes exactly t of the
+    yes and no votes, decided as the default's tie is. That never loosens the default: above 50 %, such
+    a count already has more yes than no, which the default accepts outright. In a
+    department that counts the votes cast, `eligible` adds a requirement and removes none: the yes
+    votes must also *reach* `threshold` of n, rounded up as under m of n (an absolute majority of 33
+    seats is 17, at 50 %), while the majority of the votes cast, with its second vote and casting
+    vote, and the quorum of n still apply (`majority_of_cast`). So no stated rule accepts what the
+    default rejects or would put to a second vote, even in a department that seats more members than
+    its n. `cast` is never stricter than `eligible`.
   - A proposal that a governed call files takes its scope's default rule. Legislation may require a
     matter to be filed as a proposal of its own, with `proposal_create`, a `Call` action and a stricter
     rule, and a guard on the governed operation may refuse the direct path, so a chapter can demand a
@@ -589,11 +618,12 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   Only an acceptance ends a department vote this early: until its deadline, or until every eligible
   member has voted, a `no` can still be replaced, even when the threshold is out of reach, and a veto
   holder yet to vote keeps it open. The end at which every eligible member has voted can still reject.
-  A realm-wide vote has no such early end. When it is finalized doesn't matter: finalizing never moves
-  the end of the vote (I-GOV-12 says how a GOS settles it). After the vote ends no vote is accepted or
-  replaced (`Conflict`). A vote that ended before `effective_at` does not expire: finalized before
-  `effective_at` the proposal is scheduled, even if its `deadline` is later, and finalized after it
-  the proposal is accepted and its action executes at once.
+  A realm-wide vote, and one under `majority_of_cast`, has no such early end. When it is finalized
+  doesn't matter: finalizing never moves the end of the vote (I-GOV-12 says how a GOS settles it).
+  After the vote ends no vote is accepted or replaced (`Conflict`). A vote that ended before
+  `effective_at` does not expire: finalized before `effective_at` the proposal is scheduled, even if
+  its `deadline` is later, and finalized after it the proposal is accepted and its action executes at
+  once.
 - I-GOV-8: `proposal_stop` ends a proposal that is `execution_scheduled`, without executing it, as
   `withdrawn`; for any other status, or while its action is running, it is refused with `Conflict`.
   Its governing department is the one that owns the stopped proposal (§1), so the votes that may carry
@@ -637,6 +667,18 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   scheduled proposal, the realm's can stop a department's, and a parent's can act on a department
   below it, where a sibling's cannot. A governed call that files a proposal itself (§1) scopes it to
   the governing department, so that proposal carries it when it is filed.
+- I-GOV-14: Under `majority_of_cast` (I-GOV-3), a first vote that meets its quorum and ties does not end
+  the proposal: recording its outcome (`proposal_finalize`, or the GOS settling it, I-GOV-12) opens a
+  second vote on the same proposal instead, which stays `voting`. A veto holder's `no` still rejects
+  the proposal whatever the count (I-GOV-3), so a tied first vote in which a veto holder voted no is
+  rejected, not put to a second vote. The second vote keeps the rule, its casting vote included, the
+  action, `effective_at`, `tally.eligible` and `tally.seats`; `first_vote` keeps the first vote's
+  count, the ballots start empty, so every member votes again, and `opens_at` and `deadline` become
+  the second vote's: it opens when the tie is recorded and lasts as long as the first did (with no
+  deadline when the first had none). It ends as any vote does (I-GOV-7) and is decided like the first,
+  so a second vote that misses its quorum is rejected; a tie in it is decided by the casting vote, and
+  there is no third vote. A first vote that ended after `effective_at` expires the proposal instead,
+  like a second vote that does. The first vote's ballots stay in the audit log (I-ALL-4).
 
 ## 5. Finance
 
@@ -1462,12 +1504,12 @@ There is no permission for raw database writes: everything is an operation.
 | D12 | Sessions of a collegiate organ as entities, with operations to open and close one | Rejected: a proposal's `opens_at` and `deadline` are the session |
 | D13 | Holidays as realm data | Rejected: they stay in the codex, beside its chapters |
 | D14 | Outside bodies as registry entries, or as realms | Rejected: an `External` with a `Dispatch` outbox, confirmed by an operator or a bridge; what they say enters through `external_report` |
-| D15 | What a proposal's `threshold` means under a department's m-of-n policy | Decided 8 Nov 2026: it states the rule that decides the proposal and is applied, with one comparison per scope: a realm-wide proposal's yes votes *exceed* the threshold of its basis (votes cast, or all eligible members), a department's *reach* it over its policy's n (D20) (m of n is m/n rounded down: 2 of 3 is 66 666 666); the proposer may only tighten the rule, and the casting vote is the realm's, for a realm-wide proposal only, set by governed configuration (I-GOV-3) |
+| D15 | What a proposal's `threshold` means under a department's m-of-n policy | Decided 8 Nov 2026: it states the rule that decides the proposal and is applied, with one comparison per scope: a realm-wide proposal's yes votes *exceed* the threshold of its basis (votes cast, or all eligible members), a department's *reach* it over its policy's n (D20) (m of n is m/n rounded down: 2 of 3 is 66 666 666); the proposer may only tighten the rule, and the casting vote is the realm's, for a realm-wide proposal only, set by governed configuration (I-GOV-3). Amended 10 Nov 2026 (D31): a department whose policy counts the votes cast takes a majority of them, its yes votes *exceeding* 50 % of the yes and no votes, and its head's casting vote decides a tie in a second vote; under an m-of-n policy the comparison and the absence of a casting vote stay as decided |
 | D16 | Personal data in attributes, requests, dispatches and published documents | Decided 8 Nov 2026: an attribute's kind and value are in clear, readable only by the person, the reviewers and the codex; a request's or dispatch's personal content is an encrypted `Document` reference; a published copy holds no personal data (I-PRV-1) |
 | D17 | The majority of a proposal that a governed call files | Decided 8 Nov 2026: the scope's default rule; legislation that needs more requires a proposal of its own and may refuse the direct path with a guard (I-GOV-3) |
 | D18 | Which vote may carry a governed call on another department's record | Decided 8 Nov 2026: a realm-wide proposal carries any call; a department's only a governed call whose governing department is that department or one below it, checked at creation and again when the action executes (I-GOV-13) |
 | D19 | Which department governs a change of parent, `department_delete`, `fund_create` and `budget_propose` | Decided 8 Nov 2026: a change of `parent` is governed by the lowest department that is, or is above, both the old and the new parent (an unknown new parent is `NotFound`), and every other edit by the department itself; `department_delete` by the parent, the root for a top-level department, never the root (`InvalidArgument`) nor a department that owns a fund (`Conflict`); creating an owned record, `fund_create`, by the owner named; `budget_propose` by the owner of the `fund` it names, or by the root when it names none and proposes every fund's lines; its lines are fixed when it files (`proposed`, with the proposal), a later one takes only `draft` lines, its totals are the sums over the lines it proposes, and `budget_extend` and the replacement of extended lines are per fund (§1, §3, §5) |
-| D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3) |
+| D20 | What a department's threshold is measured against | Decided 8 Nov 2026: the policy's n, fixed when the vote opens (`tally.seats`), not the seats filled: the default needs exactly m yes votes whatever the vacancies, a stricter threshold t the next whole number at or above t·n, a direct policy one yes; the seated members (`tally.eligible`) drive the quorum and the end at which everyone has voted, so a vacancy never makes a vote easier (I-GOV-3). Amended 10 Nov 2026 (D31): a department whose policy counts the votes cast measures its threshold against the yes and no votes and its quorum against the policy's n, so there too a vacancy never makes a vote easier |
 | D21 | Power of attorney by groups | Decided 8 Nov 2026: a grant names plain-language groups of operations ([`delegation.json`](../delegation.json)), not permissions, so a member reads what they hand over and every GOS and client show the same words; every operation has a tier, and an operation asks each time only if acting without the member would decide where their money or identity points, hand lasting power or keys to someone with no vote to follow, be their personal consent or signature, or take effect at once and be hard to undo; a grant made before groups keeps covering exactly what it did; limits are checked at use ([§2](#power-of-attorney)) |
 | D22 | How a delegate proposes a codex install | Decided 8 Nov 2026: as a `proposal_create` whose action is the `codex_install` call, which carries an action and so asks each time: the member approves the exact release before the realm votes. A member who holds `codex.install` may also let a delegate call `codex_install` itself: under `setup` during setup, direct; under `admin` after launch, a governed call filed as a proposal tied to the grant (I-ID-10). No new rule: the tiers decide |
 | D23 | How a progressive tax is rounded | Decided 8 Nov 2026: the exact total over all brackets is rounded once, an exact half away from zero, to the nearest cent (a multiple of 10^(decimals − 2) smallest units); never bracket by bracket (§5) |
@@ -1478,3 +1520,4 @@ There is no permission for raw database writes: everything is an operation.
 | D28 | A call in its confirm form through its own method | Decided 8 Nov 2026: a `confirm` operation, or a `direct` one whose condition holds, called through its own method with `on_behalf_of` is refused with `Forbidden` and a message that says to file it through `call_for`. The method's own reply type has no place for a pending action, and adding one to every such method's reply would break their signatures |
 | D29 | How a reviewer reads a pending attribute | Decided 8 Nov 2026: `attribute_pending_list`, a read under `attribute.review`, lists the attributes awaiting review with kind and value in clear, consistent with I-PRV-1, paged by id so that deciding a page skips none; a holder of `attribute.review` on a scope reads and decides only the attributes in it, scope `kind:<kind>` for the kinds that body certifies, and held without a scope every pending attribute of the realm, `attribute_pending_list` and `attribute_review` applying the same scope; the audit events of `attribute_submit` and `attribute_review` keep the attribute's id, and for a review the decision, never its kind or value (§2) |
 | D30 | What the fee exemption covers, and what a second adopted line does | Decided 8 Nov 2026: only the fee's ledger entry, which the GOS books itself in the category `ledger_fee`, is exempt from an adopted budget; `ledger_fee` is reserved, a `transfer_create` or `budget_draft` naming it `InvalidArgument`, budget or not, so no proposal or extension carries one; a later adopted line of the same fund, period and category amends the earlier one, within one adoption too, where the line drafted later stands, so one line stands per fund, period and category, `budget_extend` carries the newest and the spending booked against the earlier one carries over (§5) |
+| D31 | A department that decides by a majority of the votes cast | Decided 10 Nov 2026: a department's policy may count the votes cast (`Policy.threshold_of` `cast`): the yes votes must exceed the no votes, abstentions counting towards the quorum only, with the policy's quorum of its n; a tie gets a second vote on the same proposal, and a tie in that one is decided by the casting vote of the department's `head`, its chair, copied when the vote opens, so a chair who proposed keeps it and an absent chair's tie rejects. The rule is the department's, never legislation's arithmetic: no hook computes it. A proposer may only tighten it: a higher threshold of the votes cast or quorum, or `eligible`, which adds that the yes votes reach the threshold of n (an absolute majority) and keeps the majority of the votes cast and its tie procedure, so no stated rule passes what the default rejects or would put to a second vote. Amends D15 and D20 (I-GOV-3, I-GOV-14) |

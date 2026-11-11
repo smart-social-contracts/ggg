@@ -532,6 +532,7 @@ module {
     id : Text;
     is_root : Bool;
     fund : ?Text;
+    /// Its chair: under a policy that counts the votes cast, the casting vote on a tie in a second vote.
     head : ?Principal;
     /// What kind of body it is, such as the realm's plenary, so legislation from a source above can name the
     /// kind without naming the department.
@@ -1542,8 +1543,16 @@ module {
     category : Text;
     profiles : [Text];
   };
-  /// m of n approvals.
-  public type Policy = { m : Nat; n : Nat; veto : [Principal]; quorum : Ratio };
+  /// How a department decides (I-GOV-3). `threshold_of` absent or Eligible: m of n approvals. Cast: a
+  /// majority of the votes cast, with `quorum` of n voting and the head's casting vote on a second tie; m
+  /// is not used then. Either way n is the body's size, what a vacancy never lowers.
+  public type Policy = {
+    m : Nat;
+    n : Nat;
+    veto : [Principal];
+    threshold_of : ?ThresholdBasis;
+    quorum : Ratio;
+  };
   public type Position = {
     id : Text;
     status : PositionStatus;
@@ -1626,9 +1635,15 @@ module {
     result : ?ProposalResult;
     tally : Tally;
     title : Text;
+    /// True when the department's policy counted the votes cast as the vote opened (I-GOV-3): the quorum
+    /// counts over `tally.seats`, a tie over the votes cast gets a second vote, where the casting vote
+    /// decides a tie (I-GOV-14), and under Eligible the yes votes must also be a majority of the votes
+    /// cast. Absent means false.
+    majority_of_cast : ?Bool;
     action : ProposalAction;
-    /// The rule that decides it (I-GOV-3), fixed when the vote opens: the yes votes exceed (realm-wide)
-    /// or reach (a department, of `tally.seats`) the threshold of the basis, with the quorum met.
+    /// The rule that decides it (I-GOV-3), fixed when the vote opens: the yes votes exceed the threshold
+    /// of the votes cast or of a realm's eligible voters, or reach it of a department's n (`tally.seats`),
+    /// with the quorum met.
     threshold : Ratio;
     /// When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
     effective_at : ?Timestamp;
@@ -1639,11 +1654,13 @@ module {
     deadline : ?Timestamp;
     threshold_of : ThresholdBasis;
     links : [ProposalLink];
+    /// The count of a first vote that tied under majority_of_cast; `tally` is then the second vote's.
+    first_vote : ?Tally;
     on_behalf_of : ?Principal;
     proposer : Principal;
     matter : ?Text;
-    /// The realm's casting vote when the proposal was created: a member whose yes decides a tie under the
-    /// Cast basis, so only a realm-wide proposal has one. Never the proposer's choice.
+    /// A member whose yes decides a tie over the votes cast, fixed when the vote opens: the realm's for a
+    /// realm-wide proposal, the department's head when majority_of_cast. Never the proposer's choice.
     casting_vote : ?Principal;
     department : ?Text;
     quorum : Ratio;
@@ -1664,8 +1681,9 @@ module {
     title : Text;
     action : ProposalAction;
     /// Stricter than the realm's or the department's rule, never weaker (InvalidArgument): a higher threshold
-    /// or quorum, or Eligible where the default is Cast. The casting vote is the realm's, for a realm-wide
-    /// proposal only, not the proposer's.
+    /// or quorum, or Eligible where the default is Cast. In a department that counts the votes cast,
+    /// Eligible adds that the yes votes reach the threshold of n, and keeps the majority of the votes
+    /// cast. The casting vote is the scope's, never the proposer's.
     threshold : ?Ratio;
     /// Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
     effective_at : ?Timestamp;
@@ -2018,7 +2036,8 @@ module {
   /// A Record is the same source when its url is the same, whatever the checksum.
   public type SyncSourceRemoveArgs = { source : SyncSourceRef };
   /// `eligible`: who may vote, counted when the vote opens. `seats`: a department's policy n, what its
-  /// threshold is measured against (I-GOV-3); absent for a realm-wide proposal.
+  /// threshold is measured against under Eligible, and its quorum when its policy counts the votes cast
+  /// (I-GOV-3); absent for a realm-wide proposal.
   public type Tally = {
     no : Nat;
     yes : Nat;
@@ -2179,7 +2198,8 @@ module {
     #Contracted;
   };
   /// What a threshold is measured against: the yes and no votes cast, or the eligible voters; for a
-  /// department, Eligible means its policy's n (`tally.seats`), and Cast is weaker and refused.
+  /// department, Eligible means its policy's n (`tally.seats`). Cast is weaker than Eligible: refused for
+  /// a department of m of n, it is the default of one whose policy counts the votes cast.
   public type ThresholdBasis = { #Cast; #Eligible };
   public type TieredOperation = {
     permission : Text;

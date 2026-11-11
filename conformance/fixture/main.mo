@@ -4,12 +4,14 @@
 /// policy applies at once), read the realm, manage their own profile, and submit and review attributes
 /// (every member holds attribute.review here, without a scope, so each reads every pending attribute
 /// and decides all but their own, and the audit log keeps an attribute's id, never its kind or value);
-/// every other permission is held by nobody, so those operations are refused. There are four departments:
+/// every other permission is held by nobody, so those operations are refused. There are five departments:
 /// the root, with a direct policy, so a governed call on a realm-wide proposal is applied at once; a
 /// council under it, deciding 2 of 3 with a 60 % quorum, so a governed call on one of its proposals
-/// files a proposal instead; and two committees under the council, each deciding alone, so that a
+/// files a proposal instead; two committees under the council, each deciding alone, so that a
 /// proposal of the council can carry a call on a committee's records where a committee's cannot carry
-/// one on its sibling's (I-GOV-13).
+/// one on its sibling's (I-GOV-13); and a plenary of five seats under the root, deciding by a majority of
+/// the votes cast with half of its seats voting, chaired by the first member, whose casting vote
+/// decides a tie in a second vote (I-GOV-3, I-GOV-14).
 /// Members may also edit a department (department_edit, governed by that department, or by the lowest
 /// department above both the old and the new parent when it moves) and delete one that has none below
 /// it (department_delete, governed by its parent), so a committee can be moved or removed while a
@@ -26,9 +28,10 @@
 /// proposal as its vote ends or run an accepted action as it finalizes (I-GOV-12): proposal_finalize
 /// records the outcome of a vote that has ended, and proposal_execute runs the action. Nobody has
 /// granted a delegation, so nobody acts on another's behalf. Every other domain is empty, which the
-/// model allows. A proposal's rule is its scope's, the realm's over the votes cast or a
-/// department's m/n over its policy's n, unless the proposer states a stricter one, which the
-/// fixture stores and applies (I-GOV-3).
+/// model allows. A proposal's rule is its scope's, the realm's over the votes cast, a
+/// department's m/n over its policy's n, or the plenary's majority of the votes cast, unless the
+/// proposer states a stricter one, which the fixture stores and applies (I-GOV-3). A tie in the
+/// plenary's first vote is recorded by proposal_finalize, which opens the second vote (I-GOV-14).
 /// Links between realms (I-NEST-1 to 3): members vote to take legislation from a sync source and to
 /// accept a follower, which the root's direct policy applies at once; each vote records the link,
 /// then reads the realms' realm_info to refuse a cycle (Unavailable when one cannot be read), and
@@ -72,22 +75,22 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   var votingThreshold : T.Ratio = 50_000_000; // 50 %
   var votingQuorum : T.Ratio = 0;
   var castingVote : ?Principal = null;
-  /// The rule that decides a proposal (I-GOV-3). The scope's, over the votes cast, unless the proposer
-  /// states a stricter threshold, quorum or basis; the casting vote is the realm's, for a realm-wide
-  /// proposal only.
-  type Rule = { threshold : T.Ratio; quorum : T.Ratio; threshold_of : T.ThresholdBasis; casting_vote : ?Principal };
-  func defaultRule() : Rule = { threshold = votingThreshold; quorum = votingQuorum; threshold_of = #Cast; casting_vote = castingVote };
+  /// The rule that decides a proposal (I-GOV-3). The scope's unless the proposer states a stricter
+  /// threshold, quorum or basis; the casting vote, and whether a department's majority of the votes cast
+  /// applies, are the scope's.
+  type Rule = { threshold : T.Ratio; quorum : T.Ratio; threshold_of : T.ThresholdBasis; casting_vote : ?Principal; majority_of_cast : Bool };
+  func defaultRule() : Rule = { threshold = votingThreshold; quorum = votingQuorum; threshold_of = #Cast; casting_vote = castingVote; majority_of_cast = false };
   /// The rule of a proposal of `department` (I-GOV-3): the realm's, over the votes cast and with its
-  /// casting vote, for the root; for any other, m/n of its policy, rounded down, over its n seats, with
-  /// the policy's quorum.
+  /// casting vote, for the root; for a department whose policy counts the votes cast, a majority of them,
+  /// with the policy's quorum and the head's casting vote; for any other, m/n of its policy, rounded
+  /// down, over its n seats, with the policy's quorum.
   func scopeRule(department : T.Department) : Rule {
     if (department.is_root) return defaultRule();
-    {
-      threshold = department.policy.m * WHOLE / department.policy.n;
-      quorum = department.policy.quorum;
-      threshold_of = #Eligible;
-      casting_vote = null;
+    let { m; n; quorum } = department.policy;
+    if (department.policy.threshold_of == ?#Cast) {
+      return { threshold = WHOLE / 2; quorum; threshold_of = #Cast; casting_vote = department.head; majority_of_cast = true };
     };
+    { threshold = m * WHOLE / n; quorum; threshold_of = #Eligible; casting_vote = null; majority_of_cast = false };
   };
   let NOT_SCHEDULED = "only a proposal whose execution is scheduled can be stopped";
   let NO_MORE_BUDGETING = "closes no period and keeps no allocation rules, payroll or loans";
@@ -96,13 +99,14 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   func now() : T.Timestamp = Nat64.fromNat(Int.abs(Time.now()));
 
   let ROOT_ID = "root";
-  let DIRECT : T.Policy = { m = 1; n = 1; quorum = 0; veto = [] };
+  let DIRECT : T.Policy = { m = 1; n = 1; quorum = 0; veto = []; threshold_of = null };
 
   func department(id : Text, description : Text, parent : ?Text, policy : T.Policy) : T.Department = {
     id; description; kind = null; parent; is_root = parent == null; head = null; policy; target_policy = null; fund = null;
   };
 
-  /// The root decides alone; the council under it, 2 of 3; the two committees under the council, alone.
+  /// The root decides alone; the council under it, 2 of 3; the two committees under the council, alone;
+  /// the plenary under the root, by a majority of the votes cast, chaired by the first member.
   /// department_edit may move a department, so the tree is read as it stands at each check.
   let departments = Map.empty<Text, T.Department>();
   for (d in [
@@ -111,10 +115,19 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       "council",
       "A council under the realm, deciding 2 of 3 with a 60 % quorum.",
       ?ROOT_ID,
-      { m = 2; n = 3; quorum = 60_000_000; veto = [] },
+      { m = 2; n = 3; quorum = 60_000_000; veto = []; threshold_of = null },
     ),
     department("roads", "A committee under the council, deciding alone.", ?"council", DIRECT),
     department("parks", "A committee under the council, deciding alone.", ?"council", DIRECT),
+    {
+      department(
+        "plenary",
+        "A plenary of five seats under the realm, deciding by a majority of the votes cast with half of its seats voting.",
+        ?ROOT_ID,
+        { m = 1; n = 5; quorum = 50_000_000; veto = []; threshold_of = ?#Cast },
+      ) with kind = ?"plenary";
+      head = if (initMembers.size() > 0) ?initMembers[0] else null;
+    },
   ].vals()) Map.add(departments, Text.compare, d.id, d);
 
   func findDepartment(id : Text) : ?T.Department = Map.get(departments, Text.compare, id);
@@ -445,7 +458,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
 
   /// The rule a proposer states, checked against the scope's: a higher threshold or quorum, or the
   /// eligible basis where the scope counts the votes cast, is allowed; weaker is refused (I-GOV-3). The
-  /// casting vote is the scope's.
+  /// casting vote, and a department's majority of the votes cast, are the scope's.
   func statedRule(args : T.ProposalCreateArgs) : Result<Rule> {
     let scope = switch (args.department) {
       case (?d) { switch (findDepartment(d)) { case (?found) scopeRule(found); case null return #Err(#NotFound) } };
@@ -459,7 +472,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       return #Err(#InvalidArgument("the rule is weaker than the scope's: a proposer may only tighten it"));
     };
     if (threshold > WHOLE or quorum > WHOLE) return #Err(#InvalidArgument("a ratio is at most 100 000 000 (100 %)"));
-    #Ok({ threshold; quorum; threshold_of; casting_vote = scope.casting_vote });
+    #Ok({ scope with threshold; quorum; threshold_of });
   };
 
   /// The member a proposal was filed for: the grantor when it was filed on their behalf.
@@ -1287,6 +1300,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       tally = { yes = 0; no = 0; abstain = 0; eligible = ?Map.size(members); seats = policySeats(scopeOf(department)) };
       result = null;
       links;
+      majority_of_cast = ?rule.majority_of_cast;
+      first_vote = null;
     };
     Map.add(proposals, Nat.compare, n, p);
     p;
@@ -1349,42 +1364,81 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
   };
 
-  /// Whether the yes votes reach a department proposal's threshold of its policy's seats, or exceed a
-  /// realm-wide proposal's threshold of its basis (I-GOV-3). A tie over the votes cast is decided by the
-  /// casting vote's yes.
-  func thresholdMet(n : Nat, p : T.Proposal) : Bool {
+  /// Where the yes votes stand against a proposal's threshold (I-GOV-3). They reach a department's
+  /// threshold of its policy's n, and exceed a realm-wide threshold of the eligible voters; over the
+  /// votes cast, standing exactly at the threshold is a tie. Under a department's majority of the votes
+  /// cast, a threshold of n reached is not enough: the votes cast still decide, at a majority.
+  type Standing = { #Above; #Tie; #Below };
+
+  func standing(p : T.Proposal) : Standing {
     let { yes; no; eligible; seats } = p.tally;
-    switch (seats) { case (?policySeats) return yes * WHOLE >= p.threshold * policySeats; case null {} };
-    let basis = switch (p.threshold_of) {
-      case (#Cast) yes + no;
-      case (#Eligible) { switch (eligible) { case (?e) e; case null yes + no } };
-    };
-    if (yes * WHOLE > p.threshold * basis) return true;
-    switch (p.threshold_of, p.casting_vote) {
-      case (#Cast, ?caster) {
-        if (yes * WHOLE != p.threshold * basis) return false;
-        switch (Map.get(ballots(n), Principal.compare, caster)) {
-          case (?v) v.choice == #Yes;
-          case null false;
-        };
+    switch (p.threshold_of, seats) {
+      case (#Cast, _) overCast(yes, no, p.threshold);
+      case (#Eligible, ?n) {
+        if (yes * WHOLE < p.threshold * n) return #Below;
+        if (p.majority_of_cast == ?true) overCast(yes, no, WHOLE / 2) else #Above;
       };
-      case _ false;
+      case (#Eligible, null) {
+        let all = switch (eligible) { case (?e) e; case null yes + no };
+        if (yes * WHOLE > p.threshold * all) #Above else #Below;
+      };
     };
+  };
+
+  func overCast(yes : Nat, no : Nat, threshold : T.Ratio) : Standing {
+    // Abstentions alone are no tie: a tie needs a yes or a no (I-GOV-3).
+    if (yes + no == 0) return #Below;
+    let share = yes * WHOLE;
+    let needed = threshold * (yes + no);
+    if (share > needed) #Above else if (share == needed) #Tie else #Below;
+  };
+
+  /// Whether enough members voted, abstentions included. A department that counts the votes cast
+  /// measures its quorum against its policy's n, so that a vacancy never lowers it; any other proposal
+  /// against its eligible voters.
+  func quorumMet(p : T.Proposal) : Bool {
+    let { yes; no; abstain; eligible; seats } = p.tally;
+    let size = if (p.majority_of_cast == ?true) seats else eligible;
+    switch (size) { case (?m) (yes + no + abstain) * WHOLE >= p.quorum * m; case null true };
+  };
+
+  /// Whether the casting member voted yes. A tie is theirs to decide; absent, or voting otherwise, it rejects.
+  func castingYes(n : Nat, p : T.Proposal) : Bool {
+    let ?caster = p.casting_vote else return false;
+    switch (Map.get(ballots(n), Principal.compare, caster)) {
+      case (?v) v.choice == #Yes;
+      case null false;
+    };
+  };
+
+  func endedLate(p : T.Proposal, ended : T.Timestamp) : Bool {
+    switch (p.effective_at) { case (?e) ended > e; case null false };
+  };
+
+  /// Whether a vote that ended in time gets a second vote: a department's first vote over the votes cast
+  /// that met its quorum and tied (I-GOV-14).
+  func tiedFirstVote(p : T.Proposal, ended : T.Timestamp) : Bool {
+    p.majority_of_cast == ?true and p.first_vote == null and not endedLate(p, ended) and quorumMet(p) and standing(p) == #Tie;
+  };
+
+  /// The proposal's second vote, opened at `t` (I-GOV-14): the same rule and voters, the first vote's
+  /// count kept, the ballots empty, and a window as long as the first one's.
+  func secondVote(n : Nat, p : T.Proposal, t : T.Timestamp) : T.Proposal {
+    Map.remove(votes, Nat.compare, n);
+    Map.remove(everyoneVotedAt, Nat.compare, n);
+    let deadline = switch (p.opens_at, p.deadline) { case (?opened, ?d) ?(t + (d - opened)); case _ null };
+    { p with opens_at = ?t; deadline; first_vote = ?p.tally; tally = { p.tally with yes = 0; no = 0; abstain = 0 } };
   };
 
   /// How a vote that ended at `ended` and is finalized at `t` turns out. A vote that ended after
   /// `effective_at` expires the proposal, whatever was decided. Otherwise quorum and threshold decide,
-  /// and an accepted proposal with an action whose `effective_at` is still ahead is scheduled. A
-  /// motion has nothing to execute, so it stays accepted; so does an action whose `effective_at` has
-  /// passed by the time the vote is finalized, which then executes at once.
+  /// a tie by the casting vote, and an accepted proposal with an action whose `effective_at` is still
+  /// ahead is scheduled. A motion has nothing to execute, so it stays accepted; so does an action whose
+  /// `effective_at` has passed by the time the vote is finalized, which then executes at once.
   func outcome(n : Nat, p : T.Proposal, ended : T.Timestamp, t : T.Timestamp) : T.ProposalStatus {
-    switch (p.effective_at) {
-      case (?e) { if (ended > e) return #Expired };
-      case null {};
-    };
-    let { yes; no; abstain; eligible } = p.tally;
-    let quorumMet = switch (eligible) { case (?m) (yes + no + abstain) * WHOLE >= p.quorum * m; case null true };
-    if (not (quorumMet and thresholdMet(n, p))) return #Rejected;
+    if (endedLate(p, ended)) return #Expired;
+    let carried = switch (standing(p)) { case (#Above) true; case (#Tie) castingYes(n, p); case (#Below) false };
+    if (not (quorumMet(p) and carried)) return #Rejected;
     switch (p.action, p.effective_at) {
       case (#Motion, _) #Accepted;
       case (_, ?e) { if (e > t) #ExecutionScheduled else #Accepted };
@@ -1392,6 +1446,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
   };
 
+  /// Records the outcome of a vote that has ended, or opens the second vote when a first one tied.
   public shared ({ caller }) func ggg_proposal_finalize(id : Text) : async Result<T.Proposal> {
     switch (requireMember(caller, "proposal.manage")) { case (?e) return #Err(e); case null {} };
     let (n, p) = switch (findProposal(id)) { case null return #Err(#NotFound); case (?found) found };
@@ -1405,10 +1460,12 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       case (null, ?d) { if (t <= d) return #Err(#Conflict("voting is still open")); d };
       case (null, null) t; // no deadline: it may be finalized at any time, and ends then
     };
-    let finalized = { p with status = outcome(n, p, ended, t) };
+    let tied = tiedFirstVote(p, ended);
+    let finalized = if (tied) secondVote(n, p, t) else ({ p with status = outcome(n, p, ended, t) });
     Map.add(proposals, Nat.compare, n, finalized);
     settled(finalized);
-    audit("proposal_finalize", caller, #Map([("proposal", #Text(p.id))]), #Text(debug_show (finalized.status)));
+    let recorded = if (tied) "second vote" else debug_show (finalized.status);
+    audit("proposal_finalize", caller, #Map([("proposal", #Text(p.id))]), #Text(recorded));
     #Ok(finalized);
   };
 
