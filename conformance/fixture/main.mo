@@ -31,7 +31,8 @@
 /// (contract_create, contract_amend and contract_terminate, with contract.create_under_mandate,
 /// contract.amend and contract.terminate): no mandate or tender exists here, so the root owns every
 /// contract and its direct policy applies an amendment at once, unless a proposal carries it, and
-/// contract_get reads a contract with its amendments (I-GOV-16). They register organizations, of a kind
+/// contract_get reads a contract with its amendments (I-GOV-16). A transfer for a contract is refused
+/// past the contract's value, and an amendment below what has been paid on it (I-FIN-11). They register organizations, of a kind
 /// or Other, and an organization's admins edit it, its kind too (I-ORG-9), with organization.add and
 /// organization.edit; no organization seats representatives. No department has seats: every member may vote on a
 /// department's proposal (its tally.eligible), and its threshold is measured against its policy's n
@@ -87,7 +88,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   let WHOLE = 100_000_000; // 100 %, in hundred-millionths
   let MAX_LINKS = 16; // a proposal's own links
   let MAX_TAGS = 16; // a proposal's tags, and the tags a list filters by
-  let MAX_TAG_SIZE = 64; // characters
+  let MAX_TAG_SIZE = 64; // code points
   /// The realm's governance rule, set with governance_update: the voting window, and the threshold,
   /// quorum and casting vote of a realm-wide proposal.
   var votingWindow : T.Duration = 7 * 24 * 3600 * 1_000_000_000;
@@ -551,7 +552,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     if (tags.size() > MAX_TAGS) return ?#InvalidArgument("a proposal has at most 16 tags");
     let named = Map.empty<Text, ()>();
     for (t in tags.vals()) {
-      if (Text.size(t) == 0 or Text.size(t) > MAX_TAG_SIZE) return ?#InvalidArgument("a tag is 1 to 64 characters");
+      if (Text.size(t) == 0 or Text.size(t) > MAX_TAG_SIZE) return ?#InvalidArgument("a tag is 1 to 64 code points");
       if (badTagCharacters(t)) return ?#InvalidArgument("a tag has no control characters and no whitespace at either end");
       if (Map.containsKey(named, Text.compare, t)) return ?#InvalidArgument("the tags name " # t # " twice");
       Map.add(named, Text.compare, t, ());
@@ -1259,8 +1260,31 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     ?#Conflict(describe(line) # " has " # Nat.toText(has) # " " # what # "; the transfer of " # Nat.toText(amount) # " is " # Nat.toText(amount - has) # " short");
   };
 
-  /// The line and the check a transfer meets before it is filed, and again when it applies.
+  /// What has been paid on a contract: its transfers that neither failed nor were cancelled, so a
+  /// scheduled one, which is owed, counts (I-FIN-11).
+  func paidOn(contract : Text) : Nat {
+    var sum = 0;
+    for (t in Map.values(transfers)) {
+      if (t.contract == ?contract and t.status != #Failed and t.status != #Cancelled) sum += t.amount;
+    };
+    sum;
+  };
+
+  /// A transfer for a contract is in the contract's symbol and leaves the payments on it within its
+  /// value (I-FIN-11).
+  func checkPayment(args : T.TransferCreateArgs) : ?T.GggError {
+    let ?id = args.contract else return null;
+    let ?contract = Map.get(contracts, Text.compare, id) else return ?#NotFound;
+    let symbol = switch (args.symbol) { case (?s) s; case null REALM_TOKEN };
+    if (symbol != contract.symbol) return ?#InvalidArgument("a transfer for contract " # id # " is in " # contract.symbol);
+    let left = contract.value - paidOn(id) : Nat;
+    if (args.amount <= left) return null;
+    ?#Conflict("contract " # id # " has " # Nat.toText(left) # " left of its value; the transfer of " # Nat.toText(args.amount) # " is " # Nat.toText(args.amount - left) # " over");
+  };
+
+  /// The line and the checks a transfer meets before it is filed, and again when it applies.
   func checkSpending(args : T.TransferCreateArgs) : Result<?(Nat, T.Budget)> {
+    switch (checkPayment(args)) { case (?e) return #Err(e); case null {} };
     let line = switch (chargedLine(args)) { case (#Err(e)) return #Err(e); case (#Ok(l)) l };
     switch (line) {
       case (?(_, b)) { switch (checkCharge(b, args.amount, args.committed == ?true)) { case (?e) return #Err(e); case null {} } };
@@ -1312,6 +1336,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
       due_at = args.due_at;
       budget = switch (line) { case (?(_, b)) ?b.id; case null null };
       committed;
+      contract = args.contract;
     };
     Map.add(transfers, Text.compare, id, transfer);
     audit("transfer_create", caller, #Map([("fund", #Text(args.fund)), ("amount", #Nat(args.amount))]), #Text(id));
@@ -2042,6 +2067,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
     if (after == before) return #Err(#InvalidArgument("the amendment changes no term"));
     switch (checkTerms(after)) { case (?e) return #Err(e); case null {} };
+    let paid = paidOn(contract.id);
+    if (after.value < paid) return #Err(#Conflict("a value of " # Nat.toText(after.value) # " is below the " # Nat.toText(paid) # " paid on the contract"));
     #Ok((contract, after));
   };
 

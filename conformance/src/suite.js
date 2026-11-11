@@ -478,6 +478,27 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     return detail;
   });
 
+  await check('GGG', 'T2', "the transfers that name a contract, the failed and cancelled excepted, are in its symbol and add up to at most its value", async () => {
+    const walked = await walk((a) => reader.ggg_transfer_list({ ...a, fund: [], status: [] }), (t) => t.id);
+    const detail = checkWalk(walked, 'ggg_transfer_list');
+    const paidOn = new Map();
+    for (const t of walked.items) {
+      const contract = opt(t.contract);
+      if (contract !== null && !['Failed', 'Cancelled'].includes(tag(t.status))) paidOn.set(contract, [...(paidOn.get(contract) ?? []), t]);
+    }
+    for (const [id, transfers] of paidOn) {
+      const result = await reader.ggg_contract_get({ id, cursor: [], limit: [] });
+      if ('Err' in result) refused(result.Err, `ggg_contract_get(${id})`);
+      const found = opt(ok(result, `ggg_contract_get(${id})`));
+      assert(found !== null, `transfers name contract ${id}, which does not exist`);
+      const { value, symbol } = found.contract;
+      for (const t of transfers) assert(t.symbol === symbol, `transfer ${t.id} for contract ${id} is in ${t.symbol}, the contract's is ${symbol}`);
+      const paid = transfers.reduce((sum, t) => sum + t.amount, 0n);
+      assert(paid <= value, `contract ${id} has been paid ${paid}, above its value ${value}`);
+    }
+    return `${detail}, ${paidOn.size} contracts paid`;
+  });
+
   await check('GGG', 'Q1', 'ggg_join_targets takes a home_zone or none and gives it to no one, and the directory has no zone definitions', async () => {
     const zone = 'ggg-conformance-zone';
     const replies = [
