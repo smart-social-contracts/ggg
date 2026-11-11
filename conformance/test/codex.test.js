@@ -65,6 +65,7 @@ const proposal = (action, department = null) => as(alice).ggg_proposal_create({
   threshold_of: [],
   effective_at: [],
   links: [],
+  tags: [],
   on_behalf_of: [],
 });
 

@@ -11,10 +11,10 @@ import { idlFactory } from '../idl/ggg.js';
 const alice = Ed25519KeyIdentity.generate();
 const bob = Ed25519KeyIdentity.generate();
 
-/** The interface of a caller built before links existed: ProposalCreateArgs without a links field. */
+/** The interface of a caller built before links and tags existed: ProposalCreateArgs without either field. */
 const callerWithoutLinks = ({ IDL: idl }) => {
   const [, create] = idlFactory({ IDL: idl })._fields.find(([name]) => name === 'ggg_proposal_create');
-  const args = idl.Record(Object.fromEntries(create.argTypes[0]._fields.filter(([key]) => key !== 'links')));
+  const args = idl.Record(Object.fromEntries(create.argTypes[0]._fields.filter(([key]) => key !== 'links' && key !== 'tags')));
   return idl.Service({ ggg_proposal_create: idl.Func([args], create.retTypes, []) });
 };
 
@@ -63,6 +63,7 @@ const create = (identity, links) =>
     threshold_of: [],
     effective_at: [],
     links: links ? [links] : [],
+    tags: [],
     on_behalf_of: [],
   });
 const file = async (identity, links) => ok(await create(identity, links));
@@ -70,7 +71,7 @@ const withdraw = async (identity, id) => ok(await as(identity).ggg_proposal_with
 const detail = async (id) => ok(await as(alice).ggg_proposal_get({ id, cursor: [], limit: [] }))[0];
 const linkedFrom = (id, args = {}) => as(alice).ggg_proposal_linked_from({ id, cursor: [], limit: [], ...args });
 
-test('a caller that sends no links field files a proposal with no links', async () => {
+test('a caller that sends no links or tags field files a proposal with none', async () => {
   const id = ok(await asOldCaller(alice).ggg_proposal_create({
     title: 'From an older caller',
     description: '',
@@ -84,7 +85,8 @@ test('a caller that sends no links field files a proposal with no links', async 
     effective_at: [],
     on_behalf_of: [],
   }));
-  assert.deepEqual((await detail(id)).proposal.links, []);
+  const { proposal } = await detail(id);
+  assert.deepEqual([proposal.links, proposal.tags], [[], []]);
 });
 
 test('a replacement is listed with its links, and the replaced proposal points forward to it', async () => {
@@ -95,7 +97,7 @@ test('a replacement is listed with its links, and the replaced proposal points f
   assert.deepEqual((await detail(old)).replaced_by, [next]);
   assert.deepEqual((await detail(next)).replaced_by, []);
   assert.deepEqual(ok(await linkedFrom(old))[0].items, [link('Replaces', next)]);
-  const listed = ok(await as(alice).ggg_proposal_list({ cursor: [], limit: [100], status: [] })).items.find((p) => p.id === next);
+  const listed = ok(await as(alice).ggg_proposal_list({ cursor: [], limit: [100], status: [], tags: [] })).items.find((p) => p.id === next);
   assert.deepEqual(listed.links, [link('Replaces', old)]);
 });
 

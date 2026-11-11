@@ -1650,6 +1650,9 @@ module {
     /// What the proposal is (a change of legislation, a budget, a motion) and the matter it decides, in the
     /// realm's own words, for legislation to read.
     kind : ?Text;
+    /// The realm's own words for grouping proposals (an area, a district, a kind of act), at most 16,
+    /// each 1 to 64 characters and named once (I-GOV-15).
+    tags : [Text];
     description : Text;
     deadline : ?Timestamp;
     threshold_of : ThresholdBasis;
@@ -1688,6 +1691,8 @@ module {
     /// Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
     effective_at : ?Timestamp;
     kind : ?Text;
+    /// Absent means none (I-GOV-15).
+    tags : ?[Text];
     description : Text;
     threshold_of : ?ThresholdBasis;
     links : ?[ProposalLink];
@@ -1711,9 +1716,12 @@ module {
   public type ProposalLinkKind = { #RelatesTo; #Replaces };
   /// The links of other proposals to one proposal, oldest first.
   public type ProposalLinkPage = { next : ?Text; items : [ProposalLink] };
+  /// `tags`: only the proposals that carry at least one of them, compared exactly; absent or empty
+  /// means any (I-GOV-15).
   public type ProposalListArgs = {
     status : ?ProposalStatus;
     cursor : ?Text;
+    tags : ?[Text];
     limit : ?Nat32;
   };
   public type ProposalPage = { next : ?Text; items : [Proposal] };
@@ -1722,6 +1730,12 @@ module {
     #Error : Text;
     /// The Candid-encoded reply of a Call.
     #Reply : Blob;
+  };
+  /// Replaces a draft's tags (I-GOV-15).
+  public type ProposalSetTagsArgs = {
+    tags : [Text];
+    on_behalf_of : ?Principal;
+    proposal : Text;
   };
   /// ExecutionScheduled: accepted, and waiting for its effective_at.
   public type ProposalStatus = {
@@ -3078,6 +3092,10 @@ module {
         #Err : GggError;
       };
     ggg_proposal_open : shared Text -> async {
+        #Ok : Proposal;
+        #Err : GggError;
+      };
+    ggg_proposal_set_tags : shared ProposalSetTagsArgs -> async {
         #Ok : Proposal;
         #Err : GggError;
       };

@@ -1382,6 +1382,13 @@
             "Withdrawn"
           ],
           "optional": true
+        },
+        "tags": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          },
+          "optional": true
         }
       },
       "read": true
@@ -1487,6 +1494,13 @@
           },
           "optional": true
         },
+        "tags": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          },
+          "optional": true
+        },
         "on_behalf_of": {
           "type": "principal",
           "optional": true
@@ -1541,6 +1555,24 @@
       "facts": {
         "proposal": {
           "type": "text"
+        },
+        "on_behalf_of": {
+          "type": "principal",
+          "optional": true
+        }
+      }
+    },
+    "proposal_set_tags": {
+      "operation": "ggg_proposal_set_tags",
+      "facts": {
+        "proposal": {
+          "type": "text"
+        },
+        "tags": {
+          "type": "vec",
+          "element": {
+            "type": "text"
+          }
         },
         "on_behalf_of": {
           "type": "principal",
