@@ -564,23 +564,27 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
     the seats filled, so here too a vacancy never makes a vote easier; the policy's m is not used. A
     veto holder's `no` rejects it whatever the count (I-GOV-7). A tie in its first vote is put to a
     second vote (I-GOV-14), and a tie in the second vote is decided by the casting vote.
-  - Under `cast`, the yes votes standing exactly at `threshold` of the yes and no votes, at least one of
-    them, are a tie (at 50 %, as many yes as no). The `casting_vote` member's yes accepts a tie; without
-    one, or if that member did not vote yes, the tie rejects, so a tie never passes on its own. A
-    realm-wide tie is decided at once; a department's under `majority_of_cast` only in its second vote.
+  - Under `cast`, a vote is a tie when at least one yes or no was cast and the yes votes are exactly
+    `threshold` of the yes and no votes together (at 50 %: as many yes as no). The `casting_vote`
+    member's yes accepts a tie; without one, or if that member did not vote yes, the tie rejects, so a
+    tie never passes on its own. A realm-wide tie is decided at once; a department's under
+    `majority_of_cast` only in its second vote.
     The casting vote is part of the scope's default rule, never the proposer's: for a realm-wide
     proposal the realm's, set by governed configuration, `Realm.casting_vote` (`governance_update`, an
     active member); for a department's, its `head` (`department_edit`). A proposal copies it when its
     vote opens: a chair who filed the proposal keeps it, and a later change moves no open proposal. A
     department under an m-of-n policy has none, since it counts over the seats, where no tie arises.
-    If the realm's casting member leaves, new proposals still copy them, their vote does not count on
-    those (I-GOV-2) and ties reject, until `governance_update` names another or clears it; likewise a
-    head who holds no seat, or none, leaves a department's ties to reject.
+    A department's casting vote belongs to its `head` as it stands when the vote opens, an acting head
+    named before then included, and with no head a tie rejects. A head who holds no seat in the
+    department cannot vote (I-GOV-2), so its ties reject too. If the realm's casting member leaves the
+    realm, new proposals still copy them but their vote does not count (I-GOV-2), so realm-wide ties
+    reject until `governance_update` names another member or clears it.
   - The proposer may state a stricter rule when creating the proposal, never a weaker one
     (`InvalidArgument`): a higher threshold or quorum, or `eligible` where the default is `cast`. Each
     change narrows what the default accepts, so legislation's guards, which may require them, only ever
-    tighten. A threshold above the default's over the votes cast still treats a tie at itself as a tie,
-    decided the same way; the default had already passed that count, so it is never looser. In a
+    tighten. A stricter threshold t over the votes cast has its own tie, the yes votes exactly t of the
+    yes and no votes, decided as the default's tie is. That never loosens the default: above 50 %, such
+    a count already has more yes than no, which the default accepts outright. In a
     department that counts the votes cast, `eligible` adds a requirement and removes none: the yes
     votes must also *reach* `threshold` of n, rounded up as under m of n (an absolute majority of 33
     seats is 17, at 50 %), while the majority of the votes cast, with its second vote and casting
@@ -664,14 +668,16 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   the governing department, so that proposal carries it when it is filed.
 - I-GOV-14: Under `majority_of_cast` (I-GOV-3), a first vote that meets its quorum and ties does not end
   the proposal: recording its outcome (`proposal_finalize`, or the GOS settling it, I-GOV-12) opens a
-  second vote on the same proposal instead, which stays `voting`. The second vote keeps the rule, the
+  second vote on the same proposal instead, which stays `voting`. A veto holder's `no` still rejects
+  the proposal whatever the count (I-GOV-3), so a tied first vote in which a veto holder voted no is
+  rejected, not put to a second vote. The second vote keeps the rule, its casting vote included, the
   action, `effective_at`, `tally.eligible` and `tally.seats`; `first_vote` keeps the first vote's
   count, the ballots start empty, so every member votes again, and `opens_at` and `deadline` become
   the second vote's: it opens when the tie is recorded and lasts as long as the first did (with no
-  deadline when the first had none). It ends as any vote does (I-GOV-7); a tie in it is decided by the
-  casting vote, and there is no third vote. A first vote that ended after `effective_at` expires the
-  proposal instead, like a second vote that does. The first vote's ballots stay in the audit log
-  (I-ALL-4).
+  deadline when the first had none). It ends as any vote does (I-GOV-7) and is decided like the first,
+  so a second vote that misses its quorum is rejected; a tie in it is decided by the casting vote, and
+  there is no third vote. A first vote that ended after `effective_at` expires the proposal instead,
+  like a second vote that does. The first vote's ballots stay in the audit log (I-ALL-4).
 
 ## 5. Finance
 

@@ -271,6 +271,13 @@ test("a tie in the plenary gets a second vote, and only a tie in that one is the
   await vote(dave, chairAway, 'Abstain');
   await pastTheDeadline();
   assert.equal(await finalize(chairAway), 'Rejected', 'without the chair, a second tie rejects');
+
+  // Two yes and no no, but two votes of the five seats miss the quorum of three.
+  const unquorate = await tied();
+  await vote(alice, unquorate, 'Yes');
+  await vote(bob, unquorate, 'Yes');
+  await pastTheDeadline();
+  assert.equal(await finalize(unquorate), 'Rejected', 'a second vote that misses its quorum rejects');
 });
 
 test("a proposer tightens the plenary's rule, never loosens it", async () => {
