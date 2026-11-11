@@ -383,8 +383,6 @@ module {
     parties : [Ref];
     symbol : Text;
   };
-  /// The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
-  /// links to it are in ggg_proposal_linked_from.
   /// A contract and its amendments a page at a time, oldest first.
   public type ContractDetail = {
     amendments : [ContractAmendment];
@@ -1705,7 +1703,8 @@ module {
     /// realm's own words, for legislation to read.
     kind : ?Text;
     /// The realm's own words for grouping proposals (an area, a district, a kind of act), at most 16,
-    /// each 1 to 64 characters and named once (I-GOV-15).
+    /// each 1 to 64 code points, not padded with whitespace, without control characters, named once and
+    /// compared exactly, never normalised (I-GOV-15).
     tags : [Text];
     description : Text;
     deadline : ?Timestamp;
@@ -1755,6 +1754,8 @@ module {
     department : ?Text;
     quorum : ?Ratio;
   };
+  /// The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
+  /// links to it are in ggg_proposal_linked_from.
   public type ProposalDetail = {
     votes : [Vote];
     next : ?Text;

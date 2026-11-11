@@ -79,7 +79,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   let WHOLE = 100_000_000; // 100 %, in hundred-millionths
   let MAX_LINKS = 16; // a proposal's own links
   let MAX_TAGS = 16; // a proposal's tags, and the tags a list filters by
-  let MAX_TAG_SIZE = 64; // characters
+  let MAX_TAG_SIZE = 64; // code points
   /// The realm's governance rule, set with governance_update: the voting window, and the threshold,
   /// quorum and casting vote of a realm-wide proposal.
   var votingWindow : T.Duration = 7 * 24 * 3600 * 1_000_000_000;
@@ -517,7 +517,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     if (tags.size() > MAX_TAGS) return ?#InvalidArgument("a proposal has at most 16 tags");
     let named = Map.empty<Text, ()>();
     for (t in tags.vals()) {
-      if (Text.size(t) == 0 or Text.size(t) > MAX_TAG_SIZE) return ?#InvalidArgument("a tag is 1 to 64 characters");
+      if (Text.size(t) == 0 or Text.size(t) > MAX_TAG_SIZE) return ?#InvalidArgument("a tag is 1 to 64 code points");
       if (badTagCharacters(t)) return ?#InvalidArgument("a tag has no control characters and no whitespace at either end");
       if (Map.containsKey(named, Text.compare, t)) return ?#InvalidArgument("the tags name " # t # " twice");
       Map.add(named, Text.compare, t, ());
