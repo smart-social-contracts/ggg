@@ -24,7 +24,9 @@
 /// (contract_create, contract_amend and contract_terminate, with contract.create_under_mandate,
 /// contract.amend and contract.terminate): no mandate or tender exists here, so the root owns every
 /// contract and its direct policy applies an amendment at once, unless a proposal carries it, and
-/// contract_get reads a contract with its amendments (I-GOV-16). No department has seats: every member may vote on a
+/// contract_get reads a contract with its amendments (I-GOV-16). They register organizations, of a kind
+/// or Other, and an organization's admins edit it, its kind too (I-ORG-9), with organization.add and
+/// organization.edit; no organization seats representatives. No department has seats: every member may vote on a
 /// department's proposal (its tally.eligible), and its threshold is measured against its policy's n
 /// (tally.seats), as I-GOV-3 says: two yes votes carry a council proposal whether two or twenty
 /// members vote. The fixture never ends a department vote early (I-GOV-7 allows it, it does not
@@ -668,6 +670,8 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
         "contract.create_under_mandate",
         "contract.amend",
         "contract.terminate",
+        "organization.add",
+        "organization.edit",
         "codex.install",
         "codex.revert",
         "realm.data_view",
@@ -1226,12 +1230,61 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     #Ok(edited);
   };
 
-  public query func ggg_organization_get(_ : T.GetArgs) : async Result<?T.OrganizationDetail> {
-    #Ok(null);
+  // ---- Organizations (I-ORG-9). They seat no representatives here.
+  let organizations = Map.empty<Text, T.Organization>();
+
+  public query func ggg_organization_get(args : T.GetArgs) : async Result<?T.OrganizationDetail> {
+    let ?organization = Map.get(organizations, Text.compare, args.id) else return #Ok(null);
+    switch (none<T.Seat>(args.cursor, args.limit)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok({ items; next })) #Ok(?{ organization; seats = items; next });
+    };
   };
 
+  /// The organizations with the status and the kind named, if they are.
   public query func ggg_organization_list(args : T.OrganizationListArgs) : async Result<T.OrganizationPage> {
-    none(args.cursor, args.limit);
+    let wanted = func(o : T.Organization) : Bool {
+      let statusMatches = switch (args.status) { case (?s) o.status == s; case null true };
+      let kindMatches = switch (args.kind) { case (?k) o.kind == k; case null true };
+      statusMatches and kindMatches;
+    };
+    page(Iter.filter<T.Organization>(Map.values(organizations), wanted), args.cursor, args.limit);
+  };
+
+  /// The member who registers an organization becomes its admin; it is Other unless a kind is given.
+  public shared ({ caller }) func ggg_organization_register(args : T.OrganizationRegisterArgs) : async Result<T.Organization> {
+    switch (requireMember(caller, "organization.add")) { case (?e) return #Err(e); case null {} };
+    if (Text.size(args.organization) == 0) return #Err(#InvalidArgument("the organization's name is empty"));
+    if (Map.containsKey(organizations, Text.compare, args.organization)) return #Err(#Conflict("the organization is already registered"));
+    let organization : T.Organization = {
+      id = args.organization;
+      description = args.description;
+      status = #Active;
+      admins = [caller];
+      kind = switch (args.kind) { case (?k) k; case null #Other };
+    };
+    Map.add(organizations, Text.compare, organization.id, organization);
+    audit("organization_register", caller, #Map([("organization", #Text(organization.id))]), #Text(organization.id));
+    #Ok(organization);
+  };
+
+  /// Only an active organization's admins edit it (I-ORG-8).
+  public shared ({ caller }) func ggg_organization_edit(args : T.OrganizationEditArgs) : async Result<T.Organization> {
+    switch (requireMember(caller, "organization.edit")) { case (?e) return #Err(e); case null {} };
+    let ?organization = Map.get(organizations, Text.compare, args.organization) else return #Err(#NotFound);
+    if (not Array.any<Principal>(organization.admins, func(a) { a == caller })) {
+      return #Err(#Forbidden({ permission = ?"organization.edit"; message = "Only the organization's admins may edit it." }));
+    };
+    if (organization.status != #Active) return #Err(#Conflict("nobody acts for a suspended or dissolved organization"));
+    let edited = {
+      organization with
+      description = switch (args.description) { case (?d) d; case null organization.description };
+      admins = switch (args.admins) { case (?a) a; case null organization.admins };
+      kind = switch (args.kind) { case (?k) k; case null organization.kind };
+    };
+    Map.add(organizations, Text.compare, edited.id, edited);
+    audit("organization_edit", caller, #Map([("organization", #Text(edited.id))]), #Text(edited.id));
+    #Ok(edited);
   };
 
   // §4
@@ -2516,8 +2569,6 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public shared ({ caller }) func ggg_department_expel(_ : T.ExpelArgs) : async Result<T.Governed> { nobody(caller, "org.expel") };
   public shared ({ caller }) func ggg_authority_grant(_ : T.AuthorityGrantArgs) : async Result<T.Governed> { nobody(caller, "org.grant_authority") };
   public shared ({ caller }) func ggg_authority_revoke(_ : Text) : async Result<T.Governed> { nobody(caller, "org.grant_authority") };
-  public shared ({ caller }) func ggg_organization_register(_ : T.OrganizationRegisterArgs) : async Result<T.Organization> { nobody(caller, "organization.add") };
-  public shared ({ caller }) func ggg_organization_edit(_ : T.OrganizationEditArgs) : async Result<T.Organization> { nobody(caller, "organization.edit") };
   public shared ({ caller }) func ggg_representative_add(_ : T.RepresentativeAddArgs) : async Result<T.Appointment> { nobody(caller, "organization.edit") };
   public shared ({ caller }) func ggg_representative_remove(_ : Text) : async Result<T.Appointment> { nobody(caller, "organization.edit") };
   public shared ({ caller }) func ggg_organization_set_status(_ : T.OrganizationStatusArgs) : async Result<T.Governed> { nobody(caller, "organization.delete") };

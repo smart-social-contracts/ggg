@@ -71,6 +71,8 @@ path.
 - `test/contracts.test.js` runs the fixture with two members and checks contract amendments (model
   I-GOV-16): a split adds up to the value, an amendment keeps the contract's id and records its terms
   before and after with the proposal that carried it, and a terminated contract is never amended.
+- `test/organizations.test.js` runs the fixture with two members and checks organization kinds (model
+  I-ORG-9): `other` when none is given, changed only by the organization's admins, and a list by kind.
 - `test/sync.test.js` runs three fixtures that take legislation from one another and checks the links
   between realms (model I-NEST-1 to 3) and the published record (model §11).
 - `test/codex.test.js` installs codices the fixture holds and checks `codex_revert` (model §11): the one

@@ -1523,7 +1523,15 @@ export const idlFactory = ({ IDL }) => {
     'Notification' : Notification,
     'Dispatch' : Dispatch,
   });
+  const OrganizationKind = IDL.Variant({
+    'Union' : IDL.Null,
+    'Party' : IDL.Null,
+    'Company' : IDL.Null,
+    'Other' : IDL.Null,
+    'Association' : IDL.Null,
+  });
   const OrganizationEditArgs = IDL.Record({
+    'kind' : IDL.Opt(OrganizationKind),
     'description' : IDL.Opt(IDL.Text),
     'admins' : IDL.Opt(IDL.Vec(IDL.Principal)),
     'organization' : IDL.Text,
@@ -1536,6 +1544,7 @@ export const idlFactory = ({ IDL }) => {
   const Organization = IDL.Record({
     'id' : IDL.Text,
     'status' : OrganizationStatus,
+    'kind' : OrganizationKind,
     'description' : IDL.Text,
     'admins' : IDL.Vec(IDL.Principal),
   });
@@ -1547,6 +1556,7 @@ export const idlFactory = ({ IDL }) => {
   const OrganizationListArgs = IDL.Record({
     'status' : IDL.Opt(OrganizationStatus),
     'cursor' : IDL.Opt(IDL.Text),
+    'kind' : IDL.Opt(OrganizationKind),
     'limit' : IDL.Opt(IDL.Nat32),
   });
   const OrganizationPage = IDL.Record({
@@ -1554,6 +1564,7 @@ export const idlFactory = ({ IDL }) => {
     'items' : IDL.Vec(Organization),
   });
   const OrganizationRegisterArgs = IDL.Record({
+    'kind' : IDL.Opt(OrganizationKind),
     'description' : IDL.Text,
     'organization' : IDL.Text,
   });

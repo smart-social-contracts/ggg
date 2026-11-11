@@ -215,11 +215,16 @@ type Department = record {
 
 type OrganizationStatus = variant { Active; Suspended; Dissolved };
 
+// What an organization is (I-ORG-9). Other is any organization that is none of the four, and the one
+// registered without a kind or before kinds existed.
+type OrganizationKind = variant { Company; Party; Union; Association; Other };
+
 type Organization = record {
   id : text;
   description : text;
   status : OrganizationStatus;
   admins : vec principal;
+  kind : OrganizationKind;
 };
 
 type PositionStatus = variant { Open; Frozen; Closed };
@@ -1398,7 +1403,7 @@ type Chart = record {
 };
 
 type OrganizationDetail = record { organization : Organization; seats : vec Seat; next : opt text };
-type OrganizationListArgs = record { cursor : opt text; limit : opt nat32; status : opt OrganizationStatus };
+type OrganizationListArgs = record { cursor : opt text; limit : opt nat32; status : opt OrganizationStatus; kind : opt OrganizationKind };
 type OrganizationPage = record { items : vec Organization; next : opt text };
 
 type DepartmentCreateArgs = record { department : text; parent : opt text; description : text; kind : opt text };
@@ -1437,8 +1442,9 @@ type AppointArgs = record { position : text; user : principal; agent : bool; sup
 type ExpelArgs = record { department : text; user : principal };
 type AuthorityGrantArgs = record { department : text; target : Ref; operations : vec text };
 
-type OrganizationRegisterArgs = record { organization : text; description : text };
-type OrganizationEditArgs = record { organization : text; description : opt text; admins : opt vec principal };
+// `kind` absent means Other (I-ORG-9).
+type OrganizationRegisterArgs = record { organization : text; description : text; kind : opt OrganizationKind };
+type OrganizationEditArgs = record { organization : text; description : opt text; admins : opt vec principal; kind : opt OrganizationKind };
 // Seats the user in the organization's position, creating the position if it is new.
 type RepresentativeAddArgs = record {
   organization : text;
