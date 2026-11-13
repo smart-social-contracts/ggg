@@ -59,8 +59,8 @@ The two entry points of a realm's own legislation are ordinary members of these 
 
 ## 2. The domain list ([ggg#1](https://github.com/smart-social-contracts/ggg/issues/1))
 
-A **domain** is a subject of legislation, such as `tax` or `water`. (It is not one of the sections of
-the model.) The list of domains is [`domains.json`](../domains.json): for each domain, its `id` and a
+A **domain** is a subject of legislation, such as `tax` or `water`. (It is not one of the model's
+areas.) The list of domains is [`domains.json`](../domains.json): for each domain, its `id` and a
 one-line `description`. A chapter is one source's legislation in one domain, so the domain ids are the
 chapter file names.
 

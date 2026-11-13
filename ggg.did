@@ -3,6 +3,8 @@
 //
 // One record per model entity, with the model's fields, and one method per model operation.
 // Every entity is here; the methods cover the operations bound so far.
+//
+// The sections below follow the model: §2 to §10 are its nine areas, §11 to §13 its Foundation.
 
 // ---- Conventions (model §1)
 
@@ -265,7 +267,7 @@ type Authority = record {
   operations : vec text;
 };
 
-// ---- §4 Governance
+// ---- §4 Decisions
 
 // ExecutionScheduled: accepted, and waiting for its effective_at.
 type ProposalStatus = variant { Draft; Voting; Accepted; ExecutionScheduled; Rejected; Expired; Executed; Failed; Withdrawn };
@@ -688,7 +690,7 @@ type TaxDeclaration = record {
   invoice : opt text;
 };
 
-// ---- §6 Assets
+// ---- §6 Land and property
 
 type LandStatus = variant { Active; Disputed; Revoked };
 
@@ -959,7 +961,7 @@ type BidScore = record {
   scored_at : Timestamp;
 };
 
-// ---- §10 Quarters and federation
+// ---- §10 Realm and federation
 
 type RealmStatus = variant { Setup; Alpha; Beta; Production; Deprecation; Terminated };
 
@@ -1111,7 +1113,7 @@ type Follower = record {
   reported_at : opt Timestamp;
 };
 
-// ---- §11 Codex, notifications and audit
+// ---- §11 Foundation: codex, notifications and audit
 
 // Pending: installed and checked, waiting for codex_activate or its proposal's effective_at.
 type CodexStatus = variant { Pending; Active; Inactive; Reverted };
@@ -1207,7 +1209,7 @@ type Event = record {
   at : Timestamp;
 };
 
-// ---- §13 Private content
+// ---- §13 Foundation: private content
 
 type KeyEnvelope = record {
   id : text;
