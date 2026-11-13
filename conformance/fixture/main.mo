@@ -1562,6 +1562,10 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
   public query func ggg_proposal_list(args : T.ProposalListArgs) : async Result<T.ProposalPage> {
     let tags = switch (args.tags) { case (?t) t; case null [] };
     if (tags.size() > MAX_TAGS) return #Err(#InvalidArgument("a list filters by at most 16 tags"));
+    // No tag longer than a tag can be has been set (I-GOV-15), so none could match.
+    for (t in tags.vals()) {
+      if (Text.size(t) > MAX_TAG_SIZE) return #Err(#InvalidArgument("a tag to list by is at most 64 code points"));
+    };
     let wanted = func(p : T.Proposal) : Bool {
       let statusMatches = switch (args.status) { case (?s) p.status == s; case null true };
       let tagged = tags.size() == 0 or Array.any<Text>(p.tags, func(t) { Array.any<Text>(tags, func(w) { w == t }) });

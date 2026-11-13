@@ -1011,7 +1011,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     });
   });
 
-  await check('GGG', 'W28', 'tags are 1 to 64 code points, compared exactly; out of bounds, padded or with control characters they are refused, and only a draft has its tags replaced', async () => {
+  await check('GGG', 'W28', 'tags are 1 to 64 code points, compared exactly; out of bounds, padded or with control characters they are refused, a tag to list by over 64 too, and only a draft has its tags replaced', async () => {
     needMember();
     const many = Array.from({ length: 17 }, (_, i) => `tag-${i}`);
     // 64 code points, but 65 UTF-16 units and more bytes: '\u{1D11E}' (a musical clef) lies outside the BMP.
@@ -1036,6 +1036,12 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
       assert(!(await taggedIds(['VAL\u00c8NCIA'])).includes(p.id), `listing by VAL\u00c8NCIA finds proposal ${p.id}, tagged ${show(p.tags)}`);
     });
     err(await reader.ggg_proposal_list({ cursor: [], limit: [PAGE], status: [], tags: [many] }), ['InvalidArgument'], 'ggg_proposal_list(17 tags)');
+    // A tag to list by is held to the size of a tag: none longer can have been set, so none could match. The longest is fine.
+    const tooLong = `${longest}x`;
+    const list = (status, tags) => reader.ggg_proposal_list({ cursor: [], limit: [PAGE], status, tags: [tags] });
+    err(await list([], [tooLong]), ['InvalidArgument'], 'ggg_proposal_list(a tag of 65 code points)');
+    err(await list([{ Voting: null }], ['Old Town', tooLong]), ['InvalidArgument'], 'ggg_proposal_list(a tag of 65 code points beside another, with a status)');
+    ok(await list([], [longest]), 'ggg_proposal_list(a tag of 64 code points)');
     err(await mine.ggg_proposal_set_tags({ proposal: NO_PROPOSAL, tags: [], on_behalf_of: [] }), ['NotFound'], 'ggg_proposal_set_tags(unknown proposal)');
     await fileRule('tags replaced', { tags: [['before']] }, async (p) => {
       const result = await mine.ggg_proposal_set_tags({ proposal: p.id, tags: ['after'], on_behalf_of: [] });
