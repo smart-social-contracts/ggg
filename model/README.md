@@ -120,8 +120,9 @@ method per operation:
   healthy, the signing policy, and a page of earlier checksums.
 - **Lists.** Arguments `cursor : opt text` and `limit : opt nat32`; replies one page of the list
   (`items`, or a named field such as a proposal's `votes`) and `next : opt text`. Pages fit the
-  Internet Computer's limits, are never empty when `next` is set, and walk every record exactly once
-  in a stable order. A malformed cursor is `InvalidArgument`.
+  Internet Computer's limits, are never empty when `next` is set (a list by `tags` and a `status`
+  together, I-GOV-15, may be), and walk every record exactly once in a stable order. A malformed
+  cursor is `InvalidArgument`.
 - **Extra fields.** A GOS may add fields to the records it returns, and `opt` fields to the arguments
   it accepts, named after itself (`realms_gos_tally_required`).
 - **Discovery.** `icrc10_supported_standards`
@@ -699,8 +700,11 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   member it was filed for, with `proposal_set_tags` (`Conflict` once it is open, `Forbidden` for
   another's); they are not part of what is voted on. `proposal_list` with `tags` lists only the
   proposals that carry at least one of them, together with any `status` it names; absent or empty
-  means any, and more than 16 tags, or a tag of more than 64 code points, is `InvalidArgument`: no
-  such tag can have been set, so none could match.
+  means any. More than 16 tags is `InvalidArgument`, and so is a tag of more than 64 code points
+  (none can have been set, so none could match). With `tags` and a `status` together a page may be
+  short, even empty, with `next` set: the proposals that match both can be far apart in the list, so
+  a GOS may stop after checking as many as a call can bear, and a client follows `next` (the one
+  exception to a page never being empty when `next` is set, in *Lists*).
 - I-GOV-16: A contract's `split`, when not empty, names each fiscal period once, at most 64 of them,
   and its amounts add up to `value`; a period is named as a budget line names it, and need not be
   open yet. `contract_amend` replaces the terms it is given, of `value`, `split`, `starts_at` and

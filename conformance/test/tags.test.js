@@ -80,6 +80,16 @@ test('a list by tags and a status holds the proposals that match both', async ()
   assert.deepEqual(await listed(['budget'], [{ Voting: null }]), [open]);
 });
 
+test('a tag to list by is held to the size of a tag: 64 code points are listed, 65 are refused', async () => {
+  const longest = `Val\u00e8ncia-${'x'.repeat(54)}\u{1D11E}`;
+  assert.equal([...longest].length, 64);
+  const id = await file([longest]);
+  assert.deepEqual(await listed([longest]), [id]);
+  const refused = (tags, status = []) => as(alice).ggg_proposal_list({ cursor: [], limit: [100], status, tags: [tags] });
+  refusedWith(await refused([`${longest}x`]), 'InvalidArgument');
+  refusedWith(await refused(['parks', `${longest}x`], [{ Voting: null }]), 'InvalidArgument');
+});
+
 test("a member may not replace another's tags, and nobody an open proposal's", async () => {
   const id = await file(['parks']);
   refusedWith(await as(bob).ggg_proposal_set_tags({ proposal: id, tags: ['roads'], on_behalf_of: [] }), 'Forbidden');
