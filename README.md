@@ -15,7 +15,7 @@ realms.
 | [`conformance/`](conformance/README.md) | **The conformance suite.** Checks a canister against `ggg.did`, on mainnet or on a local replica. |
 
 A GOS is GGG compliant when it implements `ggg.did`, lists `GGG` in `icrc10_supported_standards`,
-and passes the conformance suite. A realm doesn't have to use every domain: one with a single
+and passes the conformance suite. A realm doesn't have to use every area: one with a single
 department, or one court whose only judge is the realm itself, is compliant, as long as what it
 doesn't use answers as the model says (an empty list, `NotFound`, `Forbidden`).
 

@@ -20,15 +20,45 @@ data however it likes, as long as what it shows matches this model.
 The model names the entities that governments and other bodies commonly have: departments,
 courts, funds, licences, tenders. A realm does not need all of them. A realm can have a single
 department, or one court whose only judge is the realm itself, and still be compliant. What a
-GOS may not do is leave an operation out. When a realm has nothing in a domain, its operations
+GOS may not do is leave an operation out. When a realm has nothing in an area, its operations
 still answer as the model says: an empty list, `NotFound`, or `Forbidden` when nobody holds the
 permission. That empty state is valid.
 
 [Realms GOS](https://github.com/smart-social-contracts/realms-gos) is the reference implementation of
-every domain. Its tests check that its operations match the operation tables below, so neither can
-drift from the other. Changes to the model come first; the implementations follow. What an
-implementation adds beyond the model (Realms GOS has extensions and a task scheduler, for example)
-is documented by that implementation, not here.
+every area and of the Foundation. Its tests check that its operations match the operation tables
+below, so neither can drift from the other. Changes to the model come first; the implementations
+follow. What an implementation adds beyond the model (Realms GOS has extensions and a task
+scheduler, for example) is documented by that implementation, not here.
+
+## Areas and the Foundation
+
+The model's sections are grouped into nine **areas**, each a part of what a realm governs, and the
+**Foundation**. The Foundation is not an area: it is what every area stands on. It holds the codex
+with the rules, the events that record what is done, the setup and administration of the realm, and
+the encrypted content kept private.
+
+An area is not a *domain*. A domain is a subject of legislation, such as `tax` or `water`
+([the domain list](../docs/layered-codex.md#2-the-domain-list-ggg1)); an area is a part of this model.
+
+| Area | Section | What it covers | Rules |
+|---|---|---|---|
+| Identity and membership | [§2](#2-identity-and-membership) | Users, members, verified persons, attributes, profiles, invitations, power of attorney and pending actions | `I-ID` |
+| Departments and organizations | [§3](#3-departments-and-organizations) | Departments with their positions, appointments and authority; external organizations and their representatives | `I-ORG` |
+| Decisions | [§4](#4-decisions) | Proposals and votes; mandates; contracts and their amendments | `I-GOV` |
+| Finance | [§5](#5-finance) | Treasury, tokens, funds, budgets, the ledger, transfers, invoices, taxes, loans and reports | `I-FIN` |
+| Land and property | [§6](#6-land-and-property) | Land parcels and zones, NFTs and credentials | `I-AST` |
+| Licensing | [§7](#7-licensing-procedures-and-requests) | Licences, the procedures that decide them, and requests to the realm | `I-LIC` |
+| Justice | [§8](#8-justice) | Courts, judges, disputes, cases, verdicts, appeals and penalties | `I-JUS` |
+| Procurement | [§9](#9-procurement) | Tenders, lots, bids and their scores | `I-PRC` |
+| Realm and federation | [§10](#10-realm-and-federation) | The realm, its quarters and capital, federal votes, links to other realms, time zones and sweeps | `I-FED`, `I-NEST` |
+| **Foundation** | [§11](#11-codex-notifications-outside-bodies-tasks-and-audit) | Codex and releases, notifications, outside bodies, tasks and the audit log | `I-EXT` |
+| | [§12](#12-realm-setup-and-administration) | Hosting, setup and administration | `I-ADM` |
+| | [§13](#13-private-content) | Key envelopes and documents | `I-PRV` |
+
+[§14](#14-permissions) lists the permission keys, [§15](#15-cross-cutting-invariants) the invariants
+that hold in every area (`I-ALL`), and [§16](#16-design-decisions) the design decisions. Section
+numbers and rule ids do not change with the grouping: a rule keeps the prefix of its section's earlier
+name (`I-GOV` for Decisions, `I-AST` for Land and property).
 
 ## 1. Conventions
 
@@ -495,7 +525,7 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   it. The kind is what the organization declares; the realm does not check it, so legislation that
   treats a party differently should not take it as proof.
 
-## 4. Governance
+## 4. Decisions
 
 ### Entities
 
@@ -899,7 +929,7 @@ the new period already holds as the other kind. A `budget_propose` whose derived
   The realm counts only the transfers that name the contract: a payment made outside the realm, or
   filed without it, is not checked.
 
-## 6. Assets: land and NFTs
+## 6. Land and property
 
 ### Entities
 
@@ -1149,7 +1179,7 @@ once no lot is `open`, and on to `contracted` as its awarded lots are contracted
   the holder's own records. It adds no payment rule: the contract's `value` bounds its payments
   (I-FIN-11). The framework is set when the contract is made and `contract_amend` never changes it.
 
-## 10. Quarters and federation
+## 10. Realm and federation
 
 A realm can be one canister or a federation of quarters, one of which is the capital. A realm also
 takes legislation from other realms, its sync sources, over links both sides vote on
@@ -1359,6 +1389,11 @@ installed whole; and the paths from several sync sources must form one chain in 
   nothing: when the other side votes, its own notice completes the link, and the receiver's reply,
   `active`, tells it so. A notice that is not answered (the call is rejected or times out; a
   `GggError` is an answer) is sent again until it is answered.
+
+## Foundation
+
+Sections 11 to 13 are the Foundation: not an area, but what every area stands on
+([Areas and the Foundation](#areas-and-the-foundation)).
 
 ## 11. Codex, notifications, outside bodies, tasks and audit
 
@@ -1624,8 +1659,8 @@ is its proposal's `effective_at` (I-GOV-5).
 
 ## 14. Permissions
 
-The permission keys, grouped by domain. An implementation may add keys of its own for operations
-outside the model.
+The permission keys, grouped by area, the Foundation's last. An implementation may add keys of its
+own for operations outside the model.
 
 - Identity: `self.join`, `self.update_public_profile`, `self.update_private_data`,
   `self.change_quarter`, `self.invoice_refresh`, `self.data_view`, `self.data_manage`,
@@ -1636,12 +1671,12 @@ outside the model.
 - Departments: `org.create`, `org.appoint`, `org.expel`, `org.set_policy`, `org.grant_authority`,
   `org.revoke_authority`, `org.manage_budget`, `org.manage_members`.
 - Organizations: `organization.add`, `organization.edit`, `organization.delete`.
-- Governance: `proposal.create`, `proposal.vote`, `proposal.manage`, `mandate.create`,
+- Decisions: `proposal.create`, `proposal.vote`, `proposal.manage`, `mandate.create`,
   `mandate.assign_executor`, `contract.create_under_mandate`, `contract.amend`, `governance.update`.
 - Finance: `treasury.view`, `treasury.manage`, `transfer.create`, `transfer.delete`,
   `invoice.refresh`, `tax.manage`, `tax.assess`, `tax.declare`,
   `token.force_transfer`, `token.freeze`.
-- Assets: `nft.mint`, `nft.force_transfer`, `nft.freeze`, `credential.sign`, `land.assess`.
+- Land and property: `nft.mint`, `nft.force_transfer`, `nft.freeze`, `credential.sign`, `land.assess`.
 - Licensing, procedures and requests: `license.apply`, `license.issue`, `license.revoke`,
   `procedure.define`, `request.file`, `request.decide`.
 - Justice: `dispute.create`, `dispute.view`, `dispute.view_all`, `dispute.accept`, `dispute.reject`,
@@ -1651,7 +1686,7 @@ outside the model.
   `resource.reassign`, `instrument.lock`, `notification.send`, `enforcement.escalate`,
   `enforcement.record`.
 - Procurement: `tender.manage`, `bid.submit`, `bid.evaluate`.
-- Federation: `quarter.sync` (held by registered quarter canisters), `quarter.register`, `quarter.deregister`, `quarter.configure`, `quarter.secede`,
+- Realm and federation: `quarter.sync` (held by registered quarter canisters), `quarter.register`, `quarter.deregister`, `quarter.configure`, `quarter.secede`,
   `quarter.join_federation`, `federal_vote.propose`, `federal_vote.manage`, `realm.register`.
 - Links between realms: `sync_source.manage`, `follower.manage`, `link.sync` (held only by the capitals at the other side of the realm's links: nobody grants it, and `all` does not include it).
 - Codex: `codex.install`, `codex.uninstall`, `codex.revert`, `legislation.publish`.
@@ -1687,7 +1722,7 @@ There is no permission for raw database writes: everything is an operation.
   grantor when delegated and the delegate that prepared it when approved from a pending action, in
   its `Event` and, for an NFT, in the token's header.
 
-## 16. Decisions
+## 16. Design decisions
 
 | # | Decision | Outcome |
 |---|---|---|
@@ -1699,7 +1734,7 @@ There is no permission for raw database writes: everything is an operation.
 | D7 | Expose every operation through one generic entry point that takes a name and untyped arguments | Rejected: each operation is a typed Candid method in `ggg.did` |
 | D8 | Make extensions part of the model | Rejected: extensions are a Realms GOS feature. Any implementation may add callers of its own, under I-ALL-1 and I-ALL-2 |
 | D9 | Forbid agents from signing, as a guardrail | Rejected: the active codex's signing policy decides, defaulting to non-agents only; every signing act records who signed and how (I-ALL-7) |
-| D10 | Split GGG into separately adopted standards (GGG-1, GGG-2, …) | Rejected: one GGG, one interface, one version. A realm may hold nothing in a domain; its operations then answer with empty lists and ordinary errors |
+| D10 | Split GGG into separately adopted standards (GGG-1, GGG-2, …) | Rejected: one GGG, one interface, one version. A realm may hold nothing in an area; its operations then answer with empty lists and ordinary errors |
 | D11 | Leave encrypted content to implementations | Rejected: key envelopes and documents are model entities (§13), with keys from vetKeys |
 | D12 | Sessions of a collegiate organ as entities, with operations to open and close one | Rejected: a proposal's `opens_at` and `deadline` are the session |
 | D13 | Holidays as realm data | Rejected: they stay in the codex, beside its chapters |

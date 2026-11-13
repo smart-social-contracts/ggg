@@ -41,7 +41,7 @@
 /// require it): that needs veto holders, who must hold a seat (I-ORG-5). Nor does it settle a
 /// proposal as its vote ends or run an accepted action as it finalizes (I-GOV-12): proposal_finalize
 /// records the outcome of a vote that has ended, and proposal_execute runs the action. Nobody has
-/// granted a delegation, so nobody acts on another's behalf. Every other domain is empty, which the
+/// granted a delegation, so nobody acts on another's behalf. Every other area is empty, which the
 /// model allows. A proposal's rule is its scope's, the realm's over the votes cast, a
 /// department's m/n over its policy's n, or the plenary's majority of the votes cast, unless the
 /// proposer states a stricter one, which the fixture stores and applies (I-GOV-3). A tie in the
@@ -279,7 +279,7 @@ persistent actor class GggFixture(initMembers : [Principal], initChapters : [(Te
     };
   };
 
-  /// A page of a domain this realm has nothing in.
+  /// A page of an area this realm has nothing in.
   func none<A>(cursor : ?Text, limit : ?Nat32) : Result<Page<A>> = page(Iter.empty<A>(), cursor, limit);
 
   func isActiveMember(p : Principal) : Bool {

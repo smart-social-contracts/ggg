@@ -22,7 +22,7 @@ files a motion for the first and expects a vote for the second on it to be refus
 votes on what it filed. Reads run as the member when one is given, because a GOS may refuse reads
 that need a model permission to anonymous callers. Every list is walked page by page and sent a
 malformed cursor, and every lookup by id is asked for an id that doesn't exist, so a realm with
-nothing in a domain is
+nothing in an area is
 checked too.
 
 Each check reports one outcome:
@@ -96,6 +96,6 @@ path.
   example.
 - `fixture/Ggg.mo` holds the Motoko types generated from `ggg.did`.
 - `fixture/main.mo` is a minimal Motoko GOS: members, five departments, proposals, links between realms
-  and a published record, and every other domain empty. The build checks its interface against
+  and a published record, and every other area empty. The build checks its interface against
   `ggg.did` with `didc check`, and the tests expect it to pass every check.
 - `fixture/broken.mo` breaks GGG on purpose, and the tests expect the checks to fail.
