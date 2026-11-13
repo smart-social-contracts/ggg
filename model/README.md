@@ -699,7 +699,8 @@ sub-department of Infrastructure, Infrastructure's. A new parent that does not e
   member it was filed for, with `proposal_set_tags` (`Conflict` once it is open, `Forbidden` for
   another's); they are not part of what is voted on. `proposal_list` with `tags` lists only the
   proposals that carry at least one of them, together with any `status` it names; absent or empty
-  means any, and more than 16 is `InvalidArgument`.
+  means any, and more than 16 tags, or a tag of more than 64 code points, is `InvalidArgument`: no
+  such tag can have been set, so none could match.
 - I-GOV-16: A contract's `split`, when not empty, names each fiscal period once, at most 64 of them,
   and its amounts add up to `value`; a period is named as a budget line names it, and need not be
   open yet. `contract_amend` replaces the terms it is given, of `value`, `split`, `starts_at` and
