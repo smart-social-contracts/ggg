@@ -94,7 +94,98 @@ argued is governance. A deviation that is tidy and silent is a bug with good man
 > *Test.* If someone compared the text with the codex, would every difference between them be one
 > you could point to and justify?
 
-## 4. GGG is common ground; the particular goes in a layer
+## 4. Prevention is better than regulation
+
+If a rule exists to stop something, and the realm can make that something **impossible**, the
+apparatus the text builds around it has nothing left to do.
+
+Legislation regulates what it cannot prevent. The text assumes the prohibited act is available — a
+council *can* set a rate above the cap, a file *can* be disclosed without a ground — so it provides
+for detection, challenge, correction and penalty after the fact. All of that is machinery for a
+world in which the act happens and is then dealt with.
+
+Code is not in that world. A realm can make the act unexecutable, and then there is no breach to
+detect.
+
+In the live `eu/es` layer the cap on an urban IBI rate is a `forbid` on `tax_policy_propose`
+(`TRLRHL Art. 72.3`). An excessive rate is not levied and then corrected on appeal: the proposal
+that would set it is refused, so the rate never exists to be challenged. The parts of the statute
+that exist to catch an excessive rate after it is charged govern a case the realm cannot produce.
+
+### What prevention does not excuse
+
+**It has to be total.** Prevention inside the realm says nothing about the world outside it. If the
+act can still happen on paper, in a body the realm does not run, or before the realm existed, then
+detection is still live and dropping it is a hole, not a simplification.
+
+**A refusal is still a record.** "It cannot happen" is not the same as "nothing is known about the
+attempt". Where what the rule protects is that attempts are visible — an auditable trail, a
+reportable count, a pattern someone is meant to notice — the refusal has to be recorded, not merely
+enforced in silence.
+
+> *Test.* Can the realm make the act unexecutable everywhere the rule reaches? Then the detection
+> and penalty around it is dead code. Only here? Then keep both.
+
+## 5. Where the text and the code differ, the text prevails
+
+Sections 2 to 4 all license a codex to depart from the shape of the text: to replace a procedure, to
+refuse a defective rule, to prevent instead of punish. They need one backstop, and this is it.
+**The legislation is the authority. The codex is a reading of it.**
+
+In case of ambiguity, conflict or doubt, the legislation prevails over the code. Concretely:
+
+- An ambiguity is settled by reading the text again, never by appealing to what the code already
+  does. "The realm does it this way" is not an argument about what the legislation requires.
+- A codex that turns out to diverge is **wrong**: a defect to fix in the codex, not a feature of the
+  realm to live with. Every realm must be correctable without the text changing.
+- Where the text genuinely admits two readings, the codex takes one and **records which**, so the
+  choice can be revisited later. Ambiguity is not a licence to take the convenient reading — take
+  the one that serves what the rule protects (§2), and say that you did.
+- A reader who wants to know what the rule *is* reads the provision. The codex shows them how it is
+  executed here, and never stands in for it.
+
+This is what keeps §3 honest. Scrutiny may refuse to implement and may raise a finding. It may never
+promote the code to the authority.
+
+> *Test.* If the provision and the codex disagree, which one changes? The codex. Always.
+
+## 6. Every rule cites the provision it comes from
+
+A rule in a codex that does not say where it came from cannot be audited. §3 asks whether the code
+matches the text and §5 says the text wins; neither question can even be put without knowing which
+text. **So every member of a chapter carries a reference to the part of the legislation it
+implements.**
+
+The model already provides for it: every mark takes `legislation="..."`, and so does a forbid.
+
+```python
+@extension(legislation="Ley Orgánica 3/2018 Art. 8")
+def check_document_share(self, args): ...
+```
+
+The field is optional in code and validated only as a string. This principle says fill it, and says
+what filling it well means:
+
+- **Cite the provision, not the instrument.** "Ley 39/2015" names a whole statute and
+  helps nobody; `Ley 39/2015 Art. 21.3` can be opened and compared with the code beside it.
+- **Cite everything the rule implements**, where it implements more than one provision
+  (`TRLRHL Arts. 61, 65, 71 and 74`).
+- **Where a member implements no provision** — scaffolding, a helper, a default that a layer below
+  will replace — say so explicitly, so that an empty citation means "nobody filled this in" and
+  nothing else.
+
+This is already the practice rather than an aspiration: all 19 marked members in the live `eu/es`
+layer carry a citation, one each.
+
+The payoff is for the reader, not the author. A realm's codex is public. A rule shown with its
+provision beside it lets any citizen take what the realm executes and check it against the
+legislation that authorises it — which is the audit that §3 and §5 depend on, and which is only
+available if the reference is there.
+
+> *Test.* Can a reader open what the citation names and see this rule in it? A citation they have to
+> go searching from is not a reference.
+
+## 7. GGG is common ground; the particular goes in a layer
 
 **GGG holds what holds nearly everywhere.** It is the architecture a realm anywhere in the world is
 built on, so a rule only makes it into the model if realms across most of the world would recognise
@@ -119,7 +210,7 @@ vocabulary that quietly implies a legal system they are not under.
 The test catches vocabulary as readily as rules: a field called `legal_basis` sounds universal, but
 if its values are the paragraphs of one region's statute, the universality is in the name only.
 
-## 5. Model the fact, not the claim about the fact
+## 8. Model the fact, not the claim about the fact
 
 Where a rule depends on something being true of the world, the model should hold **the thing that
 makes it true**, not a party's statement that it is.
@@ -138,7 +229,7 @@ Prefer, in this order:
 > *Test.* Could a rule have reached a different answer if the person had typed something else, with
 > nothing else about the realm being different? Then it is a claim.
 
-## 6. An entity earns its place by being read
+## 9. An entity earns its place by being read
 
 Every entity, field and status should be named by some rule, operation or invariant that reads it.
 A field nothing reads is a comment with a schema. It costs every implementation, every interface
@@ -147,9 +238,9 @@ version and every migration, and buys a note that a free-text field would have h
 This is why the model's [Decisions](README.md#16-decisions) mostly reject merges: an entity that an
 operation genuinely reads is not noise, however small it looks.
 
-## 7. A worked example: the legal basis of a document share
+## 10. A worked example: the legal basis of a document share
 
-This is the example the guidelines were written from. It exercises §1, §4 and §5 in one operation,
+This is the example the guidelines were written from. It exercises §1, §7 and §8 in one operation,
 and it is still open.
 
 A realm shares an encrypted document with another body. Access control is complete and
@@ -177,9 +268,9 @@ the norm assigns that task to that body.
 
 The same operation already contains the other pattern. The document carries **facts** recorded when
 it was stored — state, written by an operation that had to be authorised, which legislation reads
-when the document is shared. That is §5's first two tiers, in the same call as a claim.
+when the document is shared. That is §8's first two tiers, in the same call as a claim.
 
-Applying §5, the grounds separate by whether a realm can hold what makes them true:
+Applying §8, the grounds separate by whether a realm can hold what makes them true:
 
 | Ground | What would make it true | Verdict |
 |---|---|---|
@@ -189,12 +280,16 @@ Applying §5, the grounds separate by whether a realm can hold what makes them t
 | consent | a consent record — **no such entity exists in the model** | not expressible yet |
 | legitimate interests | a balancing of interests | **not expressible, ever** — §1 applies |
 
-And §4 applies to where it lives. The GGG model is clean here: its `DocumentShareArgs` is
+And §7 applies to where it lives. The GGG model is clean here: its `DocumentShareArgs` is
 `{ document, keys }` and says nothing about lawful grounds. But an implementation that adds a
 typed basis — a ground, a purpose, a citation, a *special category* — to its own interface has put
 one region's data-protection statute in the layer that every realm must implement, including realms
-no such statute reaches. By §4 that belongs in a layer; by §5 what the generic model owes it is the
+no such statute reaches. By §7 that belongs in a layer; by §8 what the generic model owes it is the
 `facts` channel it already has.
+
+One thing the example does right: the rule carries its provision
+(`@extension(legislation="Ley Orgánica 3/2018 Art. 8")`), which is why it could be compared with the
+text at all. §6 is the reason this example is a finding and not a suspicion.
 
 Open questions this leaves, which the model has not decided:
 
@@ -204,21 +299,25 @@ Open questions this leaves, which the model has not decided:
 - whether a citation becomes a reference rather than a string;
 - where a typed basis lives, if a typed basis is wanted at all.
 
-## 8. Applying these when proposing a change
+## 11. Applying these when proposing a change
 
 Before adding an entity, field, status or operation:
 
-1. **Name the rule that reads it.** No reader, no addition (§6).
+1. **Name the rule that reads it.** No reader, no addition (§9).
 2. **Say what it protects**, in one sentence, in terms of the obligation rather than the procedure (§2).
 3. **Show you have scrutinised it**: the edges, the contradictions, the unreachable conditions — and
-   raise what you found rather than quietly correcting it (§3).
-4. **Check it would be recognised nearly everywhere.** If it names one jurisdiction's law, or carries
-   its vocabulary, it is a layer (§4).
-5. **Check it is a fact, not a claim** — and if it is a claim, say so and justify it under §1 (§5).
-6. **Say what happens when the realm cannot decide.** "It is allowed and recorded" is an answer that
+   raise what you found rather than quietly correcting it (§3). If you departed from the text, say
+   where, and keep the text as the reference (§5).
+4. **Ask whether it can be prevented instead of regulated** — and if it can, whether the prevention
+   reaches everywhere the rule does (§4).
+5. **Cite the provision** it implements, precisely enough to open (§6).
+6. **Check it would be recognised nearly everywhere.** If it names one jurisdiction's law, or carries
+   its vocabulary, it is a layer (§7).
+7. **Check it is a fact, not a claim** — and if it is a claim, say so and justify it under §1 (§8).
+8. **Say what happens when the realm cannot decide.** "It is allowed and recorded" is an answer that
    needs defending, not a default (§1).
-7. **Write the cases that fail without it**, including one for the thing nobody thought of: the
+9. **Write the cases that fail without it**, including one for the thing nobody thought of: the
    unrecognised value, the absent reference, the ground the realm does not cover.
 
-Step 7 is how the example above was found: every case covered a value the rules knew, and none
+Step 9 is how the example above was found: every case covered a value the rules knew, and none
 covered a value they did not.
