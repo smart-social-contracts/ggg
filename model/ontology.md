@@ -62,7 +62,64 @@ Two worked distinctions:
 - *"Decided by a judge."* The obligation is that a person with standing and independence decides.
   No technology removes that. A realm implements it; it does not optimise it away.
 
-## 3. Model the fact, not the claim about the fact
+## 3. Faithful is not correct: scrutinise the logic
+
+**The logic of a rule does not always make sense.** Legislative texts are amended by different
+hands over decades. They contain rules that contradict each other, rules whose conditions can never
+be met, rules that produce absurd results at the edges, and rules left behind by the repeal of what
+they referred to. A text is not a specification that was reviewed before it shipped.
+
+Code is unforgiving in a way prose is not. A human applying an incoherent rule notices and asks.
+Code applies it, every time, at scale, instantly — so **transcribing a rule faithfully can entrench
+a defect that was harmless while a person stood between the text and the outcome.** Fidelity to the
+text is not the goal; a realm that governs correctly is.
+
+So every rule gets analysed before it is written:
+
+- What does it produce at the edges — zero, empty, the boundary date, the maximum?
+- Does it contradict another rule in the same codex, or one in a layer above?
+- Are its conditions reachable at all?
+- Does it still refer to something that exists?
+
+### Scrutiny is not amendment
+
+The codex author does not have authority to improve the law. Finding a defect does **not** license
+quietly implementing what the rule should have said. That is legislating, and it is worse than the
+defect, because it is invisible.
+
+What scrutiny produces is a **finding, raised openly**: a question back to whoever holds the text,
+a recorded decision, or a refusal to implement until it is settled. A deviation that is visible and
+argued is governance. A deviation that is tidy and silent is a bug with good manners.
+
+> *Test.* If someone compared the text with the codex, would every difference between them be one
+> you could point to and justify?
+
+## 4. GGG is common ground; the particular goes in a layer
+
+**GGG holds what holds nearly everywhere.** It is the architecture a realm anywhere in the world is
+built on, so a rule only makes it into the model if realms across most of the world would recognise
+it. Everything particular to a jurisdiction belongs in a **codex layer** — that is what layers are
+for, each adding to the one above it.
+
+Roughly:
+
+| Where | What belongs there |
+|---|---|
+| **The GGG model** | that a realm has departments, that a decision has a scope and a tally, that a document can be shared with someone, that acts are recorded and auditable |
+| **A codex layer** | which majority carries a motion here, which grounds make a disclosure lawful here, what a register must contain here, which holidays stop a clock here |
+
+This is not only tidiness. Region-specific logic in the model is a cost paid by every realm that
+does not share the region: an interface version, a field to populate, a concept to explain, and a
+vocabulary that quietly implies a legal system they are not under.
+
+> *Test.* Does the rule, the field, or the vocabulary name a jurisdiction's statute, agency, or
+> legal categories — directly, or through values only that jurisdiction uses? Then it is a layer,
+> not the model.
+
+The test catches vocabulary as readily as rules: a field called `legal_basis` sounds universal, but
+if its values are the paragraphs of one region's statute, the universality is in the name only.
+
+## 5. Model the fact, not the claim about the fact
 
 Where a rule depends on something being true of the world, the model should hold **the thing that
 makes it true**, not a party's statement that it is.
@@ -81,7 +138,7 @@ Prefer, in this order:
 > *Test.* Could a rule have reached a different answer if the person had typed something else, with
 > nothing else about the realm being different? Then it is a claim.
 
-## 4. An entity earns its place by being read
+## 6. An entity earns its place by being read
 
 Every entity, field and status should be named by some rule, operation or invariant that reads it.
 A field nothing reads is a comment with a schema. It costs every implementation, every interface
@@ -90,10 +147,10 @@ version and every migration, and buys a note that a free-text field would have h
 This is why the model's [Decisions](README.md#16-decisions) mostly reject merges: an entity that an
 operation genuinely reads is not noise, however small it looks.
 
-## 5. A worked example: the legal basis of a document share
+## 7. A worked example: the legal basis of a document share
 
-This is the example the guidelines were written from. It shows §1, §3 and §4 in one operation, and
-it is still open.
+This is the example the guidelines were written from. It exercises §1, §4 and §5 in one operation,
+and it is still open.
 
 A realm shares an encrypted document with another body. Access control is complete and
 cryptographic: the caller needs a permission, must be staff of the document's department, the
@@ -120,9 +177,9 @@ the norm assigns that task to that body.
 
 The same operation already contains the other pattern. The document carries **facts** recorded when
 it was stored — state, written by an operation that had to be authorised, which legislation reads
-when the document is shared. That is §3's first two tiers, in the same call as a claim.
+when the document is shared. That is §5's first two tiers, in the same call as a claim.
 
-Applying §3, the grounds separate by whether a realm can hold what makes them true:
+Applying §5, the grounds separate by whether a realm can hold what makes them true:
 
 | Ground | What would make it true | Verdict |
 |---|---|---|
@@ -132,24 +189,36 @@ Applying §3, the grounds separate by whether a realm can hold what makes them t
 | consent | a consent record — **no such entity exists in the model** | not expressible yet |
 | legitimate interests | a balancing of interests | **not expressible, ever** — §1 applies |
 
+And §4 applies to where it lives. The GGG model is clean here: its `DocumentShareArgs` is
+`{ document, keys }` and says nothing about lawful grounds. But an implementation that adds a
+typed basis — a ground, a purpose, a citation, a *special category* — to its own interface has put
+one region's data-protection statute in the layer that every realm must implement, including realms
+no such statute reaches. By §4 that belongs in a layer; by §5 what the generic model owes it is the
+`facts` channel it already has.
+
 Open questions this leaves, which the model has not decided:
 
-- which grounds GGG covers, and what a share needing an uncovered one does — refuse, or leave the
-  system with the fact recorded as an exception;
+- which grounds a realm covers, and what a share needing an uncovered one does — refuse, or leave
+  the system with the fact recorded as an exception;
 - whether consent becomes an entity, and what it holds (subject, purpose, given, withdrawn);
-- whether a citation becomes a reference rather than a string.
+- whether a citation becomes a reference rather than a string;
+- where a typed basis lives, if a typed basis is wanted at all.
 
-## 6. Applying these when proposing a change
+## 8. Applying these when proposing a change
 
 Before adding an entity, field, status or operation:
 
-1. **Name the rule that reads it.** No reader, no addition (§4).
+1. **Name the rule that reads it.** No reader, no addition (§6).
 2. **Say what it protects**, in one sentence, in terms of the obligation rather than the procedure (§2).
-3. **Check it is a fact, not a claim** — and if it is a claim, say so and justify it under §1 (§3).
-4. **Say what happens when the realm cannot decide.** "It is allowed and recorded" is an answer that
+3. **Show you have scrutinised it**: the edges, the contradictions, the unreachable conditions — and
+   raise what you found rather than quietly correcting it (§3).
+4. **Check it would be recognised nearly everywhere.** If it names one jurisdiction's law, or carries
+   its vocabulary, it is a layer (§4).
+5. **Check it is a fact, not a claim** — and if it is a claim, say so and justify it under §1 (§5).
+6. **Say what happens when the realm cannot decide.** "It is allowed and recorded" is an answer that
    needs defending, not a default (§1).
-5. **Write the cases that fail without it**, including one for the thing nobody thought of: the
+7. **Write the cases that fail without it**, including one for the thing nobody thought of: the
    unrecognised value, the absent reference, the ground the realm does not cover.
 
-Step 5 is how the example above was found: every case covered a value the rules knew, and none
+Step 7 is how the example above was found: every case covered a value the rules knew, and none
 covered a value they did not.
