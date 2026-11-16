@@ -30,6 +30,9 @@ drift from the other. Changes to the model come first; the implementations follo
 implementation adds beyond the model (Realms GOS has extensions and a task scheduler, for example)
 is documented by that implementation, not here.
 
+How to decide what belongs in this model, and what shape it takes, is in
+[the ontology guidelines](ontology.md). A change to the model is expected to survive them.
+
 ## 1. Conventions
 
 These rules apply to the model's data as `ggg.did` exposes it.

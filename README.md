@@ -8,6 +8,7 @@ realms.
 | | |
 |---|---|
 | [`model/`](model/README.md) | **The model.** What a realm is made of: entities, operations, lifecycles, invariants and permissions. |
+| [`model/ontology.md`](model/ontology.md) | **The ontology guidelines.** How to decide what belongs in the model, and what shape it takes. |
 | [`ggg.did`](ggg.did) | **The interface.** The model in Candid: a record for every entity and a method for every operation. |
 | [`domains.json`](domains.json) | **The domain list.** The subjects of legislation (`tax`, `water`, …) that a layered codex has chapters for. |
 | [`facts.json`](facts.json) | **The fact schema.** For every operation, the facts a codex's rules see, each with its kind, range and allowed values. Generated from `ggg.did`. |
