@@ -238,68 +238,7 @@ version and every migration, and buys a note that a free-text field would have h
 This is why the model's [Decisions](README.md#16-decisions) mostly reject merges: an entity that an
 operation genuinely reads is not noise, however small it looks.
 
-## 10. A worked example: the legal basis of a document share
-
-This is the example the guidelines were written from. It exercises §1, §7 and §8 in one operation,
-and it is still open.
-
-A realm shares an encrypted document with another body. Access control is complete and
-cryptographic: the caller needs a permission, must be staff of the document's department, the
-recipient must exist, the operation asks the member each time, and sharing hands out wrapped
-decryption keys rather than setting a flag. None of that is at issue.
-
-On top of it, the share states a **basis**: under data-protection law, the lawful ground for the
-disclosure. It is carried as text — the name of a ground, a purpose, optionally a citation.
-
-What that produces:
-
-| What the sharer states | What happens |
-|---|---|
-| nothing | refused: a share needs a basis |
-| `consent`, between public authorities | refused by the upper layer: consent is not a basis between public authorities |
-| `public task`, no citation | refused by the lower layer: name the legislation that sets this public task |
-| **an invented ground** | **allowed** — no rule matches it, so nothing denies it |
-
-The last row is §1. The ground is a label, so the rules can only test it against labels they
-happen to know, and an unrecognised one falls through every test. Closing the vocabulary does not
-fix it: it means an unlawful share must be declared in approved words. The citation requirement has
-the same shape one level up — it checks that a string is present, not that it names a norm, nor that
-the norm assigns that task to that body.
-
-The same operation already contains the other pattern. The document carries **facts** recorded when
-it was stored — state, written by an operation that had to be authorised, which legislation reads
-when the document is shared. That is §8's first two tiers, in the same call as a claim.
-
-Applying §8, the grounds separate by whether a realm can hold what makes them true:
-
-| Ground | What would make it true | Verdict |
-|---|---|---|
-| performance of a contract | a live `Contract` with the subject | expressible |
-| legal obligation | the chapter that imposes it (`ChapterRef`) | expressible |
-| public task | a `Mandate` assigning the task to the body | expressible |
-| consent | a consent record — **no such entity exists in the model** | not expressible yet |
-| legitimate interests | a balancing of interests | **not expressible, ever** — §1 applies |
-
-And §7 applies to where it lives. The GGG model is clean here: its `DocumentShareArgs` is
-`{ document, keys }` and says nothing about lawful grounds. But an implementation that adds a
-typed basis — a ground, a purpose, a citation, a *special category* — to its own interface has put
-one region's data-protection statute in the layer that every realm must implement, including realms
-no such statute reaches. By §7 that belongs in a layer; by §8 what the generic model owes it is the
-`facts` channel it already has.
-
-One thing the example does right: the rule carries its provision
-(`@extension(legislation="Ley Orgánica 3/2018 Art. 8")`), which is why it could be compared with the
-text at all. §6 is the reason this example is a finding and not a suspicion.
-
-Open questions this leaves, which the model has not decided:
-
-- which grounds a realm covers, and what a share needing an uncovered one does — refuse, or leave
-  the system with the fact recorded as an exception;
-- whether consent becomes an entity, and what it holds (subject, purpose, given, withdrawn);
-- whether a citation becomes a reference rather than a string;
-- where a typed basis lives, if a typed basis is wanted at all.
-
-## 11. Applying these when proposing a change
+## 10. Applying these when proposing a change
 
 Before adding an entity, field, status or operation:
 
