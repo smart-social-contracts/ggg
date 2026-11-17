@@ -77,6 +77,8 @@ chapter file names.
 | `treasury` | Budgets, funds, the allocation of revenue and payments. |
 | `federation` | Relations with other realms: sync sources, followers and quarters. |
 | `planning` | Urban planning: plans and their zones, what may be built or used on a parcel, and the licences and suspensions that follow. |
+| `justice` | Courts and the cases before them: who hears a dispute, how a verdict is appealed and the penalties that follow. |
+| `procurement` | Tenders and their lots: how a bid is sealed, scored and awarded, and the contract that follows. |
 
 Later: `immigration`, `education`, `social_security`, `defense`, and so on.
 
