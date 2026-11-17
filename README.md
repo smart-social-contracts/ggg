@@ -10,7 +10,7 @@ GGG describes the entities, processes and conventions that a GOS should implemen
 
 2. **Interoperability:** any GGG-compliant GOS or tool works out-of-the-box with any GGG-compliant GOS or tool.
 
-3. **Familiar but abstract:** close enough to traditional governance that its institutions map onto it, general enough not to be tied to any one country's.
+3. **Familiar but abstract:** close enough to traditional governance that existing institutions map onto it, yet general enough not to be tied to any one country or to limit governance evolution.
 
 
 ## What's in this repository
