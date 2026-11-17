@@ -1,5 +1,6 @@
 /// Breaks GGG on purpose, to test that the conformance suite reports failures.
-/// It doesn't declare GGG, its realm has no name, and it has no member or proposal methods.
+/// It doesn't declare GGG, its realm has no name, a quorum above 100 % and a time zone that is not an
+/// IANA name, and it has no member or proposal methods.
 import T "Ggg";
 
 persistent actor {
@@ -23,16 +24,20 @@ persistent actor {
       federation_realm_id = null;
       federation_codex = null;
       quarter_join_mode = null;
+      sync_sources = [];
       trusted_principals = [];
       require_marketplace_approval = false;
       trusted_approvers = [];
-      voting_threshold = 5_000;
-      voting_quorum = 0;
+      voting_threshold = 50_000_000;
+      voting_quorum = 100_000_001; // above 100 %
+      casting_vote = null;
       open_registration = false;
       logo_url = null;
       background_image_url = null;
       installed_version = "0";
       network = "local";
+      timezone = "CET"; // not an Area/Location name
+      languages = [];
       member_count = 0;
     };
   };

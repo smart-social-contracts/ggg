@@ -11,6 +11,20 @@ const NO_PROPOSAL = 'ggg-conformance-no-such-proposal';
 const NO_DEPARTMENT = 'ggg-conformance-no-such-department';
 const NO_METHOD = 'ggg_conformance_no_such_method';
 const UNKNOWN = 'ggg-conformance-no-such-record';
+// Every ratio is in hundred-millionths: 100 % is 100 000 000.
+const WHOLE = 100_000_000n;
+// A nonzero ratio under 1 % is more likely a basis-point value nobody converted (50 % was 5 000) than
+// a real quorum, so the suite warns about it.
+const SUSPICIOUSLY_SMALL = 1_000_000n;
+
+export const looksLikeBasisPoints = (ratio) => ratio > 0n && ratio < SUSPICIOUSLY_SMALL;
+
+// A time zone name has the shape of the IANA database's: `Area/Location`, up to three parts, with
+// one of its areas, or `UTC`. The shape is checked, not each city, so no zone list ships here.
+const TIMEZONE_AREAS = 'Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific|Etc';
+const TIMEZONE = new RegExp(`^(UTC|(${TIMEZONE_AREAS})/[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)?)$`);
+
+export const isTimezoneName = (name) => TIMEZONE.test(name);
 
 export class Skip extends Error {}
 
@@ -103,8 +117,13 @@ function checkProposal(p) {
     assert(p.action.Call.method.length > 0, `proposal ${p.id}: the method name is empty`);
   }
   for (const field of ['threshold', 'quorum']) {
-    assert(p[field] <= 10_000n, `proposal ${p.id}: ${field} is ${p[field]}, above 10000`);
+    assert(p[field] <= WHOLE, `proposal ${p.id}: ${field} is ${p[field]}, above ${WHOLE} (100 %)`);
   }
+  assert(tag(p.status) !== 'ExecutionScheduled' || opt(p.effective_at) !== null, `proposal ${p.id} is scheduled but has no effective_at`);
+  assert(tag(p.status) !== 'ExecutionScheduled' || tag(p.action) !== 'Motion', `proposal ${p.id}: a motion has nothing to schedule`);
+  const linked = p.links.map((l) => l.proposal);
+  assert(new Set(linked).size === linked.length, `proposal ${p.id}: its links name a proposal twice`);
+  assert(!linked.includes(p.id), `proposal ${p.id} links to itself`);
   const opens = opt(p.opens_at);
   const deadline = opt(p.deadline);
   assert(opens === null || deadline === null || opens <= deadline, `proposal ${p.id}: the deadline is before voting opens`);
@@ -115,6 +134,12 @@ function checkProposal(p) {
   if (result) {
     assert(['Executed', 'Failed'].includes(tag(p.status)), `proposal ${p.id} is ${tag(p.status)} but has a result`);
   }
+}
+
+/** The vote has ended early: every eligible member has voted, so no vote can be replaced. */
+function everyoneVoted(p) {
+  const eligible = opt(p.tally.eligible);
+  return eligible !== null && p.tally.yes + p.tally.no + p.tally.abstain >= eligible;
 }
 
 function sameProposal(listed, p) {
@@ -136,6 +161,14 @@ const votePages = (actor, id) => async ({ cursor, limit }) => {
   const detail = opt(result.Ok);
   if (!detail) return { Err: { NotFound: null } };
   return { Ok: { items: detail.votes, next: detail.next } };
+};
+
+/** ggg_proposal_linked_from, as pages for walk(). */
+const linkPages = (actor, id) => async ({ cursor, limit }) => {
+  const result = await actor.ggg_proposal_linked_from({ id, cursor, limit });
+  if ('Err' in result) return result;
+  const page = opt(result.Ok);
+  return page ? { Ok: page } : { Err: { NotFound: null } };
 };
 
 const idText = (id) => (id instanceof Principal ? id.toText() : id);
@@ -164,6 +197,8 @@ const none = { cursor: [], limit: [] };
  */
 function listTable(actor) {
   let department = null;
+  let proposal = null;
+  let delegation = null;
   let scope = null;
   const list = (what, call, field = 'items', seen) => ({
     what,
@@ -178,14 +213,40 @@ function listTable(actor) {
     if (!department) throw new Skip('the realm lists no department');
     return department;
   };
+  const needProposal = () => {
+    if (!proposal) throw new Skip('the realm lists no proposal');
+    return proposal;
+  };
   const needScope = () => {
     if (!scope) throw new Skip('the caller can open no key scope');
     return scope;
   };
+  const needDelegation = () => {
+    if (!delegation) throw new Skip('the caller has no grant, given or received');
+    return delegation;
+  };
+  const firstDelegation = (items) => {
+    delegation ??= items[0]?.id ?? null;
+  };
   return [
+    list('ggg_proposal_list', () => (a) => actor.ggg_proposal_list({ ...a, status: [], tags: [] }), 'items', (items) => {
+      proposal = items[0]?.id ?? null;
+    }),
+    list('ggg_proposal_linked_from', () => {
+      const id = needProposal();
+      return (a) => actor.ggg_proposal_linked_from({ ...a, id });
+    }),
     list('ggg_invite_list', () => (a) => actor.ggg_invite_list(a)),
-    list('ggg_delegation_list (as grantor)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Grantor: null } })),
-    list('ggg_delegation_list (as delegate)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Delegate: null } })),
+    list('ggg_delegation_list (as grantor)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Grantor: null } }), 'items', firstDelegation),
+    list('ggg_delegation_list (as delegate)', () => (a) => actor.ggg_delegation_list({ ...a, role: { Delegate: null } }), 'items', firstDelegation),
+    list('ggg_delegation_groups', () => (a) => actor.ggg_delegation_groups({ ...a, on_behalf_of: [] })),
+    list('ggg_delegation_activity', () => {
+      const id = needDelegation();
+      return (a) => actor.ggg_delegation_activity({ ...a, delegation: id, on_behalf_of: [] });
+    }),
+    list('ggg_action_list (as grantor)', () => (a) => actor.ggg_action_list({ ...a, role: { Grantor: null }, status: [] })),
+    list('ggg_action_list (as delegate)', () => (a) => actor.ggg_action_list({ ...a, role: { Delegate: null }, status: [] })),
+    list('ggg_attribute_list', () => (a) => actor.ggg_attribute_list({ ...a, kind: [], on_behalf_of: [] })),
     list('ggg_department_list', () => (a) => actor.ggg_department_list(a), 'items', (items) => {
       department = items[0]?.id ?? null;
     }),
@@ -194,15 +255,21 @@ function listTable(actor) {
       return (a) => actor.ggg_department_get({ ...a, id });
     }, 'seats'),
     list('ggg_department_chart (sub-departments)', () => (a) => actor.ggg_department_chart({ ...a, department: [] }), 'children'),
-    list('ggg_organization_list', () => (a) => actor.ggg_organization_list({ ...a, status: [] })),
+    list('ggg_organization_list', () => (a) => actor.ggg_organization_list({ ...a, status: [], kind: [] })),
     list('ggg_treasury_view (funds)', () => (a) => actor.ggg_treasury_view(a), 'funds'),
     list('ggg_ledger_view', () => (a) =>
       actor.ggg_ledger_view({ ...a, transaction: [], symbol: [], kind: [], fund: [], period: [] })),
     list('ggg_report_view', () => (a) => actor.ggg_report_view({ ...a, id: [] })),
+    list('ggg_loan_list', () => (a) => actor.ggg_loan_list({ ...a, status: [] })),
+    list('ggg_budget_list', () => (a) => actor.ggg_budget_list({ ...a, fund: [], period: [] })),
+    list('ggg_transfer_list', () => (a) => actor.ggg_transfer_list({ ...a, fund: [], status: [] })),
+    list('ggg_sweep_list', () => (a) => actor.ggg_sweep_list({ ...a, quarter: [], status: [] })),
     list('ggg_my_invoices', () => (a) => actor.ggg_my_invoices({ ...a, on_behalf_of: [] })),
     list('ggg_land_list', () => (a) => actor.ggg_land_list({ ...a, owner: [] })),
     list('ggg_land_map (zones)', () => (a) => actor.ggg_land_map({ ...a, x: 0n, y: 0n, w: 32n, h: 32n }), 'zones'),
     list('ggg_license_list', () => (a) => actor.ggg_license_list({ ...a, holder: [], kind: [], status: [] })),
+    list('ggg_procedure_list', () => (a) => actor.ggg_procedure_list(a)),
+    list('ggg_request_list', () => (a) => actor.ggg_request_list({ ...a, kind: [], status: [] })),
     list('ggg_dispute_list_all', () => (a) => actor.ggg_dispute_list_all({ ...a, status: [] })),
     list('ggg_resolution_query', () => (a) => actor.ggg_resolution_query({ ...a, since: [], court: [], search: [] })),
     list('ggg_tender_list', () => (a) => actor.ggg_tender_list({ ...a, status: [] })),
@@ -222,6 +289,9 @@ function listTable(actor) {
     list('ggg_notification_list', () => (a) =>
       actor.ggg_notification_list({ ...a, recipient: [], unread: [], on_behalf_of: [] })),
     list('ggg_events', () => (a) => actor.ggg_events(a)),
+    list('ggg_external_list', () => (a) => actor.ggg_external_list(a)),
+    list('ggg_dispatch_list', () => (a) => actor.ggg_dispatch_list({ ...a, to: [], status: [] })),
+    list('ggg_task_list', () => (a) => actor.ggg_task_list({ ...a, op: [], status: [] })),
     list('ggg_crypto_scopes', () => (a) => actor.ggg_crypto_scopes(a), 'items', (items) => {
       scope = items[0] ?? null;
     }),
@@ -231,7 +301,7 @@ function listTable(actor) {
     }),
     list('ggg_document_list', () => {
       const d = needDepartment();
-      return (a) => actor.ggg_document_list({ ...a, department: d });
+      return (a) => actor.ggg_document_list({ ...a, department: d, kind: [], language: [] });
     }),
   ];
 }
@@ -239,11 +309,15 @@ function listTable(actor) {
 /** Every bound lookup by id. */
 const getTable = (actor) => [
   ['ggg_department_get', (id) => actor.ggg_department_get({ id, ...none })],
+  ['ggg_proposal_linked_from', (id) => actor.ggg_proposal_linked_from({ id, ...none })],
   ['ggg_organization_get', (id) => actor.ggg_organization_get({ id, ...none })],
   ['ggg_tender_get', (id) => actor.ggg_tender_get({ id, ...none })],
+  ['ggg_contract_get', (id) => actor.ggg_contract_get({ id, ...none })],
   ['ggg_dispute_get', (id) => actor.ggg_dispute_get({ id, on_behalf_of: [] })],
+  ['ggg_request_get', (id) => actor.ggg_request_get({ id, on_behalf_of: [] })],
   ['ggg_crypto_envelope', (id) => actor.ggg_crypto_envelope(id)],
   ['ggg_document_get', (id) => actor.ggg_document_get(id)],
+  ['ggg_action_get', (id) => actor.ggg_action_get(id)],
 ];
 
 /** Update methods any caller may use, so the anonymous check skips them. */
@@ -270,6 +344,12 @@ export function updateTable() {
   return idlFactory({ IDL })
     ._fields.filter(([name, fn]) => name.startsWith('ggg_') && !fn.annotations.includes('query'))
     .map(([name, fn]) => [name, fn.argTypes.map(blank)]);
+}
+
+/** A method's arguments, Candid-encoded with its own types, as the generic call carries them. */
+function encodeArgs(method, args) {
+  const [, fn] = idlFactory({ IDL })._fields.find(([name]) => name === method);
+  return new Uint8Array(IDL.encode(fn.argTypes, args));
 }
 
 /**
@@ -331,6 +411,107 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     return `${realm.name}: ${realm.installed_version}, ${tag(realm.status)}`;
   });
 
+  await check('GGG', 'R2', 'the realm states its voting threshold and quorum in hundred-millionths', async () => {
+    const realm = await anon.ggg_realm_info();
+    for (const field of ['voting_threshold', 'voting_quorum']) {
+      assert(realm[field] <= WHOLE, `${field} is ${realm[field]}, above ${WHOLE} (100 %)`);
+    }
+    return `threshold ${realm.voting_threshold}, quorum ${realm.voting_quorum}`;
+  });
+
+  await check('GGG', 'R3', 'the realm names its time zone with an IANA name', async () => {
+    const { timezone } = await anon.ggg_realm_info();
+    assert(isTimezoneName(timezone), `timezone "${timezone}" is not an IANA name such as Europe/Madrid, or UTC`);
+    return timezone;
+  });
+
+  await check('GGG', 'O1', 'department policies state their quorum in hundred-millionths', async () => {
+    const walked = await walk((a) => reader.ggg_department_list(a), (d) => d.id);
+    const detail = checkWalk(walked, 'ggg_department_list');
+    for (const d of walked.items) {
+      for (const [name, policy] of [['policy', d.policy], ['target_policy', opt(d.target_policy)]]) {
+        if (policy) assert(policy.quorum <= WHOLE, `department ${d.id}: ${name}.quorum is ${policy.quorum}, above ${WHOLE} (100 %)`);
+      }
+    }
+    return detail;
+  });
+
+  await check('GGG', 'O2', 'ggg_organization_list filters by kind', async () => {
+    let listed = 0;
+    for (const kind of ['Company', 'Party', 'Union', 'Association', 'Other']) {
+      const walked = await walk((a) => reader.ggg_organization_list({ ...a, status: [], kind: [{ [kind]: null }] }), (o) => o.id);
+      checkWalk(walked, `ggg_organization_list(${kind})`);
+      for (const o of walked.items) assert(tag(o.kind) === kind, `organization ${o.id} is ${tag(o.kind)}, listed as ${kind}`);
+      listed += walked.items.length;
+    }
+    return `${listed} organizations listed by kind`;
+  });
+
+  await check('GGG', 'B1', 'no budget line holds more than it plans, and only an adopted expense line holds reserved or committed money', async () => {
+    const walked = await walk((a) => reader.ggg_budget_list({ ...a, fund: [], period: [] }), (b) => b.id);
+    const detail = checkWalk(walked, 'ggg_budget_list');
+    for (const b of walked.items) {
+      const staged = tag(b.status) === 'Adopted' && tag(b.kind) === 'Expense';
+      if (!staged) assert(b.reserved === 0n && b.committed === 0n, `line ${b.id} is ${tag(b.status)} ${tag(b.kind)} but holds reserved or committed money`);
+      if (staged) assert(b.reserved + b.committed + b.actual <= b.planned, `line ${b.id} holds ${b.reserved + b.committed + b.actual}, above the ${b.planned} it plans`);
+    }
+    return detail;
+  });
+
+  await check('GGG', 'T1', 'every scheduled transfer has a due date, and a list by status holds only that status', async () => {
+    const walked = await walk((a) => reader.ggg_transfer_list({ ...a, fund: [], status: [{ Scheduled: null }] }), (t) => t.id);
+    const detail = checkWalk(walked, 'ggg_transfer_list(Scheduled)');
+    for (const t of walked.items) {
+      assert(tag(t.status) === 'Scheduled', `transfer ${t.id} is ${tag(t.status)}, listed as Scheduled`);
+      assert(opt(t.due_at) !== null, `scheduled transfer ${t.id} has no due date`);
+    }
+    return detail;
+  });
+
+  await check('GGG', 'S1', 'a sweep that reached the ledger names its block, and one that did not names none', async () => {
+    const walked = await walk((a) => reader.ggg_sweep_list({ ...a, quarter: [], status: [] }), (s) => s.id);
+    const detail = checkWalk(walked, 'ggg_sweep_list');
+    for (const s of walked.items) {
+      const moved = ['Sent', 'Booked'].includes(tag(s.status));
+      assert(moved === (opt(s.block) !== null), `sweep ${s.id} is ${tag(s.status)} with block ${show(s.block)}`);
+    }
+    return detail;
+  });
+
+  await check('GGG', 'T2', "the transfers that name a contract, the failed and cancelled excepted, are in its symbol and add up to at most its value", async () => {
+    const walked = await walk((a) => reader.ggg_transfer_list({ ...a, fund: [], status: [] }), (t) => t.id);
+    const detail = checkWalk(walked, 'ggg_transfer_list');
+    const paidOn = new Map();
+    for (const t of walked.items) {
+      const contract = opt(t.contract);
+      if (contract !== null && !['Failed', 'Cancelled'].includes(tag(t.status))) paidOn.set(contract, [...(paidOn.get(contract) ?? []), t]);
+    }
+    for (const [id, transfers] of paidOn) {
+      const result = await reader.ggg_contract_get({ id, cursor: [], limit: [] });
+      if ('Err' in result) refused(result.Err, `ggg_contract_get(${id})`);
+      const found = opt(ok(result, `ggg_contract_get(${id})`));
+      assert(found !== null, `transfers name contract ${id}, which does not exist`);
+      const { value, symbol } = found.contract;
+      for (const t of transfers) assert(t.symbol === symbol, `transfer ${t.id} for contract ${id} is in ${t.symbol}, the contract's is ${symbol}`);
+      const paid = transfers.reduce((sum, t) => sum + t.amount, 0n);
+      assert(paid <= value, `contract ${id} has been paid ${paid}, above its value ${value}`);
+    }
+    return `${detail}, ${paidOn.size} contracts paid`;
+  });
+
+  await check('GGG', 'Q1', 'ggg_join_targets takes a home_zone or none and gives it to no one, and the directory has no zone definitions', async () => {
+    const zone = 'ggg-conformance-zone';
+    const replies = [
+      ok(await anon.ggg_join_targets([]), 'ggg_join_targets with no argument'),
+      ok(await anon.ggg_join_targets([{ home_zone: [] }]), 'ggg_join_targets without a home_zone'),
+      ok(await anon.ggg_join_targets([{ home_zone: [zone] }]), 'ggg_join_targets with a home_zone'),
+    ];
+    for (const reply of replies) assert(!show(reply).includes(zone), `ggg_join_targets gives back the zone it was told: ${show(reply)}`);
+    const directory = ok(await anon.ggg_quarter_directory({ cursor: [], limit: [] }), 'ggg_quarter_directory');
+    assert(opt(directory.zones) === null, `ggg_quarter_directory carries zones, which only quarter_sync does: ${show(directory.zones)}`);
+    return `${replies[2].targets.length} quarters take joins`;
+  });
+
   await check('GGG', 'M1', 'ggg_user_get answers a caller about itself', async () => {
     const m = ok(await anon.ggg_user_get(Principal.anonymous()), 'ggg_user_get(anonymous, as anonymous)');
     assert(m.length === 0, `the anonymous principal is a member: ${show(m)}`);
@@ -369,12 +550,33 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
   });
 
   await check('GGG', 'P1', 'ggg_proposal_list paginates and returns well-formed summaries', async () => {
-    const walked = await walk((a) => reader.ggg_proposal_list({ ...a, status: [] }), (p) => p.id);
+    const walked = await walk((a) => reader.ggg_proposal_list({ ...a, status: [], tags: [] }), (p) => p.id);
     const detail = checkWalk(walked, 'ggg_proposal_list');
     walked.items.forEach(checkProposal);
     proposals = walked.items;
     return detail;
   });
+
+  await check('GGG', 'R4', 'no ratio looks like an unconverted basis-point value', async () => {
+    const realm = await anon.ggg_realm_info();
+    const walked = await walk((a) => reader.ggg_department_list(a), (d) => d.id);
+    checkWalk(walked, 'ggg_department_list');
+    const ratios = [
+      ['realm voting_threshold', realm.voting_threshold],
+      ['realm voting_quorum', realm.voting_quorum],
+    ];
+    for (const d of walked.items) {
+      ratios.push([`department ${d.id} policy.quorum`, d.policy.quorum]);
+      const target = opt(d.target_policy);
+      if (target) ratios.push([`department ${d.id} target_policy.quorum`, target.quorum]);
+    }
+    for (const p of proposals) {
+      ratios.push([`proposal ${p.id} threshold`, p.threshold], [`proposal ${p.id} quorum`, p.quorum]);
+    }
+    const small = ratios.filter(([, value]) => looksLikeBasisPoints(value)).map(([what, value]) => `${what} is ${value}`);
+    assert(!small.length, `under 1 % (${SUSPICIOUSLY_SMALL}), so basis points? ${small.join('; ')}`);
+    return `${ratios.length} ratios`;
+  }, 'should');
 
   await check('GGG', 'P2', 'ggg_proposal_get finds each listed proposal', async () => {
     if (!proposals.length) throw new Skip('the realm has no proposals, or they could not be listed');
@@ -394,7 +596,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
 
   await check('GGG', 'P4', 'ggg_proposal_list filters by status', async () => {
     const status = proposals.length ? proposals[0].status : { Voting: null };
-    const result = await reader.ggg_proposal_list({ cursor: [], limit: [PAGE], status: [status] });
+    const result = await reader.ggg_proposal_list({ cursor: [], limit: [PAGE], status: [status], tags: [] });
     refused(result.Err, 'ggg_proposal_list');
     for (const p of ok(result, 'ggg_proposal_list(status)').items) {
       assert(tag(p.status) === tag(status), `filter ${tag(status)} returned proposal ${p.id} with ${tag(p.status)}`);
@@ -403,7 +605,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
   });
 
   await check('GGG', 'P5', 'a malformed cursor returns InvalidArgument', async () => {
-    const result = await reader.ggg_proposal_list({ cursor: [BAD_CURSOR], limit: [PAGE], status: [] });
+    const result = await reader.ggg_proposal_list({ cursor: [BAD_CURSOR], limit: [PAGE], status: [], tags: [] });
     refused(result.Err, 'ggg_proposal_list');
     err(result, ['InvalidArgument'], 'ggg_proposal_list(malformed cursor)');
   });
@@ -470,6 +672,14 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     description: 'Created by the GGG conformance suite. It can be withdrawn or ignored.',
     department: [],
     action: { Motion: null },
+    kind: [],
+    matter: [],
+    threshold: [],
+    quorum: [],
+    threshold_of: [],
+    effective_at: [],
+    links: [],
+    tags: [],
     on_behalf_of: [],
     ...extra,
   });
@@ -511,6 +721,7 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     return `proposal ${id}, ${tag(p.status)}`;
   });
 
+  let replaced = false;
   await check('GGG', 'W3', 'a member votes, and a second vote replaces the first', async () => {
     needMember();
     if (!created) throw new Skip('no proposal was filed');
@@ -527,14 +738,18 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     const recorded = await votesOf(created.id);
     assert(recorded.length === 1 && tag(recorded[0].choice) === 'Yes', `the recorded votes are ${show(recorded)}`);
 
+    const voted = (await getProposal(mine, created.id)).proposal;
+    if (everyoneVoted(voted)) throw new Skip('the vote ended with this vote, as every eligible member has voted, so it cannot be replaced');
     ok(await mine.ggg_proposal_vote(vote(created.id, 'No')), 'a second ggg_proposal_vote');
     const changed = await votesOf(created.id);
     assert(changed.length === 1 && tag(changed[0].choice) === 'No', `after voting again, the votes are ${show(changed)}`);
+    replaced = true;
   });
 
   await check('GGG', 'W4', 'the tally counts the vote once', async () => {
     needMember();
     if (!created || tag(created.status) !== 'Voting') throw new Skip('no proposal open for voting was filed');
+    if (!replaced) throw new Skip('no vote was replaced');
     const { tally } = (await getProposal(mine, created.id)).proposal;
     const { yes, no, abstain } = tally;
     assert(yes + no + abstain > 0n, 'the tally is still zero (allowed only with secret ballots)');
@@ -571,9 +786,15 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
   await check('GGG', 'W9', 'acting on behalf of someone without their delegation returns Forbidden', async () => {
     needMember();
     const forStranger = [Ed25519KeyIdentity.generate().getPrincipal()];
+    const profile = { nickname: ['GGG conformance'], avatar: [], language: [], on_behalf_of: [] };
     const real = [
       ['ggg_proposal_create', motion('no delegation', { on_behalf_of: forStranger })],
-      ['ggg_profile_update', { nickname: ['GGG conformance'], avatar: [], on_behalf_of: forStranger }],
+      ['ggg_profile_update', { ...profile, on_behalf_of: forStranger }],
+      // The member's own act: refused under any grant, so under a stranger's too.
+      ['ggg_delegation_revoke_all', { cursor: [], limit: [], on_behalf_of: forStranger }],
+      // The generic call and its query twin carry the grantor as a required principal.
+      ['ggg_call_for', { method: 'ggg_profile_update', arg: encodeArgs('ggg_profile_update', [profile]), on_behalf_of: forStranger[0], note: [] }],
+      ['ggg_read_for', { method: 'ggg_me', arg: encodeArgs('ggg_me', [{ on_behalf_of: [] }]), on_behalf_of: forStranger[0] }],
     ];
     if (created) {
       real.push(['ggg_proposal_vote', { ...vote(created.id, 'Yes'), on_behalf_of: forStranger }]);
@@ -621,6 +842,299 @@ export async function runSuite({ host, canisterId, fetchRootKey = false, member 
     if (!withdrawn) throw new Skip('no proposal was withdrawn');
     err(await mine.ggg_proposal_vote(vote(created.id, 'Yes')), ['Conflict'], 'ggg_proposal_vote(withdrawn)');
     err(await mine.ggg_proposal_withdraw({ proposal: created.id, on_behalf_of: [] }), ['Conflict'], 'a second ggg_proposal_withdraw');
+  });
+
+  await check('GGG', 'W13', 'a proposal states an effective_at, and it is read back unchanged', async () => {
+    needMember();
+    const effective = BigInt(Date.now() + 365 * 24 * 3600 * 1000) * 1_000_000n;
+    const title = `GGG conformance check ${new Date().toISOString()} (effective_at)`;
+    const result = await mine.ggg_proposal_create(motion(title, { effective_at: [effective] }));
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not propose');
+    const id = ok(result, 'ggg_proposal_create(effective_at)');
+    try {
+      const p = (await getProposal(mine, id))?.proposal;
+      assert(p, `ggg_proposal_get(${id}) does not find the new proposal`);
+      checkProposal(p);
+      assert(opt(p.effective_at) === effective, `effective_at is ${show(p.effective_at)}, not ${effective}`);
+      return `proposal ${id}, effective_at ${effective}`;
+    } finally {
+      await mine.ggg_proposal_withdraw({ proposal: id, on_behalf_of: [] });
+    }
+  });
+
+  await check('GGG', 'W14', 'an effective_at in the past returns InvalidArgument', async () => {
+    needMember();
+    await proposeAs(motion('effective in the past', { effective_at: [1n] }), 'ggg_proposal_create(effective_at in the past)');
+  });
+
+  const link = (kind, proposal) => ({ kind: { [kind]: null }, proposal });
+  /** Files a Motion with the given links, and withdraws it when `then` is done. */
+  const fileLinked = async (title, links, then) => {
+    const result = await mine.ggg_proposal_create(motion(`GGG conformance check ${new Date().toISOString()} (${title})`, { links: [links] }));
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not propose');
+    const id = ok(result, `ggg_proposal_create(${title})`);
+    try {
+      return await then(id);
+    } finally {
+      await mine.ggg_proposal_withdraw({ proposal: id, on_behalf_of: [] });
+    }
+  };
+  const linkedFrom = async (id) => {
+    const walked = await walk(linkPages(mine, id), (l) => `${tag(l.kind)}:${l.proposal}`);
+    if (walked.err) throw new Error(`ggg_proposal_linked_from(${id}) returned Err ${show(walked.err)}`);
+    return walked.items.map((l) => `${tag(l.kind)}:${l.proposal}`);
+  };
+
+  await check('GGG', 'W15', 'a proposal replaces a withdrawn one, and the replaced one shows it is replaced', async () => {
+    needMember();
+    await fileLinked('to be replaced', [], async (old) => {
+      ok(await mine.ggg_proposal_withdraw({ proposal: old, on_behalf_of: [] }), 'ggg_proposal_withdraw');
+      await fileLinked('replacement', [link('Replaces', old)], async (next) => {
+        const p = (await getProposal(mine, next)).proposal;
+        checkProposal(p);
+        assert(show(p.links) === show([link('Replaces', old)]), `links are ${show(p.links)}`);
+        assert((await linkedFrom(old)).includes(`Replaces:${next}`), `${old} does not show it is replaced by ${next}`);
+        const replaced = opt((await getProposal(mine, old)).replaced_by);
+        assert(replaced === next, `ggg_proposal_get(${old}) shows replaced_by ${replaced}, not ${next}`);
+        const again = await mine.ggg_proposal_create(motion('a second replacement', { links: [[link('Replaces', old)]] }));
+        err(again, ['Conflict'], 'a second Replaces of the same proposal');
+      });
+    });
+  });
+
+  await check('GGG', 'W16', 'a proposal relates to another, and both show it', async () => {
+    needMember();
+    await fileLinked('referenced', [], async (a) => {
+      await fileLinked('relates to', [link('RelatesTo', a)], async (b) => {
+        const p = (await getProposal(mine, b)).proposal;
+        assert(show(p.links) === show([link('RelatesTo', a)]), `links are ${show(p.links)}`);
+        assert((await linkedFrom(a)).includes(`RelatesTo:${b}`), `${a} does not show that ${b} relates to it`);
+      });
+    });
+  });
+
+  await check('GGG', 'W17', 'a link to an unknown proposal, to an open one it replaces, or the same one twice is refused', async () => {
+    needMember();
+    await fileLinked('open', [], async (open) => {
+      const attempt = async (links, tags, what) => {
+        const result = await mine.ggg_proposal_create(motion(what, { links: [links] }));
+        if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not propose');
+        err(result, tags, `ggg_proposal_create(${what})`);
+      };
+      await attempt([link('RelatesTo', UNKNOWN)], ['NotFound'], 'link to an unknown proposal');
+      await attempt([link('Replaces', open)], ['Conflict'], 'replaces a proposal that is not withdrawn');
+      await attempt([link('RelatesTo', open), link('RelatesTo', open)], ['InvalidArgument'], 'links the same proposal twice');
+    });
+  });
+
+  /** Files a Motion with `extra` on top of the defaults, runs `then` on the proposal, and withdraws it. */
+  const fileRule = async (title, extra, then) => {
+    const result = await mine.ggg_proposal_create(motion(`GGG conformance check ${new Date().toISOString()} (${title})`, extra));
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not propose');
+    const id = ok(result, `ggg_proposal_create(${title})`);
+    try {
+      return await then((await getProposal(mine, id)).proposal);
+    } finally {
+      await mine.ggg_proposal_withdraw({ proposal: id, on_behalf_of: [] });
+    }
+  };
+
+  await check('GGG', 'W18', "a proposal's rule defaults to the realm's over the votes cast, and its kind and matter are kept", async () => {
+    needMember();
+    const realm = await anon.ggg_realm_info();
+    await fileRule('default rule', { kind: ['motion'], matter: ['conformance'] }, (p) => {
+      assert(p.threshold === realm.voting_threshold, `threshold is ${p.threshold}, the realm's is ${realm.voting_threshold}`);
+      assert(p.quorum === realm.voting_quorum, `quorum is ${p.quorum}, the realm's is ${realm.voting_quorum}`);
+      assert(tag(p.threshold_of) === 'Cast', `threshold_of is ${tag(p.threshold_of)}`);
+      assert(show(p.casting_vote) === show(realm.casting_vote), `casting_vote is ${show(p.casting_vote)}, the realm's is ${show(realm.casting_vote)}`);
+      assert(opt(p.kind) === 'motion' && opt(p.matter) === 'conformance', `kind and matter are ${show(p.kind)}, ${show(p.matter)}`);
+    });
+  });
+
+  await check('GGG', 'W19', 'a rule weaker than the default is refused', async () => {
+    needMember();
+    const realm = await anon.ggg_realm_info();
+    const weaker = [];
+    if (realm.voting_threshold > 0n) weaker.push(['lower threshold', { threshold: [realm.voting_threshold - 1n] }]);
+    if (realm.voting_quorum > 0n) weaker.push(['lower quorum', { quorum: [realm.voting_quorum - 1n] }]);
+    if (!weaker.length) throw new Skip('the realm has no threshold and no quorum, so nothing is weaker');
+    for (const [what, extra] of weaker) await proposeAs(motion(what, extra), `ggg_proposal_create(${what})`);
+    return weaker.map(([what]) => what).join(', ');
+  });
+
+  await check('GGG', 'W20', 'a stricter rule is stored as stated', async () => {
+    needMember();
+    const realm = await anon.ggg_realm_info();
+    const stricter = (ratio) => (ratio < WHOLE ? ratio + 1n : ratio);
+    const threshold = stricter(realm.voting_threshold);
+    const quorum = stricter(realm.voting_quorum);
+    await fileRule('stricter rule', { threshold: [threshold], quorum: [quorum], threshold_of: [{ Eligible: null }] }, (p) => {
+      assert(p.threshold === threshold && p.quorum === quorum, `the rule is ${p.threshold}, ${p.quorum}, not ${threshold}, ${quorum}`);
+      assert(tag(p.threshold_of) === 'Eligible', `threshold_of is ${tag(p.threshold_of)}`);
+    });
+  });
+
+  await check('GGG', 'W26', "a proposal of a department that counts the votes cast takes a majority of them, its quorum and its head's casting vote", async () => {
+    needMember();
+    const walked = await walk((a) => reader.ggg_department_list(a), (d) => d.id);
+    checkWalk(walked, 'ggg_department_list');
+    const counting = walked.items.find((d) => !d.is_root && tag(opt(d.policy.threshold_of) ?? { Eligible: null }) === 'Cast');
+    if (!counting) throw new Skip('no department counts the votes cast');
+    await fileRule('a majority of the votes cast', { department: [counting.id] }, (p) => {
+      assert(tag(p.threshold_of) === 'Cast' && p.threshold === WHOLE / 2n, `the rule is ${p.threshold} of ${tag(p.threshold_of)}, not a majority of the votes cast`);
+      assert(p.quorum === counting.policy.quorum, `quorum is ${p.quorum}, the policy's is ${counting.policy.quorum}`);
+      assert(opt(p.majority_of_cast) === true, `majority_of_cast is ${show(p.majority_of_cast)}`);
+      assert(opt(p.tally.seats) === counting.policy.n, `tally.seats is ${show(p.tally.seats)}, the policy's n is ${counting.policy.n}`);
+      assert(show(p.casting_vote) === show(counting.head), `casting_vote is ${show(p.casting_vote)}, the head is ${show(counting.head)}`);
+    });
+    return counting.id;
+  });
+
+  /** The ids of the proposals `ggg_proposal_list` returns for `tags`, every page. */
+  const taggedIds = async (tags) => {
+    const walked = await walk((a) => reader.ggg_proposal_list({ ...a, status: [], tags: [tags] }), (p) => p.id);
+    checkWalk(walked, `ggg_proposal_list(tags ${tags.join(', ')})`);
+    for (const p of walked.items) {
+      assert(p.tags.some((t) => tags.includes(t)), `proposal ${p.id}, tagged ${show(p.tags)}, carries none of ${tags.join(', ')}`);
+    }
+    return walked.items.map((p) => p.id);
+  };
+
+  await check('GGG', 'W27', 'a proposal keeps its tags, and ggg_proposal_list finds it by any one of them', async () => {
+    needMember();
+    const mark = `ggg-conformance-${Date.now()}`;
+    const tags = [mark, 'Old Town'];
+    await fileRule('tags', { tags: [tags] }, async (p) => {
+      assert(show(p.tags) === show(tags), `tags are ${show(p.tags)}, not ${show(tags)}`);
+      assert((await taggedIds([`${mark}-other`, mark])).includes(p.id), `listing by ${mark} misses proposal ${p.id}`);
+      assert(!(await taggedIds([`${mark}-other`])).includes(p.id), `listing by another tag finds proposal ${p.id}`);
+    });
+  });
+
+  await check('GGG', 'W28', 'tags are 1 to 64 code points, compared exactly; out of bounds, padded or with control characters they are refused, a tag to list by over 64 too, and only a draft has its tags replaced', async () => {
+    needMember();
+    const many = Array.from({ length: 17 }, (_, i) => `tag-${i}`);
+    // 64 code points, but 65 UTF-16 units and more bytes: '\u{1D11E}' (a musical clef) lies outside the BMP.
+    const longest = `Val\u00e8ncia-${'x'.repeat(54)}\u{1D11E}`;
+    assert([...longest].length === 64, 'the longest tag is 64 code points');
+    const refused = [
+      ['17 tags', many],
+      ['an empty tag', ['']],
+      ['a tag of 65 code points', [`${longest}x`]],
+      ['a tag twice', ['a', 'a']],
+      ['a leading space', [' Val\u00e8ncia']],
+      ['a trailing space', ['Val\u00e8ncia ']],
+      ['a control character', ['Old\tTown']],
+    ];
+    for (const [what, tags] of refused) {
+      await proposeAs(motion(what, { tags: [tags] }), `ggg_proposal_create(${what})`);
+    }
+    // Compared exactly: the case differs, so these are two tags.
+    const kept = ['Val\u00e8ncia', 'val\u00e8ncia', longest];
+    await fileRule('tags in any script', { tags: [kept] }, async (p) => {
+      assert(show(p.tags) === show(kept), `tags are ${show(p.tags)}, not ${show(kept)}`);
+      assert(!(await taggedIds(['VAL\u00c8NCIA'])).includes(p.id), `listing by VAL\u00c8NCIA finds proposal ${p.id}, tagged ${show(p.tags)}`);
+    });
+    err(await reader.ggg_proposal_list({ cursor: [], limit: [PAGE], status: [], tags: [many] }), ['InvalidArgument'], 'ggg_proposal_list(17 tags)');
+    // A tag to list by is held to the size of a tag: none longer can have been set, so none could match. The longest is fine.
+    const tooLong = `${longest}x`;
+    const list = (status, tags) => reader.ggg_proposal_list({ cursor: [], limit: [PAGE], status, tags: [tags] });
+    err(await list([], [tooLong]), ['InvalidArgument'], 'ggg_proposal_list(a tag of 65 code points)');
+    err(await list([{ Voting: null }], ['Old Town', tooLong]), ['InvalidArgument'], 'ggg_proposal_list(a tag of 65 code points beside another, with a status)');
+    ok(await list([], [longest]), 'ggg_proposal_list(a tag of 64 code points)');
+    err(await mine.ggg_proposal_set_tags({ proposal: NO_PROPOSAL, tags: [], on_behalf_of: [] }), ['NotFound'], 'ggg_proposal_set_tags(unknown proposal)');
+    await fileRule('tags replaced', { tags: [['before']] }, async (p) => {
+      const result = await mine.ggg_proposal_set_tags({ proposal: p.id, tags: ['after'], on_behalf_of: [] });
+      if (tag(p.status) !== 'Draft') return err(result, ['Conflict'], `ggg_proposal_set_tags(${tag(p.status)})`);
+      const replaced = ok(result, 'ggg_proposal_set_tags(draft)').tags;
+      assert(show(replaced) === show(['after']), `a draft's tags are ${show(replaced)}, not after`);
+    });
+  });
+
+  await check('GGG', 'W30', 'paying an unknown transfer returns NotFound', async () => {
+    needMember();
+    const result = await mine.ggg_transfer_pay(UNKNOWN);
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not pay transfers');
+    err(result, ['NotFound'], 'ggg_transfer_pay(unknown transfer)');
+  });
+
+  await check('GGG', 'W31', 'resolving an unknown sweep returns NotFound', async () => {
+    needMember();
+    const result = await mine.ggg_sweep_resolve({ sweep: UNKNOWN, block: [] });
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not resolve sweeps');
+    err(result, ['NotFound'], 'ggg_sweep_resolve(unknown sweep)');
+  });
+
+  await check('GGG', 'W29', 'amending an unknown contract returns NotFound', async () => {
+    needMember();
+    const amend = { contract: UNKNOWN, value: [1n], split: [], starts_at: [], ends_at: [] };
+    const result = await mine.ggg_contract_amend(amend);
+    if ('Err' in result && tag(result.Err) === 'Forbidden') throw new Skip('this member may not amend contracts');
+    err(result, ['NotFound'], 'ggg_contract_amend(unknown contract)');
+  });
+
+  /** The active grants the member holds as a delegate. */
+  const grantsHeld = async () => {
+    const grants = await walk((a) => mine.ggg_delegation_list({ ...a, role: { Delegate: null } }), (d) => d.id);
+    refused(grants.err, 'ggg_delegation_list');
+    if (grants.err) throw new Error(`ggg_delegation_list returned Err ${show(grants.err)}`);
+    return grants.items.filter((d) => tag(d.status) === 'Active');
+  };
+  /** A grant covers an operation by its permission (a grant made before groups) or by its group. */
+  const covers = (grant, permission, group) => grant.scope.some((s) => [permission, `group:${group}`, 'group:*'].includes(s));
+
+  await check('GGG', 'W21', 'the generic call refuses to carry a member-only operation on behalf of a stranger', async () => {
+    needMember();
+    const stranger = Ed25519KeyIdentity.generate().getPrincipal();
+    const blanks = Object.fromEntries(updateTable());
+    const memberOnly = ['ggg_action_approve', 'ggg_action_decline', 'ggg_delegation_revoke_all'];
+    for (const method of memberOnly) {
+      const result = await mine.ggg_call_for({ method, arg: encodeArgs(method, blanks[method]), on_behalf_of: stranger, note: [] });
+      err(result, ['Forbidden', 'InvalidArgument'], `ggg_call_for(${method})`);
+    }
+    return memberOnly.join(', ');
+  });
+
+  await check('GGG', 'W22', 'approving a pending action that does not exist is refused', async () => {
+    needMember();
+    const result = await mine.ggg_action_approve({ action: UNKNOWN, hash: 'ggg-conformance:no-such-hash', on_behalf_of: [] });
+    err(result, ['NotFound', 'Forbidden', 'InvalidArgument'], 'ggg_action_approve(unknown)');
+  });
+
+  await check('GGG', 'W24', 'ggg_read_for refuses a read that asks each time, even under a grant that covers it', async () => {
+    needMember();
+    // The one read that asks each time (delegation.json): it goes through ggg_call_for, as a pending action.
+    const method = 'ggg_attribute_pending_list';
+    const bound = idlFactory({ IDL })._fields.find(([name]) => name === method);
+    if (!bound) throw new Skip(`${method} is not in this ggg.did`);
+    const grant = (await grantsHeld()).find((d) => covers(d, 'attribute.review', 'sign'));
+    if (!grant) throw new Skip('the member holds no active grant that covers the sign group');
+    const result = await mine.ggg_read_for({ method, arg: encodeArgs(method, bound[1].argTypes.map(blank)), on_behalf_of: grant.grantor });
+    err(result, ['Forbidden'], `ggg_read_for(${method}, on behalf of a grantor whose grant covers it)`);
+    return `refused for ${grant.grantor.toText()}`;
+  });
+
+  await check('GGG', 'W25', 'collecting a pending action that does not exist is refused', async () => {
+    needMember();
+    err(await mine.ggg_action_collect(UNKNOWN), ['NotFound', 'Forbidden'], 'ggg_action_collect(unknown)');
+  });
+
+  await check('GGG', 'W23', 'a delegate never votes on a proposal it filed, whichever grantor it votes for', async () => {
+    needMember();
+    const active = await grantsHeld();
+    const filer = active.find((d) => covers(d, 'proposal.create', 'propose'));
+    const voter = filer && active.find((d) => covers(d, 'proposal.vote', 'vote') && d.grantor.toText() !== filer.grantor.toText());
+    if (!voter) throw new Skip('the member holds no two active grants: one to propose, and one from another member to vote');
+    const filed = await mine.ggg_proposal_create(motion('filed by a delegate for one grantor', { on_behalf_of: [filer.grantor] }));
+    if ('Err' in filed && tag(filed.Err) === 'Forbidden') throw new Skip('the grant does not let this delegate propose');
+    const id = ok(filed, 'ggg_proposal_create(on behalf of the first grantor)');
+    try {
+      const result = await mine.ggg_proposal_vote({ ...vote(id, 'Yes'), on_behalf_of: [voter.grantor] });
+      err(result, ['Forbidden'], 'ggg_proposal_vote(on behalf of the second grantor, on a proposal the delegate filed)');
+    } finally {
+      await mine.ggg_proposal_withdraw({ proposal: id, on_behalf_of: [filer.grantor] });
+    }
+    return `filed for ${filer.grantor.toText()}, refused for ${voter.grantor.toText()}`;
   });
 
   return results;
