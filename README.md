@@ -4,7 +4,9 @@ GGG is a standard for Governance Operating Systems (GOS).
 
 A GOS is software that transparently and verifiably runs the governance processes of a city or a country, from government to public administration, so that corruption is harder to conceal and cooperation can scale.
 
-GGG describes the entities, processes and conventions that a GOS should implement aiming the following goals:
+GGG describes the entities, processes and conventions that a GOS should implement. For example, GGG calls each place a GOS governs a **realm**: a city, a region, a country, or any other community that governs itself.
+
+GGG aims the following goals:
 
 1. **Implementation-agnosticism:** it says what a GOS does, not how a GOS stores or runs it.
 
