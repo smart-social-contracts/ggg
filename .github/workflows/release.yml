@@ -51,6 +51,18 @@ jobs:
             exit 1
           fi
           sha=$(git rev-parse --verify "${REF:-HEAD}^{commit}")
+          # The version is a reviewable fact in the tree, not a dispatch-time
+          # guess: the commit being released has to declare it itself, so the
+          # tarball says which GGG it is and the bump is visible in a diff.
+          declared=$(git show "$sha:version.txt" 2>/dev/null | tr -d '[:space:]' || true)
+          if [ -z "$declared" ]; then
+            echo "::error::$sha has no version.txt: commit the version before releasing it"
+            exit 1
+          fi
+          if [ "$declared" != "$VERSION" ]; then
+            echo "::error::version.txt at $sha says '$declared', not '$VERSION': bump it in a commit first"
+            exit 1
+          fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Releasing $sha as $tag"

@@ -31,12 +31,11 @@ What a GOS adds beyond the model, such as Realms GOS's extensions, stays outside
 
 ## Status
 
-Version 0.1.0, the first. Every entity is in `ggg.did`; the methods cover the operations bound so
-far. Releases are tags (`v0.1.0`) with [semantic versioning](model/README.md#versions): until 1.0,
-anything may change.
+The version this tree will be released as is in [`version.txt`](version.txt); a release is a tag of
+this repository, with [semantic versioning](model/README.md#versions): until 1.0, anything may
+change. Every entity is in `ggg.did`; the methods cover the operations bound so far.
 
-The documents in [`docs/`](docs) are the 2025 concept notes, replaced by the model, except
-[What GGG provides for a layered codex](docs/layered-codex.md): the operations, fields and units a
+[What GGG provides for a layered codex](docs/layered-codex.md) is the operations, fields and units a
 GOS implements so a realm can run legislation from several sources.
 
 ## License
