@@ -1,9 +1,20 @@
 # Generalized Global Governance (GGG)
 
-GGG describes what a realm is, a community that governs itself, independently of the software
-that runs it. A program that runs realms is a Governance Operating System (GOS). Anyone can write
-one. GGG is what lets different GOS, wallets, hosting platforms and tools work with each other's
-realms.
+GGG is a standard for Governance Operating Systems (GOS).
+
+A GOS is software that transparently and verifiably runs the governance processes of a city or a country, from government to public administration, so that corruption is harder to conceal and cooperation can scale.
+
+GGG describes the entities, processes and conventions that a GOS should implement aiming the following goals:
+
+1. **Implementation-agnosticism:** it says what a GOS does, not how a GOS stores or runs it.
+
+2. **Interoperability:** any GGG-compliant GOS or tool works out-of-the-box with any GGG-compliant GOS or tool.
+
+3. **Familiar but abstract:** close enough to traditional governance that its institutions map onto it, general enough not to be tied to any one country's.
+
+
+## What's in this repository
+
 
 | | |
 |---|---|
