@@ -16,6 +16,33 @@ The word is **legislation**, in the model, the Candid interface and the docs.
 
 ---
 
+## The words
+
+| Word | Whose | What it is |
+|---|---|---|
+| **domain** | GGG's, or the codex's | A subject legislation is about: `tax`, `water`, `data_protection`. The ones GGG models are the **common domains**, listed in [`domains.json`](../domains.json) and the same subject in every realm; a codex may declare a **local domain** for a subject of its own. |
+| **layer** | the codex's | One source of legislation: `eu`, `eu/es`, `eu/es/vc`, `eu/es/vc/46250-valencia`, `eu/es/vc/emshi`. Each layer adds to the one above it. |
+| **chapter** | the codex's | One layer's legislation in one domain, a Python file pinned by checksum: `eu/es/vc/46250-valencia/tax.py`. |
+
+A codex is a grid, like a spreadsheet: a domain is a column, a layer is a row, and a chapter is a
+cell. Most cells are empty -- only the layers that legislate on a subject have a chapter in it.
+Reading down a column gives every authority's word on that subject, innermost last.
+
+From the Valencian codex:
+
+| | |
+|---|---|
+| Domain | `data_protection`, a common domain |
+| Layers that legislate on it | `eu`, `eu/es`, `eu/es/vc/46250-valencia` |
+| Chapters | `eu/data_protection.py`, `eu/es/data_protection.py`, `eu/es/vc/46250-valencia/data_protection.py` |
+| How they stack | each declares `class DataProtection(above("data_protection"))`, so the city's chapter reads the state's, which reads the Union's |
+
+GGG does not name the divisions a source uses *inside* a chapter. Every legal system has its own and
+no two agree, so naming one would imply a mapping between them that does not exist
+([ontology §7](../model/ontology.md#7-ggg-is-common-ground-the-particular-goes-in-a-layer)).
+
+---
+
 ## 1. Chapters use GGG's operations directly
 
 There is no catalogue of "slots" between a codex and GGG. A chapter's members are named after GGG
@@ -84,12 +111,22 @@ Later: `immigration`, `education`, `social_security`, `defense`, and so on.
 
 - **An id** is lowercase letters and underscores, starting with a letter (`data_protection`), so it is
   a file name and, in CamelCase, a class name (`DataProtection`).
+- **A domain names the subject, not the entities.** A chapter uses whatever the model offers, not
+  only what its own domain suggests: València's `tax` chapter reads `Human` and `Attribute`, and
+  emshi's `water` chapter reads `TaxPolicy`. The domain says what the legislation is about.
 - **The list has GGG's version, none of its own.** One GGG, one version: `domains.json` is released
   with the model, `ggg.did` and the conformance suite as a tag of this repository (`v0.1.0`). A tool
   that reads the list names the GGG version it read it from.
 - **The list only grows.** An id is never renamed, reused or removed, because chapters are named after
   it. Adding a domain is a minor release; rewording a description is a patch.
-- **A chapter's domain must be in the list.** The tools that read a codex refuse a chapter in any other.
+- **A chapter's domain is in this list, or the codex declares it.** The subjects here are the ones
+  GGG models. A codex may declare a **local domain** for a subject of its own -- `drought_measures`,
+  say -- and file chapters in it; the tools that read a codex refuse a chapter in neither. Where a
+  codex declares one belongs to the layered codex's own layout, and is documented with it.
+- **A local domain reaches only the codex that declares it.** `above("<domain>")` resolves by name
+  across layers, so a local domain stacks through that codex's layers and no further, while a common
+  domain is the same subject in every realm. A codex that finds itself declaring a subject most
+  realms would recognise should propose it here instead.
 
 ---
 

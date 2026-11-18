@@ -210,6 +210,16 @@ vocabulary that quietly implies a legal system they are not under.
 The test catches vocabulary as readily as rules: a field called `legal_basis` sounds universal, but
 if its values are the paragraphs of one region's statute, the universality is in the name only.
 
+The test rules out borrowing a jurisdiction's **structure**, not only its categories. Every legal
+system divides its legislation, and no two divide it alike: German statutes run
+`Buch > Abschnitt > Titel > §`, Spanish ones `libro > título > capítulo > sección > artículo`, the
+US Code `Title > Chapter > Section`. The same word does not even keep its rank -- a Spanish
+`sección` sits below a `capítulo`, while a section of a UK Act is the provision itself. Naming one
+of those divisions in the model would imply a mapping between them that does not exist. So GGG
+names the **subject** legislation is about, which every jurisdiction has, and stays out of naming
+the divisions a source organises its own text into, which none of them share. A layer is free to
+mirror its own structure inside a chapter.
+
 ## 8. Model the fact, not the claim about the fact
 
 Where a rule depends on something being true of the world, the model should hold **the thing that
