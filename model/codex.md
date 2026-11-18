@@ -97,7 +97,7 @@ Later: `immigration`, `education`, `social_security`, `defense`, and so on.
 
 Writing real municipal and regional legislation as chapters found entities, fields and operations the
 model lacks. Each is added at the scope below; some are narrowed, and some stay in the codex. Every
-addition is in the [model](../model/README.md) and `ggg.did`; the model's sections say how it behaves.
+addition is in the [model](../README.md#the-model) and `ggg.did`; the model's sections say how it behaves.
 
 ### 3.1 Entities, fields and operations
 
@@ -203,7 +203,7 @@ No layer of legislation names a department of a lower layer.
 
 ### 3.3 The fact schema: units, rates, money and periods
 
-**The fact schema is [`facts.json`](../facts.json),** released with `ggg.did` and generated from it
+**The fact schema is [`facts.json`](../generated/facts.json),** released with `ggg.did` and generated from it
 (`npm run facts` in `conformance/`; a conformance test keeps the two equal). It has one entry per Cedar
 action: every operation, named as the operation, with its facts, which are the operation's arguments as
 `ggg.did` types them; and every list of records among those arguments as an action of its own,
@@ -245,7 +245,7 @@ need not forbid them.
   Integers inside, decimals for people: a GOS shows `0.123456 %`, and a chapter writes a rate as the
   legislation does. Integers because there is one form for every value, so checksums are stable;
   nothing is parsed; and Cedar compares integers natively, while its decimal type has only four digits
-  after the point. The model's ratio fields ([conventions](../model/README.md#1-conventions)) are
+  after the point. The model's ratio fields ([conventions](conventions.md#1-conventions)) are
   on this scale since [ggg#9](https://github.com/smart-social-contracts/ggg/issues/9), a breaking
   change.
 - **Money is rounded by one rule:** wherever money is computed from a rate, the result is rounded to
@@ -408,7 +408,7 @@ or the call is refused with `InvalidArgument`. The rules:
 ## 7. The `WorkingDay` unit ([ggg#7](https://github.com/smart-social-contracts/ggg/issues/7))
 
 `PeriodUnit = variant { Day; WorkingDay; Month; Year }` and `Period = record { count : nat; unit : PeriodUnit }`
-are in `ggg.did`, and the [model's conventions](../model/README.md#1-conventions) define them.
+are in `ggg.did`, and the [model's conventions](conventions.md#1-conventions) define them.
 
 A **working day** is a day that is neither a weekend day nor a holiday in **the realm's calendar**,
 taken in **the realm's time zone** (§6; for a matter of one quarter alone, the quarter's). Much

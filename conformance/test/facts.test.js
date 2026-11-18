@@ -4,14 +4,14 @@ import { test } from 'node:test';
 import { generate, KINDS, parseDid } from '../scripts/facts.js';
 
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
-const committed = JSON.parse(read('facts.json'));
+const committed = JSON.parse(read('generated/facts.json'));
 const generated = generate();
 const { types, methods } = parseDid(read('ggg.did'));
 
 const WHOLE = 100_000_000;
 
-test('facts.json is what scripts/facts.js generates from ggg.did', () => {
-  assert.deepEqual(committed, generated, 'run `npm run facts` and commit facts.json');
+test('generated/facts.json is what scripts/facts.js generates from ggg.did', () => {
+  assert.deepEqual(committed, generated, 'run `npm run facts` and commit generated/facts.json');
 });
 
 test('every ggg_ method has an action with its facts, and read operations are marked', () => {
@@ -117,8 +117,8 @@ test('a fact\'s unit is in its schema entry, never in its name', () => {
   assert.deepEqual(suffixed, [], 'a fact name carries a unit suffix');
 });
 
-test('the kinds table in docs/layered-codex.md is the kinds of facts.json', () => {
-  const page = read('docs/layered-codex.md');
+test('the kinds table in model/codex.md is the kinds of facts.json', () => {
+  const page = read('model/codex.md');
   const section = page.slice(page.indexOf('### 3.3'), page.indexOf('## 4.'));
   const code = (names) => names.map((n) => `\`${n}\``).join(', ');
   const rows = [...section.matchAll(/^\| `(\w+)` \| (.+?) \| (.+?) \| (.+?) \| (.+?) \|$/gm)].map(

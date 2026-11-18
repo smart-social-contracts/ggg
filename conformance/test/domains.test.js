@@ -29,8 +29,8 @@ test('a domain has a one-line description, in the model\'s words', () => {
   }
 });
 
-test('the table in docs/layered-codex.md is the list in domains.json', () => {
-  const page = read('docs/layered-codex.md');
+test('the table in model/codex.md is the list in domains.json', () => {
+  const page = read('model/codex.md');
   const section = page.slice(page.indexOf('## 2. The domain list'), page.indexOf('## 3.'));
   const rows = [...section.matchAll(/^\| `(\w+)` \| (.+) \|$/gm)].map(([, id, description]) => ({ id, description }));
   assert.deepEqual(rows, domains);

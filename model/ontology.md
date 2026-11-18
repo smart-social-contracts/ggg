@@ -1,8 +1,6 @@
 # GGG ontology guidelines
 
-**Version:** 0.1.0 (see [Versions](README.md#versions)).
-
-[The model](README.md) says what a realm is made of. This page says **how to decide what belongs in
+[The model](../README.md#the-model) says what a realm is made of. This page says **how to decide what belongs in
 it**, and what shape a thing takes once it does. It binds nobody's implementation: it is the
 reasoning a change to the model has to survive.
 
@@ -235,10 +233,33 @@ Every entity, field and status should be named by some rule, operation or invari
 A field nothing reads is a comment with a schema. It costs every implementation, every interface
 version and every migration, and buys a note that a free-text field would have held.
 
-This is why the model's [Decisions](README.md#16-decisions) mostly reject merges: an entity that an
+This is why the model's [Decisions](reference.md#16-decisions) mostly reject merges: an entity that an
 operation genuinely reads is not noise, however small it looks.
 
-## 10. Applying these when proposing a change
+## 10. How GGG is written
+
+The model is read by people who did not write it, and often not in their first language. Three rules
+hold for every page in this repository.
+
+**A GGG word keeps its GGG meaning.** GGG gives a narrow meaning to plain words: `realm`, `domain`,
+`layer`, `chapter`, `codex`, `source`, `release`, `fact`, `mark`, `quarter`. Once a word is one of
+these, never also use it loosely. Write "in software engineering", not "in the domain of software
+engineering". Write "the rest of this page", not "the next chapter". A reader cannot tell a loose use
+from a strict one, so the loose use teaches them the wrong meaning. Every entity named in `ggg.did`
+is reserved in the same way.
+
+**Short pages.** No page here is longer than 1000 lines. A page that outgrows that is split by
+subject, so a reader opens the one subject they came for. Say a thing once, in the place it belongs,
+and link to it from anywhere that needs it.
+
+**Simple English.** Short sentences. Common words. One idea at a time. A rule that only a fluent
+reader can parse is a rule that will be implemented wrongly. Prefer a table or a list to a long
+sentence, and an example to an explanation.
+
+> *Test.* Read the page as someone who knows governance, but not GGG, and not much English. Can they
+> say what the realm must do? If not, the page needs work, however correct it is.
+
+## 11. Applying these when proposing a change
 
 Before adding an entity, field, status or operation:
 
