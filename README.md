@@ -85,7 +85,7 @@ splitting and merging
 
 ## Permissioning
 
-
+Most operations need a permission, such as `attribute.review`. A member holds one directly, through their department, or through a **profile**: a named set of permissions, which a seat can carry. A missing permission gives a `Forbidden` error that can name it. Holding a permission is not always enough, because the realm's rules may still require a vote. An **agent**, such as an AI assistant, may hold a seat only with a supervisor who holds a non-agent seat in the same body.
 
 ## Operations
 
@@ -132,4 +132,12 @@ A new realm starts in **setup**: the founder named by its host configures it wit
 
 ## Examples
 
-democratic vote
+**A democratic vote.** A town decides whether to spend more on its parks.
+
+1. A member files a proposal with `ggg_proposal_create`. Its action calls `ggg_budget_amend` to raise the parks budget line.
+2. `ggg_proposal_open` starts the vote. Who may vote, the threshold and the quorum are fixed now.
+3. Members vote yes, no or abstain with `ggg_proposal_vote`, themselves or through a delegate.
+4. After the deadline, `ggg_proposal_finalize` counts the votes. The proposal passes if enough members voted (the quorum) and enough voted yes (the threshold).
+5. `ggg_proposal_execute` amends the budget, at once or on the date set in the proposal.
+
+Every step is recorded as an event.
