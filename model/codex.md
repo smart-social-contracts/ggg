@@ -16,6 +16,37 @@ The word is **legislation**, in the model, the Candid interface and the docs.
 
 ---
 
+## The words
+
+| Word | Whose | What it is |
+|---|---|---|
+| **domain** | the codex's | A subject legislation is about: `tax`, `water`, `data_protection`. The codex chooses them. GGG publishes a common list of the subjects most realms share, so that one id means one subject across realms (§2). |
+| **layer** | the codex's | One source of legislation: `eu`, `eu/es`, `eu/es/vc`, `eu/es/vc/46250-valencia`, `eu/es/vc/emshi`. Each layer adds to the one above it. |
+| **chapter** | the codex's | One layer's legislation in one domain, a Python file pinned by checksum: `eu/es/vc/46250-valencia/tax.py`. |
+
+A codex is a grid, like a spreadsheet: a domain is a column, a layer is a row, and a chapter is a
+cell. Most cells are empty -- only the layers that legislate on a subject have a chapter in it.
+Reading down a column gives every authority's word on that subject, innermost last.
+
+From the Valencian codex:
+
+| | |
+|---|---|
+| Domain | `data_protection` |
+| Layers that legislate on it | `eu`, `eu/es`, `eu/es/vc/46250-valencia` |
+| Chapters | `eu/data_protection.py`, `eu/es/data_protection.py`, `eu/es/vc/46250-valencia/data_protection.py` |
+| How they stack | each declares `class DataProtection(above("data_protection"))`, so the city's chapter reads the state's, which reads the Union's |
+
+**A domain names the subject, not the entities.** A chapter uses whatever the model offers, not only
+what its own domain suggests: Valencia's `tax` chapter reads `Human` and `Attribute`, and emshi's
+`water` chapter reads `TaxPolicy`.
+
+GGG does not name the divisions a source uses *inside* a chapter. Every legal system has its own and
+no two agree, so naming one would imply a mapping between them that does not exist
+([ontology §7](ontology.md#7-ggg-is-common-ground-the-particular-goes-in-a-layer)).
+
+---
+
 ## 1. Chapters use GGG's operations directly
 
 There is no catalogue of "slots" between a codex and GGG. A chapter's members are named after GGG
@@ -59,8 +90,8 @@ The two entry points of a realm's own legislation are ordinary members of these 
 
 ## 2. The domain list ([ggg#1](https://github.com/smart-social-contracts/ggg/issues/1))
 
-A **domain** is a subject of legislation, such as `tax` or `water`. (It is not one of the sections of
-the model.) The list of domains is [`domains.json`](../domains.json): for each domain, its `id` and a
+A **domain** is a subject of legislation, such as `tax` or `water`. The codex chooses the domains it
+files chapters under. GGG publishes a common list of them in [`domains.json`](../domains.json): for each domain, its `id` and a
 one-line `description`. A chapter is one source's legislation in one domain, so the domain ids are the
 chapter file names.
 
@@ -87,9 +118,20 @@ Later: `immigration`, `education`, `social_security`, `defense`, and so on.
 - **The list has GGG's version, none of its own.** One GGG, one version: `domains.json` is released
   with the model, `ggg.did` and the conformance suite as a tag of this repository (`v0.1.0`). A tool
   that reads the list names the GGG version it read it from.
-- **The list only grows.** An id is never renamed, reused or removed, because chapters are named after
-  it. Adding a domain is a minor release; rewording a description is a patch.
-- **A chapter's domain must be in the list.** The tools that read a codex refuse a chapter in any other.
+- **The common list only grows.** An id in it is never renamed, reused or removed, because chapters
+  are named after it. Adding a domain is a minor release; rewording a description is a patch.
+- **A codex chooses its own domains.** The list above is a recommendation, not a gate. It names the
+  subjects most realms legislate on, so that realms converge on one id for one subject and a reader
+  can compare two realms' releases. A codex may file a chapter under any id that follows the id rule
+  above -- `drought_measures`, say -- and the tools that read a codex accept it. GGG cannot list
+  every subject a realm may legislate on, and a realm should not need a GGG release to file its own
+  legislation ([ontology §7](ontology.md#7-ggg-is-common-ground-the-particular-goes-in-a-layer)).
+- **Two ids are reserved.** `calendar` is a layer's calendar, which is set at `<source>/calendar`, in
+  the same namespace as a chapter. `realm` is the domain only the realm's own layer fills (§3). A
+  codex uses neither for a chapter of its own.
+- **An id means the same thing in every layer of a codex.** A chapter inherits by name:
+  `above("tax")` reads the `tax` chapter one layer up. A misspelled id is therefore not an error a
+  tool can see -- it is a new domain with one chapter, inheriting nothing.
 
 ---
 
