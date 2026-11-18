@@ -73,10 +73,11 @@ flowchart TB
 
 ## Domains
 
+GGG groups its entities and operations into domains, one section of `ggg.did` each: identity and membership, departments and organizations, governance, finance, assets, licensing, justice, procurement, quarters and federation, codex and audit, realm setup, and private content. Apart from a few shared types, each section stands alone.
 
 ## Layers
 
-codex propagation and inheritance
+Legislation comes in layers. A realm can follow other realms, such as its region and its country, and add its own layer on top. Each source publishes releases, with the date each comes into force. A follower reports what it runs, and is non-compliant from the first release it misses. In a federation, a new codex reaches every quarter at the same moment.
 
 
 splitting and merging
@@ -117,9 +118,11 @@ Everything happens through **operations**, the methods of `ggg.did`, named noun 
 
 ## Tasks
 
-
+A **task** is an operation scheduled for later, such as a status change on a set date. It runs with the authority of whoever scheduled it. Every check and rule runs again at that time, so the task follows the legislation then in force.
 
 ## Onboarding / status
+
+A new realm starts in **setup**: the founder named by its host configures it without votes. Launching moves it to **alpha**, and the later stages are beta, production, deprecation and terminated. After launch, every change follows the realm's rules.
 
 
 
