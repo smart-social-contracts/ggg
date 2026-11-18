@@ -1,6 +1,6 @@
 # GGG conformance suite
 
-Checks that a canister implements [`ggg.did`](../ggg.did) as the [model](../model/README.md) says.
+Checks that a canister implements [`ggg.did`](../ggg.did) as the [model](../README.md#the-model) says.
 It runs against any canister id, on mainnet or on a local replica.
 
 ```bash
@@ -41,7 +41,7 @@ Each check reports one outcome:
 ```bash
 npm install
 npm run idl     # regenerate idl/ggg.js and fixture/Ggg.mo from ggg.did; needs didc
-npm run facts   # regenerate ../facts.json, the fact schema, from ggg.did
+npm run facts   # regenerate ../generated/facts.json, the fact schema, from ggg.did
 npm test        # check ggg.did against the model, and run the suite against the fixture on PocketIC
 ```
 
@@ -56,9 +56,9 @@ path.
 - `test/model.test.js` fails when an entity's fields in `ggg.did` differ from the model, or a `ggg_`
   method is not a model operation.
 - `test/domains.test.js` fails when `domains.json` is malformed or differs from the table in
-  `docs/layered-codex.md`.
-- `test/facts.test.js` fails when `facts.json` differs from what `scripts/facts.js` generates from
-  `ggg.did`, or when the kinds table in `docs/layered-codex.md` differs from it.
+  `model/codex.md`.
+- `test/facts.test.js` fails when `generated/facts.json` differs from what `scripts/facts.js` generates from
+  `ggg.did`, or when the kinds table in `model/codex.md` differs from it.
 - `test/delegation.test.js` fails when `delegation.json` misses a method of `ggg.did` or lists one twice,
   names an unknown tier, group or condition, or disagrees with the model's `delegable` and `confirm` flags.
 - `test/rules.test.js` runs the fixture with four members and checks what a proposal's stated rule

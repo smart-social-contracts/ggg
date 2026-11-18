@@ -1,8 +1,11 @@
-// The operation tables of model/README.md, as the static tests read them.
+// The operation tables of the model, as the static tests read them.
 import { readFileSync } from 'node:fs';
 
 export const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
-export const model = read('model/README.md');
+// The model is split by subject (ontology §10). The static tests read its pages as one page.
+export const MODEL_PAGES = ['conventions', 'membership', 'governance', 'finance', 'services',
+  'federation', 'running', 'reference'].map((name) => `model/${name}.md`);
+export const model = MODEL_PAGES.map(read).join('\n');
 export const did = read('ggg.did');
 
 /** The rows of the model's tables under a "### <heading>", by their first cell. */

@@ -1,12 +1,12 @@
-// Generates facts.json, the fact schema, from ggg.did: for every operation, the facts a codex's rules
+// Generates generated/facts.json, the fact schema, from ggg.did: for every operation, the facts a codex's rules
 // see (its arguments, as the model defines them), with the kind, range and allowed values of each
-// (docs/layered-codex.md §3.3). Run with no arguments to rewrite ../facts.json; test/facts.test.js
+// (model/codex.md §3.3). Run with no arguments to rewrite ../generated/facts.json; test/facts.test.js
 // checks that the committed file is what this script generates.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const DID = new URL('../../ggg.did', import.meta.url);
-const OUT = new URL('../../facts.json', import.meta.url);
+const OUT = new URL('../../generated/facts.json', import.meta.url);
 
 // Every ratio is in hundred-millionths: 100 % is 100 000 000.
 const WHOLE = 100_000_000;
@@ -17,7 +17,7 @@ const SAFE_MAX = 9_007_199_254_740_991;
 
 // The kinds the fact schema adds to Candid's types, each declared by named aliases of ggg.did, with the
 // range of each alias (and of its fields, for a record). A fact's unit comes from here, never from a
-// suffix in its name. `range` is the table's wording, on docs/layered-codex.md §3.3.
+// suffix in its name. `range` is the table's wording, on model/codex.md §3.3.
 export const KINDS = {
   ratio: {
     aliases: { Ratio: { min: 0, max: WHOLE }, Rate: { min: 0, max: 100 * WHOLE } },
@@ -58,7 +58,7 @@ const ALIAS_KIND = Object.fromEntries(
 );
 
 // Facts that are not arguments. A GOS computes each from its own records when the operation is called,
-// deterministically, and legislation reads it like an argument (docs/layered-codex.md §1).
+// deterministically, and legislation reads it like an argument (model/codex.md §1).
 const DERIVED = {
   tender_award: {
     published_in: { type: { vec: { name: 'text' } }, derived: "the journals of the tender's notices" },
