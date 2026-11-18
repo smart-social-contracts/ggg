@@ -2,16 +2,16 @@
 
 GGG is a standard for Governance Operating Systems (GOS) running on the [Internet Computer Protocol(ICP)](wwww.internetcomputer.org).
 
-Governance is ...
-An Operating system is ..
+**Governance** is how a community makes and carries out its decisions: who may decide what, under which rules, and how it is recorded.
+An **operating system** is the software that manages a computer's resources and lets programs share them safely.
 
-A GOS is software that transparently and verifiably runs the governance processes of a city or a country, from government to public administration
+A GOS is software that transparently and verifiably runs the governance processes of a city or a country, from government to public administration.
 
-GOS enables the mergence of coopreation, which is the natural. that corruption is harder to conceal and cooperation can scale.
+A GOS lets cooperation emerge, as it naturally does: corruption is harder to conceal, and cooperation can scale.
 
 GGG describes the entities, processes and conventions that a GOS should implement. For example, GGG calls each place a GOS governs a **realm**: a city, a region, a country, or any other community that governs itself.
 
-GGG aims the following goals:
+GGG has the following goals:
 
 1. **Implementation-agnosticism:** it says what a GOS does, not how a GOS stores or runs it. The only requirement is that it must run on the Internet Computer.
 
@@ -23,30 +23,36 @@ GGG aims the following goals:
 
 ## Architecture
 
-An Operating system is typically consists of ...
-Kernel I/O Internal resource management Internal process communication System utilities and libraries P rocess management Security and access control, booting
+Each part of an operating system has a counterpart in a GOS:
 
-we can draw analogies to governance:
+| Operating system | GOS |
+|---|---|
+| Kernel | the core that checks permissions and runs every operation |
+| Process management | proposals, votes and scheduled tasks |
+| Resource management | treasury, funds and budgets |
+| Communication between processes | sync between a capital and its quarters, and between linked realms |
+| Security and access control | permissions, profiles and delegation |
+| Input and output | notifications to members, dispatches to outside bodies, reports from them |
+| System utilities and libraries | the codex, and the layers it inherits from other realms |
+| Booting | realm setup, then launch |
+
+The main parts of a GOS:
 
 - **Realm:** the community a GOS governs.
-- **Quarter:** part of a large realm, run as a realm of its own and coordinatedsplit  by a capital.
+- **Quarter:** part of a large realm, run as a realm of its own and coordinated by a capital.
 - **User:** a person or an agent, identified by an Internet Computer principal, who becomes a member by joining a realm.
 - **Permission:** the right to perform an operation, held directly or through a profile or department. Members can let a delegate act for them.
 - **Organizations:** bodies outside the realm's government, such as companies, parties, unions and associations.
 - **Departments:** the realm's own bodies, in a tree under a root department, each deciding by its own voting policy.
-- **Codex:** the realm's legislation as code inside the GOS
+- **Codex:** the realm's legislation as code inside the GOS.
 
 
 ### Quarters
 
-ICP architecture conditions GGG arthitecture: large canisters, split by user
-- Canister's resources are large (memory, storage)
-- Intercanister communication is slow
+Two reasons shape quarters:
 
-Phylosophical reasons:
-corruption is harder to conceal and cooperation can scale => it should be possible for users to fork a GOS easily, the architecture should facilitate that
-
-that's why we need quarters
+- **The Internet Computer.** A canister has plenty of memory and storage, but calls between canisters are slow. So a large realm is split by member, not by function: each quarter holds whole members, and most of their work stays inside one canister.
+- **Forking.** If people can fork a GOS easily, corruption is harder to hide and cooperation can scale. A quarter is a complete realm, so it can secede (`ggg_quarter_secede`) and govern itself.
 
 
 ```mermaid
@@ -65,18 +71,18 @@ flowchart TB
     QN -. "guest elsewhere" .- M
 ```
 
-# Domains
+## Domains
 
 
-# Layers
+## Layers
 
-codex propagatoin and inheritance
+codex propagation and inheritance
 
 
 splitting and merging
 
 
-# Permissioning
+## Permissioning
 
 
 
@@ -109,11 +115,11 @@ Everything happens through **operations**, the methods of `ggg.did`, named noun 
 
 
 
-# Tasks
+## Tasks
 
 
 
-# onboarding / status
+## Onboarding / status
 
 
 
@@ -124,17 +130,3 @@ Everything happens through **operations**, the methods of `ggg.did`, named noun 
 ## Examples
 
 democratic vote
-
-
-
-
-
-===========
-
-realmgos:
-
-cedar
-Python encoding of legislation into codex
-(engine)
-extensions
-
