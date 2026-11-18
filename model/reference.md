@@ -4,7 +4,7 @@ One part of [the GGG model](../README.md#the-model).
 
 ## 14. Permissions
 
-The permission keys, grouped by domain. An implementation may add keys of its own for operations
+The permission keys, grouped by the part of the model they belong to. An implementation may add keys of its own for operations
 outside the model.
 
 - Identity: `self.join`, `self.update_public_profile`, `self.update_private_data`,
@@ -79,7 +79,7 @@ There is no permission for raw database writes: everything is an operation.
 | D7 | Expose every operation through one generic entry point that takes a name and untyped arguments | Rejected: each operation is a typed Candid method in `ggg.did` |
 | D8 | Make extensions part of the model | Rejected: extensions are a Realms GOS feature. Any implementation may add callers of its own, under I-ALL-1 and I-ALL-2 |
 | D9 | Forbid agents from signing, as a guardrail | Rejected: the active codex's signing policy decides, defaulting to non-agents only; every signing act records who signed and how (I-ALL-7) |
-| D10 | Split GGG into separately adopted standards (GGG-1, GGG-2, …) | Rejected: one GGG, one interface, one version. A realm may hold nothing in a domain; its operations then answer with empty lists and ordinary errors |
+| D10 | Split GGG into separately adopted standards (GGG-1, GGG-2, …) | Rejected: one GGG, one interface, one version. A realm may hold nothing in a part of the model; its operations then answer with empty lists and ordinary errors |
 | D11 | Leave encrypted content to implementations | Rejected: key envelopes and documents are model entities (§13), with keys from vetKeys |
 | D12 | Sessions of a collegiate organ as entities, with operations to open and close one | Rejected: a proposal's `opens_at` and `deadline` are the session |
 | D13 | Holidays as realm data | Rejected: they stay in the codex, beside its chapters |

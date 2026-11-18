@@ -2160,7 +2160,8 @@ type CodexSource = variant {
   Release : record { source : text; version : text };
 };
 
-// A chapter of a release: the domain it writes and the checksum of its bytes.
+// A chapter of a release: the domain it writes and the checksum of its bytes. `domain` is the
+// codex's own id for the subject, opaque text to GGG, like a release's `source`.
 type ChapterRef = record { domain : text; checksum : text };
 // One release of one layer, as a published record lists it: every chapter of the source, changed or
 // not, its calendar's checksum, the commit it was built from, when it was published and from when it

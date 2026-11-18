@@ -45,7 +45,7 @@ Two pages sit beside it:
 | | |
 |---|---|
 | [`ggg.did`](ggg.did) | **The interface.** The model in Candid: a record for every entity, a method for every operation. |
-| [`domains.json`](domains.json) | **The domain list.** The subjects of legislation (`tax`, `water`, …) a layered codex files chapters under. |
+| [`domains.json`](domains.json) | **The common domain list.** A shared vocabulary for the subjects of legislation (`tax`, `water`, …) a codex files chapters under. A codex may use ids of its own too. |
 | [`delegation.json`](delegation.json) | **Power of attorney.** Every operation's tier and group, and the plain-language groups a grant names. |
 | [`generated/`](generated/README.md) | **Derived files.** Written by a command, never by hand. |
 | [`conformance/`](conformance/README.md) | **The conformance suite.** Checks a canister against `ggg.did`, on mainnet or a local replica. |
@@ -55,7 +55,7 @@ Two pages sit beside it:
 A GOS is GGG compliant when it implements `ggg.did`, lists `GGG` in
 `icrc10_supported_standards`, and passes the conformance suite.
 
-A realm does not have to use every domain. One with a single department, or one court whose only
+A realm does not have to use every part of the model. One with a single department, or one court whose only
 judge is the realm itself, is compliant — as long as what it does not use still answers as the model
 says: an empty list, `NotFound`, or `Forbidden` when nobody holds the permission. That empty state is
 valid.
