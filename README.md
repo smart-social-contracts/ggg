@@ -9,7 +9,7 @@ A GOS is software that transparently and verifiably runs the governance processe
 
 A GOS lets cooperation emerge, as it naturally does: corruption is harder to conceal, and cooperation can scale.
 
-GGG describes the entities, processes and conventions that a GOS should implement. For example, GGG calls each place a GOS governs a **realm**: a city, a region, a country, or any other community that governs itself.
+GGG describes the entities, processes and conventions that a GOS should implement. For example, GGG calls each place a GOS governs a **realm**: a city such as Tallinn, a region such as Catalonia, a country such as Kenya, or any other community that governs itself.
 
 GGG has the following goals:
 
@@ -17,9 +17,21 @@ GGG has the following goals:
 
 2. **Interoperability:** any GGG-compliant GOS or tool works out-of-the-box with any GGG-compliant GOS or tool.
 
-3. **Familiar but abstract:** close enough to traditional governance that existing institutions map onto it, yet general enough not to be tied to any one country or to limit governance evolution.
+3. **Familiar but abstract:** close enough to traditional governance that existing institutions map onto it, yet general enough not to be tied to any one country or to limit governance evolution. See [Reference countries](#reference-countries).
 
 **This page is the whole specification.** [`ggg.did`](ggg.did) is the same thing in Candid, the interface description language (IDL) for the ICP, and is normative for exact types and signatures. Where this page and `ggg.did` disagree, one of them needs fixing.
+
+## Reference countries
+
+GGG draws its examples from eight countries in three groups. Each group plays a different role.
+
+| Group | Countries | Role |
+|---|---|---|
+| EU civil-law democracies | Spain, Germany, Estonia | **The base.** GGG must fit all three. They also share a layer above them: the EU. |
+| Common-law democracies | United States, United Kingdom, India, Kenya | **The contrast.** A concept should work here too. If it does not, it is probably a European habit, not common ground. |
+| One-party state | China | **The stress test** for administrative machinery, such as scale, deep layers and digital services. Never for how decisions are made. |
+
+A rule belongs in GGG when it holds in the first group and in most of the second. A rule that holds in one country only belongs in a codex layer.
 
 ## Architecture
 
@@ -77,7 +89,7 @@ GGG groups its entities and operations into domains, one section of `ggg.did` ea
 
 ## Layers
 
-Legislation comes in layers. A realm can follow other realms, such as its region and its country, and add its own layer on top. Each source publishes releases, with the date each comes into force. A follower reports what it runs, and is non-compliant from the first release it misses. In a federation, a new codex reaches every quarter at the same moment.
+Legislation comes in layers. A realm can follow other realms, such as its region and its country, and add its own layer on top. A town in Catalonia, for example, follows the EU, Spain and Catalonia, and adds its own bylaws. Each source publishes releases, with the date each comes into force. A follower reports what it runs, and is non-compliant from the first release it misses. In a federation, a new codex reaches every quarter at the same moment.
 
 
 splitting and merging
@@ -105,7 +117,7 @@ flowchart TD
 
 Everything happens through **operations**, the methods of `ggg.did`, named noun then verb, such as `ggg_proposal_vote` or `ggg_budget_draft`. Reads never change anything. An operation either succeeds or returns an error, and a refusal can name the permission that was missing.
 
-**Decisions.** When the realm's rules reserve a change for a decision, the operation files a **proposal** instead of making the change. The members entitled to vote, in the whole realm or in one department, decide it under a threshold and quorum fixed when voting opens. An accepted proposal takes effect at once, or on a date set when it was filed.
+**Decisions.** When the realm's rules reserve a change for a decision, the operation files a **proposal** instead of making the change. The members entitled to vote, in the whole realm or in one department, decide it under a threshold and quorum fixed when voting opens. In an Indian village assembly, for example, every adult in the village takes part. An accepted proposal takes effect at once, or on a date set when it was filed.
 
 **Delegation.** A member can let a delegate act for them, limited to chosen groups of operations and to a period. Some operations still wait for the member's own approval each time.
 
