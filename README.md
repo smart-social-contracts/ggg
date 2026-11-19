@@ -225,18 +225,13 @@ GGG groups its entities and operations into twelve domains, numbered as in `ggg.
 
 Legislation comes in layers. A realm can follow other realms, such as its region and its country, and add its own layer on top. A town in Catalonia, for example, follows the EU, Spain and Catalonia, and adds its own bylaws. Each source publishes releases, with the date each comes into force. A follower reports what it runs, and is non-compliant from the first release it misses. In a federation, a new codex reaches every quarter at the same moment.
 
-
-splitting and merging
-
-
+Layers split and merge. One source has many followers: every town in Spain follows Spain's layer. A realm can also follow a source beside it, not only those above it: a town in a metropolitan area can follow the area's water authority as well as its own region.
 
 ## Codex
 
-Codex any piece of code that translates legislation into GGG-compliant logic 
-table 2 dimensions layer and subject matter
-example: Social Security legislation can use ggg domain tax, identity, etc.
+A **codex** is any code that turns legislation into logic a GGG-compliant GOS can run. It is a table with two dimensions: each row is a layer and each column a subject matter, such as tax or social security. A cell is one layer's legislation on one subject matter, called a chapter. Most cells are empty, because few layers legislate on every subject matter. Reading down a column gives every source's word on that subject matter, the realm's own last.
 
-
+The codex names its subject matters; to GGG they are opaque text. A subject matter is not a domain: a chapter uses whatever operations the legislation needs, in any domain. Social security legislation, for example, uses identity and membership (domain 1) to know who is covered and finance (domain 4) to collect contributions and pay benefits.
 
 ## Permissioning
 
