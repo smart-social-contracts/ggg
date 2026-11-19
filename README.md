@@ -31,7 +31,7 @@ In other words, GGG shall describe the most relevant entities, processes and con
 
 ## Design rationale
 
-This section is the reasoning supporting decisions made in this standard as well as the general principles followed.
+This part is the reasoning supporting decisions made in this standard as well as the general principles followed.
 
 **1. The model holds logic, not labels.** GGG implements logic derived from legislative texts. If something cannot be turned into logic, GGG does not cover it. A field recording what someone asserts, which no rule can check, is not governance — it is a form. **What GGG does not cover it should refuse, not record.** *Test:* Name the rule that reads the field and the decision it makes. If no rule can, the field does not belong.
 
@@ -100,7 +100,7 @@ A rule belongs in GGG when it holds in the first group and in most of the second
 | Structure | Item / Point / Number | Different levels in China (项), the EU (point) and Germany (Nummer) |
 | Structure | Division | A structural level in Australian or Canadian statutes, and also an administrative level in India |
 | Structure | Schedule / Annex | A real structural component in the UK and India, and in EU texts |
-| Topic | Subject matter | The standard heading of Article 1 in EU acts, so it can be mistaken for a pointer to that article |
+| Topic | Subject matter | Allowed only for what a piece of legislation is about, as in `ChapterRef.subject_matter`. Elsewhere it is the standard heading of Article 1 in EU acts, so it can be mistaken for a pointer to that article |
 | Topic | Subject | Also the subject of an RDF triple, and a "data subject" in data protection law |
 | Topic | Scope | The standard heading of Article 2 in EU acts, meaning who and what the law applies to |
 | Topic | Object / Objective / Purpose | "Objects clause" is a legal term; "object" is also an RDF and programming term |
