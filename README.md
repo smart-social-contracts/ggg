@@ -56,11 +56,11 @@ This section is the reasoning supporting decisions made in this standard as well
 
 ## Reference countries
 
-GGG draws its examples from eight countries in three groups. Each group plays a different role.
+GGG draws its examples from six countries in three groups. Each group plays a different role.
 
 | Group | Countries | Role |
 |---|---|---|
-| EU civil-law democracies | Spain, Germany | **The base.** GGG must fit all three. They also share a layer above them: the EU. |
+| EU civil-law democracies | Spain, Germany | **The base.** GGG must fit both. They also share a layer above them: the EU. |
 | Common-law democracies | United States, United Kingdom, India | **The contrast.** A concept should work here too. If it does not, it is probably a European habit, not common ground. |
 | One-party state | China | **The stress test** for administrative machinery, such as scale, deep layers and digital services. Never for how decisions are made. |
 
@@ -94,11 +94,11 @@ A rule belongs in GGG when it holds in the first group and in most of the second
 | Structure | Chapter | Exists everywhere but at different depths; the UK also uses "chapter" for an Act's number ("1988 c. 48") |
 | Structure | Section | The basic unit in the US, UK and India, but a mid-level grouping in Spain (Sección) and China (节) |
 | Structure | Article | The basic unit in Spain and China and in some German laws, but a document in everyday English |
-| Structure | Paragraph | Means § in Germany and Estonia, 款 in China, (1) in the US, and (a) in the UK |
+| Structure | Paragraph | Means § in Germany, 款 in China, (1) in the US, and (a) in the UK |
 | Structure | Subsection | Means (a) in the US and (1) in the UK and India |
 | Structure | Clause | Means (i) in the US, (a) in India, and is a generic word for any provision |
 | Structure | Item / Point / Number | Different levels in China (项), the EU (point) and Germany (Nummer) |
-| Structure | Division | A structural level in Estonia (jagu) and in Australian or Canadian statutes, and also an administrative level in India |
+| Structure | Division | A structural level in Australian or Canadian statutes, and also an administrative level in India |
 | Structure | Schedule / Annex | A real structural component in the UK and India, and in EU texts |
 | Topic | Subject matter | The standard heading of Article 1 in EU acts, so it can be mistaken for a pointer to that article |
 | Topic | Subject | Also the subject of an RDF triple, and a "data subject" in data protection law |
