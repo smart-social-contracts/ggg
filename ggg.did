@@ -1,4 +1,4 @@
-// GGG 0.2.0: the GGG model in Candid.
+// GGG 0.3.0: the GGG model in Candid.
 // Model: https://github.com/smart-social-contracts/ggg/blob/main/model/README.md
 //
 // One record per model entity, with the model's fields, and one method per model operation.
@@ -10,6 +10,11 @@
 type Timestamp = nat64;
 // Nanoseconds.
 type Duration = nat64;
+// A calendar day in the realm's time zone, written "YYYY-MM-DD" (ISO 8601), such as "2027-01-01". Something
+// due on a date is due until the end of that day, and a range of dates includes its first and last day. A
+// text that is not a real date is InvalidArgument. Days the law names are Dates; moments the GOS records are
+// Timestamps.
+type Date = text;
 
 // A count of calendar units: three months is three months, whatever the days. Deadlines and terms in
 // legislation are Periods, never Durations. A WorkingDay is a day that is neither a weekend day nor a
@@ -90,7 +95,7 @@ type GuestUser = record {
 type Human = record {
   id : text;
   user : principal;
-  date_of_birth : opt Timestamp;
+  date_of_birth : opt Date;
   h3_index : opt text;
 };
 
@@ -108,7 +113,7 @@ type Identity = record {
   ref : text;
   status : IdentityStatus;
   verified_at : opt Timestamp;
-  expires_at : opt Timestamp;
+  expires_at : opt Date;
 };
 
 type AttributeStatus = variant { Pending; Verified; Rejected };
@@ -127,7 +132,7 @@ type Attribute = record {
   ref : text;
   status : AttributeStatus;
   verified_at : opt Timestamp;
-  expires_at : opt Timestamp;
+  expires_at : opt Date;
 };
 
 type UserProfile = record {
@@ -388,8 +393,8 @@ type Contract = record {
   terms_ref : text;
   terms_hash : text;
   status : ContractStatus;
-  starts_at : opt Timestamp;
-  ends_at : opt Timestamp;
+  starts_at : opt Date;
+  ends_at : opt Date;
   // How `value` is spread over fiscal periods, each named once, adding up to it; empty when it is not
   // spread.
   split : vec PeriodAmount;
@@ -413,7 +418,7 @@ type Framework = record { holder : FrameworkHolder; reference : text; winners : 
 type PeriodAmount = record { period : text; amount : Money };
 
 // The terms of a contract that an amendment may change.
-type ContractTerms = record { value : Money; split : vec PeriodAmount; starts_at : opt Timestamp; ends_at : opt Timestamp };
+type ContractTerms = record { value : Money; split : vec PeriodAmount; starts_at : opt Date; ends_at : opt Date };
 
 // One amendment of a contract: its terms before and after, the proposal that carried it,
 // absent when its governing department decided directly, and when it applied.
@@ -482,8 +487,8 @@ type FiscalPeriodStatus = variant { Open; Closed; Archived };
 type FiscalPeriod = record {
   id : text;
   name : text;
-  starts_at : Timestamp;
-  ends_at : Timestamp;
+  starts_at : Date;
+  ends_at : Date;
   status : FiscalPeriodStatus;
   statements : Value;
   source_hash : text;
@@ -573,7 +578,7 @@ type Invoice = record {
   items : vec InvoiceItem;
   facts : Value;
   symbol : text;
-  due_at : opt Timestamp;
+  due_at : opt Date;
   status : InvoiceStatus;
   reason : opt Ref;
   paid_at : opt Timestamp;
@@ -594,8 +599,8 @@ type Transfer = record {
   status : TransferStatus;
   at : Timestamp;
   payroll : opt text;
-  // When a scheduled transfer is due.
-  due_at : opt Timestamp;
+  // The day a scheduled transfer is due.
+  due_at : opt Date;
   // The budget line it is charged to, and whether it drew on that line's committed money.
   budget : opt text;
   committed : bool;
@@ -703,7 +708,7 @@ type Land = record {
   // in square metres, when, and under which reference in the assessor's register.
   assessed_value : opt Money;
   area : opt Area;
-  assessed_at : opt Timestamp;
+  assessed_at : opt Date;
   assessment_ref : opt text;
   owner : Ref;
   status : LandStatus;
@@ -738,10 +743,10 @@ type License = record {
   issued_by : text;
   status : LicenseStatus;
   applied_at : Timestamp;
-  // When a decision is due, from the Procedure of the licence's kind.
-  decision_due : opt Timestamp;
+  // The day a decision is due, from the Procedure of the licence's kind.
+  decision_due : opt Date;
   issued_at : opt Timestamp;
-  expires_at : opt Timestamp;
+  expires_at : opt Date;
   evidence_ref : opt text;
   conditions : Value;
   // The parcel the licence is for, when it is for one.
@@ -774,8 +779,8 @@ type Request = record {
   by : Ref;
   body : Value;
   filed_at : Timestamp;
-  due_at : opt Timestamp;
-  extension_limit : opt Timestamp;
+  due_at : opt Date;
+  extension_limit : opt Date;
   status : RequestStatus;
   decision : opt text;
   reply : opt text;
@@ -889,7 +894,7 @@ type Penalty = record {
   amount : opt Money;
   symbol : opt text;
   status : PenaltyStatus;
-  due_at : opt Timestamp;
+  due_at : opt Date;
   executed_at : opt Timestamp;
   invoice : opt text;
 };
@@ -901,7 +906,7 @@ type TenderStatus = variant { Draft; Open; Closed; Evaluation; Awarded; Contract
 type Criterion = record { criterion : text; weight : Ratio };
 
 // A notice of the tender published in a journal, recorded with tender_notice.
-type Notice = record { journal : text; published_at : Timestamp; ref : opt text };
+type Notice = record { journal : text; published_at : Date; ref : opt text };
 
 type LotStatus = variant { Open; Awarded; Void };
 
@@ -1218,9 +1223,9 @@ type KeyEnvelope = record {
   at : Timestamp;
 };
 
-// A publication of the document in a journal: the dispatch that carried it, and when and under which
-// reference the journal published it, from the dispatch's confirmation.
-type Publication = record { journal : text; dispatch : text; published_at : opt Timestamp; ref : opt text };
+// A publication of the document in a journal: the dispatch that carried it, and the day and the reference
+// under which the journal published it, from the dispatch's confirmation.
+type Publication = record { journal : text; dispatch : text; published_at : opt Date; ref : opt text };
 // Content in clear: where it lives and its hash. It holds no personal data.
 type Published = record { ref : text; hash : text };
 
@@ -1325,7 +1330,7 @@ type IdentitySubmitArgs = record {
   category : opt text;
   issuer : opt text;
   ref : text;
-  expires_at : opt Timestamp;
+  expires_at : opt Date;
 };
 type IdentityReviewArgs = record { identity : text; status : variant { Verified; Rejected } };
 
@@ -1335,7 +1340,7 @@ type AttributeSubmitArgs = record {
   value : text;
   issuer : opt text;
   ref : text;
-  expires_at : opt Timestamp;
+  expires_at : opt Date;
 };
 type AttributeReviewArgs = record { attribute : text; status : variant { Verified; Rejected } };
 // The caller's own attributes, of one kind or all.
@@ -1584,8 +1589,8 @@ type ContractCreateArgs = record {
   symbol : text;
   terms_ref : text;
   terms_hash : text;
-  starts_at : opt Timestamp;
-  ends_at : opt Timestamp;
+  starts_at : opt Date;
+  ends_at : opt Date;
   // Absent means not spread over periods.
   split : opt vec PeriodAmount;
   // The awarded lot of `tender` it is made from, named when the tender has lots.
@@ -1600,8 +1605,8 @@ type ContractAmendArgs = record {
   contract : text;
   value : opt Money;
   split : opt vec PeriodAmount;
-  starts_at : opt Timestamp;
-  ends_at : opt Timestamp;
+  starts_at : opt Date;
+  ends_at : opt Date;
 };
 
 // `casting_vote` names an active member, else InvalidArgument.
@@ -1680,8 +1685,8 @@ type TransferCreateArgs = record {
   // contract's, Conflict past the contract's value.
   contract : opt text;
   on_behalf_of : opt principal;
-  // A time after the call: the transfer is Scheduled, owed until transfer_pay pays it.
-  due_at : opt Timestamp;
+  // A date after today: the transfer is Scheduled, owed until transfer_pay pays it.
+  due_at : opt Date;
   // True: it pays money its budget line has committed, not the line's available credit.
   committed : opt bool;
 };
@@ -1693,7 +1698,7 @@ type InvoiceCreateArgs = record {
   payer : Ref;
   amount : Money;
   symbol : opt text;
-  due_at : opt Timestamp;
+  due_at : opt Date;
   reason : opt Ref;
   items : vec InvoiceItem;
   facts : opt Value;
@@ -1714,8 +1719,8 @@ type InvoicePage = record { items : vec Invoice; next : opt text };
 
 // `department` is the fund's owner; a department owns at most one fund.
 type FundCreateArgs = record { fund : text; name : opt text; kind : opt text; department : opt text };
-// Periods open in order: one starts no earlier than the latest ends.
-type PeriodOpenArgs = record { period : text; name : opt text; starts_at : Timestamp; ends_at : Timestamp };
+// Periods open in order: one starts after the latest one ends.
+type PeriodOpenArgs = record { period : text; name : opt text; starts_at : Date; ends_at : Date };
 // `category` never names `ledger_fee` or `sweep`, entries the GOS books itself (InvalidArgument).
 type BudgetDraftArgs = record { fund : text; period : text; category : text; kind : BudgetKind; planned : Money };
 type BudgetAmendArgs = record { budget : text; planned : Money };
@@ -1876,7 +1881,7 @@ type RequestGetArgs = record { id : text; on_behalf_of : opt principal };
 type RequestListArgs = record { cursor : opt text; limit : opt nat32; kind : opt text; status : opt RequestStatus };
 type RequestPage = record { items : vec Request; next : opt text };
 // Sets or moves the deadline, never past `extension_limit`, which is set once (Conflict after that).
-type RequestSetDueArgs = record { request : text; due_at : Timestamp; extension_limit : opt Timestamp };
+type RequestSetDueArgs = record { request : text; due_at : Date; extension_limit : opt Date };
 // `decision` is the realm's word for the outcome (`granted`, `refused`, `refused_by_silence`).
 type RequestDecideArgs = record { request : text; decision : text; reply : opt text };
 
@@ -1897,7 +1902,7 @@ type LicenseDecideArgs = record {
   license : text;
   approve : bool;
   department : opt text;
-  expires_at : opt Timestamp;
+  expires_at : opt Date;
   conditions : opt Value;
 };
 // With `resume`, reinstates a suspended licence.
@@ -1938,7 +1943,7 @@ type PenaltyTerms = record {
   target : Ref;
   amount : opt Money;
   symbol : opt text;
-  due_at : opt Timestamp;
+  due_at : opt Date;
 };
 type VerdictDraftArgs = record { case : text; decision : text; reasoning_ref : opt text; penalties : vec PenaltyTerms };
 type VerdictContractArgs = record { verdict : text; contract : text };
@@ -1959,7 +1964,7 @@ type AppealDecideArgs = record {
   reasoning_ref : opt text;
   penalties : vec PenaltyTerms;
 };
-type PenaltyExecuteArgs = record { penalty : text; due_at : opt Timestamp };
+type PenaltyExecuteArgs = record { penalty : text; due_at : opt Date };
 type EnforcementArgs = record { verdict : text; note : text };
 type EnforcementNotifyArgs = record { verdict : text; to : Ref; title : opt text; body : opt text };
 
@@ -2018,8 +2023,8 @@ type TenderAwardArgs = record { tender : text; bid : opt text; justification : o
 // Leaves a lot with no award, for lack of a bid or of an acceptable one.
 type TenderLotVoidArgs = record { tender : text; lot : text; reason : opt text };
 // Records that a notice of the tender appeared in `journal`: an External of kind `journal`, or `realm` for
-// the realm's own journal. `at` defaults to now and is never in the future.
-type TenderNoticeArgs = record { tender : text; journal : text; ref : opt text; at : opt Timestamp };
+// the realm's own journal. `at` defaults to today and is never in the future.
+type TenderNoticeArgs = record { tender : text; journal : text; ref : opt text; at : opt Date };
 
 // Domain 9: Quarters and federation
 

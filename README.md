@@ -90,6 +90,7 @@ Every domain uses the same conventions:
 | Convention | Rule |
 |---|---|
 | Time | A moment is nanoseconds since 1 January 1970 (UTC). A length of time is in nanoseconds too. |
+| Date | A day in the realm's time zone, written YYYY-MM-DD. Something due on a date is due until the end of that day, and a range of dates includes its first and last day. Days the law names, such as birth dates and due dates, are dates; moments the GOS records are times. |
 | Legal periods | Deadlines and terms in legislation are counted in days, working days, months or years, never in nanoseconds. A working day is neither a weekend nor a holiday in the realm's calendar. Spain, for example, counts most deadlines in working days, and Germany in calendar days. |
 | Shares and rates | Hundred-millionths: 100 % is 100 000 000. A share is at most 100 %; a tax rate may be higher. |
 | Money | A whole number in the token's smallest unit, such as cents. |
