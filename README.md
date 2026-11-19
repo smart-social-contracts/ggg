@@ -225,7 +225,7 @@ GGG groups its entities and operations into twelve domains, numbered as in `ggg.
 
 Legislation comes in layers. A realm can follow other realms, such as its region and its country, and add its own layer on top. A town in Catalonia, for example, follows the EU, Spain and Catalonia, and adds its own bylaws. Each source publishes releases, with the date each comes into force. A follower reports what it runs, and is non-compliant from the first release it misses. In a federation, a new codex reaches every quarter at the same moment.
 
-**Splitting and merging** (under study). Splitting a realm: some of its quarters move to a different codex. Merging realms: their quarters follow a new capital and share its codex.
+**Splitting and merging.** A realm runs one codex in all its quarters, so a split makes separate realms: a group of quarters secedes and forms a realm of its own. Secession cannot be blocked, even when the capital is down. It withdraws the quarter's open federal votes on both sides, and money already swept is still booked. The leaving realm takes a new id for its own layer, because a layer's id belongs to one realm. A merge is a realm joining another realm's capital, and it takes the capital's whole codex. Who decides a split or a merge is for each realm's legislation.
 
 ## Codex
 
