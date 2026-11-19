@@ -235,7 +235,7 @@ The codex names its subject matters; to GGG they are opaque text. A subject matt
 
 ## Permissioning
 
-Most operations need a permission, such as `attribute.review`. A member holds one directly, through their department, or through a **profile**: a named set of permissions, which a seat can carry. A missing permission gives a `Forbidden` error that can name it. Holding a permission is not always enough, because the realm's rules may still require a vote. An **agent**, such as an AI assistant, may hold a seat only with a supervisor who holds a non-agent seat in the same body.
+Most operations need a permission, such as `attribute.review`. A member holds one directly, through their department, or through a **profile**: a named set of permissions, which a seat can carry. A missing permission gives a `Forbidden` error that can name it. Holding a permission is not always enough, because the realm's rules may still require a vote. An **agent**, such as an AI assistant, may hold a seat only with a supervisor who holds a non-agent seat in the same body, and never signs an act of office, such as a verdict or a licence decision. A **banned** member can only read. Nobody decides a matter that concerns them: an official never reviews their own identity, a judge never hears their own dispute, and a treasurer never pays themselves.
 
 ## Private content
 
