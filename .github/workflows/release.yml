@@ -1,0 +1,99 @@
+# Cuts a GGG release: one tarball of the repo at a commit, plus the checksum
+# file that covers it. GGG is a specification, so the tarball is the whole
+# tree -- ggg.did, the model, the domain and fact lists, and the conformance
+# suite -- exactly as a consumer pins it.
+#
+# The release is left a draft. It becomes real once the checksum file is
+# signed with the release key (smart-social-contracts/.github,
+# scripts/sign-release.sh), which publishes it and starts release-verify.yml.
+# GitHub creates the tag at `ref` on that publish, not before.
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, without the leading v (e.g. 0.2.0)'
+        required: true
+        type: string
+      ref:
+        description: 'Commit, tag or branch to release (default: the ref this run was started on)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Full history and tags: `ref` may be any commit, and the tag check below
+      # needs every existing tag.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve what is being released
+        id: target
+        env:
+          VERSION: ${{ inputs.version }}
+          REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          case "$VERSION" in
+            v*) echo "::error::give the version without the leading v (got '$VERSION')"; exit 1 ;;
+          esac
+          tag="v$VERSION"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::$tag already exists"
+            exit 1
+          fi
+          sha=$(git rev-parse --verify "${REF:-HEAD}^{commit}")
+          # The version is a reviewable fact in the tree, not a dispatch-time
+          # guess: the commit being released has to declare it itself, so the
+          # tarball says which GGG it is and the bump is visible in a diff.
+          declared=$(git show "$sha:version.txt" 2>/dev/null | tr -d '[:space:]' || true)
+          if [ -z "$declared" ]; then
+            echo "::error::$sha has no version.txt: commit the version before releasing it"
+            exit 1
+          fi
+          if [ "$declared" != "$VERSION" ]; then
+            echo "::error::version.txt at $sha says '$declared', not '$VERSION': bump it in a commit first"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $sha as $tag"
+
+      - name: Build the tarball and its checksum file
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz --prefix="ggg-$TAG/" -o "ggg-$TAG.tar.gz" "$SHA"
+          sha256sum "ggg-$TAG.tar.gz" > "checksums-$TAG.txt"
+          cat "checksums-$TAG.txt"
+
+      - name: Create the draft release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.target.outputs.tag }}
+          target_commitish: ${{ steps.target.outputs.sha }}
+          name: Release ${{ steps.target.outputs.tag }}
+          draft: true
+          fail_on_unmatched_files: true
+          files: |
+            ggg-${{ steps.target.outputs.tag }}.tar.gz
+            checksums-${{ steps.target.outputs.tag }}.txt
+
+      - name: Summary
+        run: |
+          echo "═══════════════════════════════════════════════════════"
+          echo " GGG ${{ steps.target.outputs.tag }} drafted at ${{ steps.target.outputs.sha }}"
+          echo " Draft: ${{ steps.create_release.outputs.url }}"
+          echo " Sign and publish: sign-release.sh ${{ github.repository }} ${{ steps.target.outputs.tag }}"
+          echo "═══════════════════════════════════════════════════════"
