@@ -131,6 +131,19 @@ splitting and merging
 
 Most operations need a permission, such as `attribute.review`. A member holds one directly, through their department, or through a **profile**: a named set of permissions, which a seat can carry. A missing permission gives a `Forbidden` error that can name it. Holding a permission is not always enough, because the realm's rules may still require a vote. An **agent**, such as an AI assistant, may hold a seat only with a supervisor who holds a non-agent seat in the same body.
 
+## Private content
+
+Private content, such as personal data, is kept encrypted.
+
+- **Encrypted before it arrives.** The realm stores only where the encrypted content lives, its hash, and, for each person allowed to read it, a copy of the document's key locked for that person.
+- **Sharing is an operation.** Giving someone a key needs a permission and is recorded as an event. A share can record its legal basis and purpose, and whether the data is of a special category such as health, as EU data-protection law asks.
+- **Access can end.** Keys can be revoked and a document deleted with all its keys. Revoking stops future reading only.
+- **Publishing is explicit.** A document becomes public only when published, in clear, optionally in an official journal.
+- **Records hold no secrets.** A request or message that carries personal data refers to an encrypted document. The audit log leaves out secrets such as invite codes.
+- **Sealed until opened.** Court evidence stays encrypted, and a sealed bid shows no price until revealed.
+
+Certified attributes are the one exception: they are stored in clear, but only the person, their reviewers and the codex can read them.
+
 ## Operations
 
 ```mermaid
