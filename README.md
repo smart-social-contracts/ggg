@@ -275,7 +275,7 @@ Everything happens through **operations**, the methods of `ggg.did`, named noun 
 
 **Decisions.** When the realm's rules reserve a change for a decision, the operation files a **proposal** instead of making the change. The members entitled to vote, in the whole realm or in one department, decide it under a threshold and quorum fixed when voting opens. In an Indian village assembly, for example, every adult in the village takes part. An accepted proposal takes effect at once, or on a date set when it was filed.
 
-**Delegation.** A member can let a delegate act for them, limited to chosen groups of operations and to a period. Some operations still wait for the member's own approval each time.
+**Delegation.** A member can let a delegate act for them, limited to chosen groups of operations and to a period. Some operations still wait for the member's own approval each time. [`delegation.json`](delegation.json) lists the groups a grant can name and puts every operation in a tier: it runs at once under a grant, asks the member each time, only the member or the founder can do it, or it needs no grant.
 
 **Legislation.** The codex attaches rules to operations. A realm can also take legislation from other realms, such as its region or its country, when both sides agree by vote, and GGG records whether it runs the latest release in force.
 
