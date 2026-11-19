@@ -1023,7 +1023,7 @@ type Calendar = record {
 
 type Registry = record { id : text; description : text; principal_id : principal };
 
-type QuarterStatus = variant { Setup; Active; Suspended; Splitting; Merging };
+type QuarterStatus = variant { Setup; Active; Suspended };
 
 type Quarter = record {
   id : text;
