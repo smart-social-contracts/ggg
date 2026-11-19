@@ -54,6 +54,18 @@ This part is the reasoning supporting decisions made in this standard as well as
 **10. How GGG is written.** **A GGG word keeps its GGG meaning** — **Short pages:** this specification is one page of at most 500 lines. **Simple English:** short sentences, common words, one idea at a time — a rule only a fluent reader can parse will be implemented wrongly. *Test:* Read it as someone who knows governance, but not GGG, and not much English. Can they say what the realm must do?
 
 
+## Proposing a change
+
+Before you add an entity, field, status or operation, show that:
+
+1. a rule or operation reads it (principle 9);
+2. you know what it protects (principle 2);
+3. it holds in the [reference countries](#reference-countries), not in one country only (principle 7);
+4. it records a fact, not a claim (principle 8);
+5. it cites the provision it comes from (principle 6).
+
+Then change `ggg.did` and this page together, in one change. If it breaks compatibility, raise the version.
+
 ## Reference countries
 
 GGG draws its examples from six countries in three groups. Each group plays a different role.
