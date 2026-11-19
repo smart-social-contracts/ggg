@@ -297,3 +297,7 @@ A new realm starts in **setup**: the founder named by its host configures it wit
 5. `ggg_proposal_execute` amends the budget, at once or on the date set in the proposal.
 
 Every step is recorded as an event.
+
+## License
+
+GGG is released under the [MIT License](LICENSE).
