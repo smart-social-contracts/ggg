@@ -85,22 +85,22 @@ flowchart TB
 
 ## Domains
 
-GGG groups its entities and operations into twelve domains, one section of `ggg.did` each and numbered as there. Section §1 holds the conventions they all share, such as units of time and money. Apart from those, each section stands alone.
+GGG groups its entities and operations into twelve domains, numbered as in `ggg.did`. They share a few conventions, such as units of time and money, which `ggg.did` sets out first. Apart from those, each domain stands alone.
 
-| § | Domain | What it covers |
+| # | Domain | What it covers |
 |---|---|---|
-| 2 | Identity and membership | Users and members, identity proofs, certified attributes, invites, profiles, permissions and delegation |
-| 3 | Departments and organizations | Departments and their voting policies, outside organizations, positions and appointments |
-| 4 | Governance | Proposals and votes, mandates, contracts and their amendments, and the realm's voting rules |
-| 5 | Finance | Treasury, tokens, funds, budgets, a double-entry ledger, invoices, transfers, payroll, loans and taxes |
-| 6 | Assets | Land parcels with their assessed value and zones, and credentials issued as tokens |
-| 7 | Licensing | Licences, the procedure for each kind (including what silence after a deadline means, as in Spanish law) and petitions |
-| 8 | Justice | Courts, judges, disputes, cases, evidence, verdicts, appeals and penalties |
-| 9 | Procurement | Tenders and their lots, sealed bids, scoring, awards and published notices |
-| 10 | Quarters and federation | The capital and its quarters, federal votes, swept funds, and links to realms whose legislation it follows |
-| 11 | Codex and audit | The codex, legislation releases, notifications, messages to outside bodies, scheduled tasks and the event log |
-| 12 | Realm setup | The realm's settings, setup and launch, upgrades and monitoring |
-| 13 | Private content | Encrypted documents, the keys to read them, and sharing or publishing them |
+| 1 | Identity and membership | Users and members, identity proofs, certified attributes, invites, profiles, permissions and delegation |
+| 2 | Departments and organizations | Departments and their voting policies, outside organizations, positions and appointments |
+| 3 | Governance | Proposals and votes, mandates, contracts and their amendments, and the realm's voting rules |
+| 4 | Finance | Treasury, tokens, funds, budgets, a double-entry ledger, invoices, transfers, payroll, loans and taxes |
+| 5 | Assets | Land parcels with their assessed value and zones, and credentials issued as tokens |
+| 6 | Licensing | Licences, the procedure for each kind (including what silence after a deadline means, as in Spanish law) and petitions |
+| 7 | Justice | Courts, judges, disputes, cases, evidence, verdicts, appeals and penalties |
+| 8 | Procurement | Tenders and their lots, sealed bids, scoring, awards and published notices |
+| 9 | Quarters and federation | The capital and its quarters, federal votes, swept funds, and links to realms whose legislation it follows |
+| 10 | Codex, notifications and audit | The codex, legislation releases, notifications, messages to outside bodies, scheduled tasks and the event log |
+| 11 | Realm setup | The realm's settings, setup and launch, upgrades and monitoring |
+| 12 | Private content | Encrypted documents, the keys to read them, and sharing or publishing them |
 
 ## Layers
 

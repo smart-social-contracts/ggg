@@ -4,7 +4,7 @@
 // One record per model entity, with the model's fields, and one method per model operation.
 // Every entity is here; the methods cover the operations bound so far.
 
-// ---- Conventions (model §1)
+// ---- Conventions
 
 // Nanoseconds since 1970-01-01 UTC, as returned by ic0.time.
 type Timestamp = nat64;
@@ -16,17 +16,17 @@ type Duration = nat64;
 // holiday in the realm's calendar, taken in the realm's time zone; GGG names the unit and the GOS
 // counts it, failing closed when its calendar has no entries for a year the count reaches. Periods
 // compare only within one unit: comparing two units fails closed, with no conversion through the
-// calendar (model §1).
+// calendar.
 type PeriodUnit = variant { Day; WorkingDay; Month; Year };
 type Period = record { count : nat; unit : PeriodUnit };
 
 // A ratio in hundred-millionths: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456.
-// One scale for quorum, threshold, share, weight and tax rate (model §1). A Ratio is at most 100 %; a
+// One scale for quorum, threshold, share, weight and tax rate. A Ratio is at most 100 %; a
 // Rate, for tax rates and coefficients, which legislation takes above 100 %, is at most 100 times that.
 type Ratio = nat;
 type Rate = nat;
 // Money in the token's smallest unit (Token.decimals). Money computed from a Ratio is rounded to the
-// nearest cent, an exact half away from zero (model §1).
+// nearest cent, an exact half away from zero.
 type Money = nat;
 // Money that may be negative, such as a discount line of an invoice. Rounded as Money is.
 type SignedMoney = int;
@@ -56,7 +56,7 @@ type GggError = variant {
   GenericError : record { error_code : nat; message : text };
 };
 
-// ---- §2 Identity and membership
+// ---- Domain 1: Identity and membership
 
 type User = record {
   id : principal;
@@ -191,7 +191,7 @@ type DelegationRequest = record {
   request_expires_at : Timestamp;
 };
 
-// ---- §3 Departments and organizations
+// ---- Domain 2: Departments and organizations
 
 // How a department decides. `threshold_of` absent or Eligible: m of n approvals. Cast: a
 // majority of the votes cast, with `quorum` of n voting and the head's casting vote on a second tie; m
@@ -265,7 +265,7 @@ type Authority = record {
   operations : vec text;
 };
 
-// ---- §4 Governance
+// ---- Domain 3: Governance
 
 // ExecutionScheduled: accepted, and waiting for its effective_at.
 type ProposalStatus = variant { Draft; Voting; Accepted; ExecutionScheduled; Rejected; Expired; Executed; Failed; Withdrawn };
@@ -308,7 +308,7 @@ type Proposal = record {
   description : text;
   proposer : principal;
   on_behalf_of : opt principal;
-  // The delegate that prepared the call, when the proposer approved it from a pending action (§2).
+  // The delegate that prepared the call, when the proposer approved it from a pending action (domain 1).
   prepared_by : opt principal;
   department : opt text;
   // What the proposal is (a change of legislation, a budget, a motion) and the matter it decides, in the
@@ -429,7 +429,7 @@ type ContractAmendment = record {
 // A contract and its amendments a page at a time, oldest first.
 type ContractDetail = record { contract : Contract; amendments : vec ContractAmendment; next : opt text };
 
-// ---- §5 Finance
+// ---- Domain 4: Finance
 
 type TreasuryConfig = record {
   epoch : Duration;
@@ -638,7 +638,7 @@ type FinancialReport = record {
 // `subject` names the entity each assessment walks (e.g. `Land`, `User`, `Organization`); `rate` or
 // `amount` is what the entry charges when no codex computes it; `facts` is what legislation reads about
 // the entry beyond these. A rule on tax_policy_propose or tax_policy_draft ranges over the policy's
-// entries, one request per entry (layered-codex §3.2).
+// entries, one request per entry.
 type TaxEntry = record {
   code : text;
   kind : text;
@@ -688,7 +688,7 @@ type TaxDeclaration = record {
   invoice : opt text;
 };
 
-// ---- §6 Assets
+// ---- Domain 5: Assets
 
 type LandStatus = variant { Active; Disputed; Revoked };
 
@@ -727,7 +727,7 @@ type Zone = record {
   population : nat;
 };
 
-// ---- §7 Licensing
+// ---- Domain 6: Licensing
 
 type LicenseStatus = variant { Applied; Active; Rejected; Suspended; Revoked; Expired };
 
@@ -782,7 +782,7 @@ type Request = record {
   decided_at : opt Timestamp;
 };
 
-// ---- §8 Justice
+// ---- Domain 7: Justice
 
 type CourtLevel = variant { FirstInstance; Appellate; Supreme; Specialized };
 type CourtStatus = variant { Active; Closed };
@@ -894,7 +894,7 @@ type Penalty = record {
   invoice : opt text;
 };
 
-// ---- §9 Procurement
+// ---- Domain 8: Procurement
 
 type TenderStatus = variant { Draft; Open; Closed; Evaluation; Awarded; Contracted; Cancelled };
 
@@ -959,7 +959,7 @@ type BidScore = record {
   scored_at : Timestamp;
 };
 
-// ---- §10 Quarters and federation
+// ---- Domain 9: Quarters and federation
 
 type RealmStatus = variant { Setup; Alpha; Beta; Production; Deprecation; Terminated };
 
@@ -1111,7 +1111,7 @@ type Follower = record {
   reported_at : opt Timestamp;
 };
 
-// ---- §11 Codex, notifications and audit
+// ---- Domain 10: Codex, notifications and audit
 
 // Pending: installed and checked, waiting for codex_activate or its proposal's effective_at.
 type CodexStatus = variant { Pending; Active; Inactive; Reverted };
@@ -1207,7 +1207,7 @@ type Event = record {
   at : Timestamp;
 };
 
-// ---- §13 Private content
+// ---- Domain 12: Private content
 
 type KeyEnvelope = record {
   id : text;
@@ -1252,7 +1252,7 @@ type GetArgs = record { id : text; cursor : opt text; limit : opt nat32 };
 // The change was applied, with the id of any record it created, or a proposal was filed to make it.
 type Governed = variant { Done : opt text; Proposed : text };
 
-// §2
+// Domain 1: Identity and membership
 
 type UserEntry = record { user : User; member : opt Member };
 type UserPage = record { items : vec UserEntry; next : opt text };
@@ -1390,7 +1390,7 @@ type DelegationDecideArgs = record {
 type DelegationRevokeAllArgs = record { cursor : opt text; limit : opt nat32; on_behalf_of : opt principal };
 type DelegationsRevoked = record { revoked : nat; next : opt text };
 
-// Pending actions (model §2): a call in its confirm form, prepared by a delegate under a grant and waiting
+// Pending actions (domain 1): a call in its confirm form, prepared by a delegate under a grant and waiting
 // for the grantor's own approval.
 type Call = record { method : text; arg : blob };
 // Approved: a read the grantor approved, waiting for the delegate to collect it (ggg_action_collect).
@@ -1435,7 +1435,7 @@ type CallForArgs = record { method : text; arg : blob; on_behalf_of : principal;
 type CallForReply = variant { Done : blob; Proposed : text; Pending : PendingAction };
 type ReadForArgs = record { method : text; arg : blob; on_behalf_of : principal };
 
-// §3
+// Domain 2: Departments and organizations
 
 // A position and the appointments that hold it.
 type Seat = record { position : Position; holders : vec Appointment };
@@ -1510,7 +1510,7 @@ type RepresentativeAddArgs = record {
 };
 type OrganizationStatusArgs = record { organization : text; status : OrganizationStatus };
 
-// §4
+// Domain 3: Governance
 
 // The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
 // links to it are in ggg_proposal_linked_from.
@@ -1612,7 +1612,7 @@ type GovernanceUpdateArgs = record {
   casting_vote : opt variant { Set : principal; Clear };
 };
 
-// §5
+// Domain 4: Finance
 
 // The treasury and its registered tokens, and its funds a page at a time.
 type TreasuryView = record {
@@ -1742,7 +1742,7 @@ type PayrollRunArgs = record { department : text; period : text; symbol : opt te
 // `adjustments` are figures the issuer adds to the ledger's, for a report in terms the ledger doesn't keep.
 type ReportIssueArgs = record { period : text; kind : opt text; adjustments : opt Value };
 
-// The entries are checked as they are when the policy is proposed (layered-codex §3.2).
+// The entries are checked as they are when the policy is proposed.
 type TaxPolicyDraftArgs = record { document : Value; description : opt text; taxes : vec TaxEntry };
 // Bills one batch of taxpayers for the period; those already billed are skipped.
 type TaxAssessArgs = record { period : text; tax : opt text; cursor : opt text; limit : opt nat32 };
@@ -1783,7 +1783,7 @@ type PaymentAccountRemoveArgs = record { account : text; organization : opt text
 type ForceTransferArgs = record { symbol : text; from : principal; to : principal; amount : Money; reason : opt text };
 type FreezeArgs = record { symbol : text; account : principal; frozen : bool; reason : opt text };
 
-// §6
+// Domain 5: Assets
 
 type LandListArgs = record { cursor : opt text; limit : opt nat32; owner : opt Ref };
 type LandPage = record { items : vec Land; next : opt text };
@@ -1843,7 +1843,7 @@ type CredentialIssueArgs = record {
 type CredentialIssued = record { token_id : nat; header : vec record { text; text } };
 type CredentialRevokeArgs = record { schema : text; token_id : nat; organization : text; reason : text };
 
-// §7
+// Domain 6: Licensing
 
 type LicenseListArgs = record {
   cursor : opt text;
@@ -1903,7 +1903,7 @@ type LicenseDecideArgs = record {
 // With `resume`, reinstates a suspended licence.
 type LicenseSuspendArgs = record { license : text; resume : bool };
 
-// §8
+// Domain 7: Justice
 
 type DisputeGetArgs = record { id : text; on_behalf_of : opt principal };
 type DisputeListArgs = record { cursor : opt text; limit : opt nat32; status : opt DisputeStatus };
@@ -1973,7 +1973,7 @@ type CourtCreateArgs = record {
 };
 type JudgeAppointArgs = record { court : text; user : principal; specialization : opt text };
 
-// §9
+// Domain 8: Procurement
 
 type TenderListArgs = record { cursor : opt text; limit : opt nat32; status : opt TenderStatus };
 type TenderPage = record { items : vec Tender; next : opt text };
@@ -2021,7 +2021,7 @@ type TenderLotVoidArgs = record { tender : text; lot : text; reason : opt text }
 // the realm's own journal. `at` defaults to now and is never in the future.
 type TenderNoticeArgs = record { tender : text; journal : text; ref : opt text; at : opt Timestamp };
 
-// §10
+// Domain 9: Quarters and federation
 
 // `zones` is filled by quarter_sync alone: the zones the realm defines, as zone_define takes them, for the quarter to
 // define the same (the capital is where the realm's codex defines its districts). Null in quarter_directory.
@@ -2120,7 +2120,7 @@ type LinkSide = variant { SyncSource; Follower };
 // From the capital at the other side of a link: the link's new status after the caller's vote.
 type LinkNotifyArgs = record { side : LinkSide; status : LinkStatus };
 
-// §11
+// Domain 10: Codex, notifications and audit
 
 type SigningPolicy = record {
   agents : vec text;
@@ -2238,7 +2238,7 @@ type TaskRescheduleArgs = record { task : text; at : Timestamp };
 type TaskListArgs = record { cursor : opt text; limit : opt nat32; op : opt text; status : opt TaskStatus };
 type TaskPage = record { items : vec Task; next : opt text };
 
-// §12
+// Domain 11: Realm setup
 
 type RealmConfigureArgs = record {
   name : opt text;
@@ -2296,7 +2296,7 @@ type Monitor = record {
   events : nat;
 };
 
-// §13
+// Domain 12: Private content
 
 type ScopePage = record { items : vec text; next : opt text };
 
@@ -2349,7 +2349,7 @@ type DocumentDeleted = record { revoked : nat; deleted : bool };
 service : {
   icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
 
-  // §2
+  // Domain 1: Identity and membership
   ggg_user_get : (principal) -> (variant { Ok : opt UserEntry; Err : GggError }) query;
   ggg_user_list : (ListArgs) -> (variant { Ok : UserPage; Err : GggError }) query;
   ggg_invite_list : (ListArgs) -> (variant { Ok : InvitePage; Err : GggError }) query;
@@ -2398,7 +2398,7 @@ service : {
   ggg_action_collect : (text) -> (variant { Ok : blob; Err : GggError });
   ggg_call_for : (CallForArgs) -> (variant { Ok : CallForReply; Err : GggError });
 
-  // §3
+  // Domain 2: Departments and organizations
   ggg_department_get : (GetArgs) -> (variant { Ok : opt DepartmentDetail; Err : GggError }) query;
   ggg_department_list : (ListArgs) -> (variant { Ok : DepartmentPage; Err : GggError }) query;
   ggg_department_chart : (ChartArgs) -> (variant { Ok : Chart; Err : GggError }) query;
@@ -2423,7 +2423,7 @@ service : {
   ggg_representative_remove : (text) -> (variant { Ok : Appointment; Err : GggError });
   ggg_organization_set_status : (OrganizationStatusArgs) -> (variant { Ok : Governed; Err : GggError });
 
-  // §4
+  // Domain 3: Governance
   ggg_proposal_get : (GetArgs) -> (variant { Ok : opt ProposalDetail; Err : GggError }) query;
   ggg_proposal_linked_from : (GetArgs) -> (variant { Ok : opt ProposalLinkPage; Err : GggError }) query;
   ggg_proposal_list : (ProposalListArgs) -> (variant { Ok : ProposalPage; Err : GggError }) query;
@@ -2446,7 +2446,7 @@ service : {
   ggg_contract_get : (GetArgs) -> (variant { Ok : opt ContractDetail; Err : GggError }) query;
   ggg_governance_update : (GovernanceUpdateArgs) -> (variant { Ok : Governed; Err : GggError });
 
-  // §5
+  // Domain 4: Finance
   ggg_treasury_view : (ListArgs) -> (variant { Ok : TreasuryView; Err : GggError }) query;
   ggg_ledger_view : (LedgerArgs) -> (variant { Ok : LedgerPage; Err : GggError }) query;
   ggg_report_view : (ReportArgs) -> (variant { Ok : ReportPage; Err : GggError }) query;
@@ -2490,7 +2490,7 @@ service : {
   ggg_token_force_transfer : (ForceTransferArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_token_freeze : (FreezeArgs) -> (variant { Ok : Governed; Err : GggError });
 
-  // §6
+  // Domain 5: Assets
   ggg_land_list : (LandListArgs) -> (variant { Ok : LandPage; Err : GggError }) query;
   ggg_land_map : (LandMapArgs) -> (variant { Ok : LandMap; Err : GggError }) query;
   ggg_credential_verify : (CredentialVerifyArgs) -> (variant { Ok : CredentialCheck; Err : GggError }) query;
@@ -2507,7 +2507,7 @@ service : {
   ggg_credential_issue : (CredentialIssueArgs) -> (variant { Ok : CredentialIssued; Err : GggError });
   ggg_credential_revoke : (CredentialRevokeArgs) -> (variant { Ok : nat; Err : GggError });
 
-  // §7
+  // Domain 6: Licensing
   ggg_license_list : (LicenseListArgs) -> (variant { Ok : LicensePage; Err : GggError }) query;
   ggg_license_verify : (LicenseVerifyArgs) -> (variant { Ok : LicenseCheck; Err : GggError }) query;
   ggg_procedure_list : (ListArgs) -> (variant { Ok : ProcedurePage; Err : GggError }) query;
@@ -2523,7 +2523,7 @@ service : {
   ggg_request_set_due : (RequestSetDueArgs) -> (variant { Ok : Request; Err : GggError });
   ggg_request_decide : (RequestDecideArgs) -> (variant { Ok : Request; Err : GggError });
 
-  // §8
+  // Domain 7: Justice
   ggg_dispute_get : (DisputeGetArgs) -> (variant { Ok : opt Dispute; Err : GggError }) query;
   ggg_dispute_list_all : (DisputeListArgs) -> (variant { Ok : DisputePage; Err : GggError }) query;
   ggg_resolution_query : (ResolutionQueryArgs) -> (variant { Ok : ResolutionPage; Err : GggError }) query;
@@ -2549,7 +2549,7 @@ service : {
   ggg_judge_appoint : (JudgeAppointArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_judge_revoke : (text) -> (variant { Ok : Governed; Err : GggError });
 
-  // §9
+  // Domain 8: Procurement
   ggg_tender_list : (TenderListArgs) -> (variant { Ok : TenderPage; Err : GggError }) query;
   ggg_tender_get : (GetArgs) -> (variant { Ok : opt TenderDetail; Err : GggError }) query;
   ggg_tender_create : (TenderCreateArgs) -> (variant { Ok : Governed; Err : GggError });
@@ -2564,7 +2564,7 @@ service : {
   ggg_tender_lot_void : (TenderLotVoidArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_tender_notice : (TenderNoticeArgs) -> (variant { Ok : Tender; Err : GggError });
 
-  // §10
+  // Domain 9: Quarters and federation
   ggg_quarter_directory : (ListArgs) -> (variant { Ok : QuarterDirectory; Err : GggError }) query;
   ggg_join_targets : (opt JoinTargetsArgs) -> (variant { Ok : JoinTargets; Err : GggError }) query;
   ggg_quarter_sync : () -> (variant { Ok : QuarterDirectory; Err : GggError });
@@ -2593,7 +2593,7 @@ service : {
   ggg_follower_report : (FollowerReportArgs) -> (variant { Ok : Follower; Err : GggError });
   ggg_link_notify : (LinkNotifyArgs) -> (variant { Ok : LinkStatus; Err : GggError });
 
-  // §11
+  // Domain 10: Codex, notifications and audit
   ggg_codex_status : (ListArgs) -> (variant { Ok : CodexView; Err : GggError }) query;
   ggg_legislation_releases : (ListArgs) -> (variant { Ok : ReleasePage; Err : GggError }) query;
   ggg_legislation_chapter : (text) -> (variant { Ok : opt blob; Err : GggError }) query;
@@ -2616,7 +2616,7 @@ service : {
   ggg_task_reschedule : (TaskRescheduleArgs) -> (variant { Ok : Task; Err : GggError });
   ggg_task_cancel : (text) -> (variant { Ok : Task; Err : GggError });
 
-  // §12
+  // Domain 11: Realm setup
   ggg_realm_info : () -> (Realm) query;
   ggg_realm_monitor : () -> (variant { Ok : Monitor; Err : GggError }) query;
   ggg_setup_state : () -> (variant { Ok : SetupState; Err : GggError });
@@ -2631,7 +2631,7 @@ service : {
   ggg_realm_register : (RealmRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_realm_upgrade : (RealmUpgradeArgs) -> (variant { Ok : Governed; Err : GggError });
 
-  // §13
+  // Domain 12: Private content
   ggg_crypto_envelope : (text) -> (variant { Ok : opt KeyEnvelope; Err : GggError }) query;
   ggg_crypto_scopes : (ListArgs) -> (variant { Ok : ScopePage; Err : GggError }) query;
   ggg_crypto_access : (AccessArgs) -> (variant { Ok : PrincipalPage; Err : GggError }) query;
