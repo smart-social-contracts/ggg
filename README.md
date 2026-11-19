@@ -83,9 +83,25 @@ flowchart TB
     QN -. "guest elsewhere" .- M
 ```
 
+## Conventions
+
+Every domain uses the same conventions:
+
+| Convention | Rule |
+|---|---|
+| Time | A moment is nanoseconds since 1 January 1970 (UTC). A length of time is in nanoseconds too. |
+| Legal periods | Deadlines and terms in legislation are counted in days, working days, months or years, never in nanoseconds. A working day is neither a weekend nor a holiday in the realm's calendar. Spain, for example, counts most deadlines in working days, and Germany in calendar days. |
+| Shares and rates | Hundred-millionths: 100 % is 100 000 000. A share is at most 100 %; a tax rate may be higher. |
+| Money | A whole number in the token's smallest unit, such as cents. |
+| Area | Square metres. |
+| Ids | Entities are named by text ids, users by their Internet Computer principal. A reference to an entity that can be of several kinds carries its kind and id. |
+| Open data | Where GGG leaves a shape open, such as the facts that legislation reads, it uses one generic value type. |
+| Replies | An operation returns its result or one error, such as not found, forbidden, invalid argument or conflict. |
+| Lists | Lists come a page at a time: pass back `next` to get the following page. |
+
 ## Domains
 
-GGG groups its entities and operations into twelve domains, numbered as in `ggg.did`. They share a few conventions, such as units of time and money, which `ggg.did` sets out first. Apart from those, each domain stands alone.
+GGG groups its entities and operations into twelve domains, numbered as in `ggg.did`. They all share the conventions above. Apart from those, each domain stands alone.
 
 | # | Domain | What it covers |
 |---|---|---|
