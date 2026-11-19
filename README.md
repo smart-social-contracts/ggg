@@ -1,5 +1,7 @@
 # Generalized Global Governance (GGG)
 
+## Definitions
+
 GGG is a standard for Governance Operating Systems (GOS) running on the [Internet Computer Protocol(ICP)](wwww.internetcomputer.org).
 
 **Governance** is how a community makes and carries out its decisions: who may decide what, under which rules, and how it is recorded.
@@ -9,9 +11,11 @@ A GOS is software that transparently and verifiably runs the governance processe
 
 A GOS lets cooperation emerge, as it naturally does: corruption is harder to conceal, and cooperation can scale.
 
-GGG describes the entities, processes and conventions that a GOS should implement. For example, GGG calls each place a GOS governs a **realm**: a city such as Tallinn, a region such as Catalonia, a country such as Kenya, or any other community that governs itself.
 
-GGG has the following goals:
+
+## Goals 
+
+GGG is a GOS ontology with the following goals:
 
 1. **Implementation-agnosticism:** it says what a GOS does, not how a GOS stores or runs it. The only requirement is that it must run on the Internet Computer.
 
@@ -19,7 +23,36 @@ GGG has the following goals:
 
 3. **Familiar but abstract:** close enough to traditional governance that existing institutions map onto it, yet general enough not to be tied to any one country or to limit governance evolution. See [Reference countries](#reference-countries).
 
+
+In other words, GGG shall describe the most relevant entities, processes and conventions of traditional governance systems so they can be implemented on the Internet Computer using any programming language and tech stack available allowing working out-of-the-box with other GGG-compliant systems like GOS, MCP clients/servers, etc.
+
 **This page is the whole specification.** [`ggg.did`](ggg.did) is the same thing in Candid, the interface description language (IDL) for the ICP, and is normative for exact types and signatures. Where this page and `ggg.did` disagree, one of them needs fixing.
+
+
+## Design rationale
+
+This section is the reasoning supporting decisions made in this standard as well as the general principles followed.
+
+**1. The model holds logic, not labels.** GGG implements logic derived from legislative texts. If something cannot be turned into logic, GGG does not cover it. A field recording what someone asserts, which no rule can check, is not governance — it is a form. **What GGG does not cover it should refuse, not record.** *Test:* Name the rule that reads the field and the decision it makes. If no rule can, the field does not belong.
+
+**2. Legislation describes a process; code executes one.** Legislation describes a process with the technology of its day: registers were books, notice was paper, identity was a clerk recognising a face. Separate the **obligation** (what the rule protects — binding) from the **procedure** (the means — replaceable by any means that serves the obligation at least as well). *Test:* Ask what the rule protects. If the means can change without defeating that, the means is technology, not legislation.
+
+**3. Faithful is not correct: scrutinise the logic.** Texts amended by many hands over decades contain rules that contradict each other, rules whose conditions are unreachable, and rules left behind by repeal. Code applies an incoherent rule every time, instantly, at scale. Scrutiny produces a **finding raised openly**, never a quiet correction: the codex author has no authority to improve the legislation. *Test:* If someone compared the text with the codex, would every difference be one you could point to and justify?
+
+**4. Prevention is better than regulation.** Legislation regulates what it cannot prevent, so it provides for detection, challenge and penalty after the fact. A realm can make the act unexecutable, and then there is no breach to detect. But prevention must be **total** — it says nothing about the world outside the realm — and a refusal is still a record where what the rule protects is that attempts are visible. *Test:* Can the realm make the act unexecutable everywhere the rule reaches? Then the machinery around it is dead code. Only here? Then keep both.
+
+**5. Where the text and the code differ, the text prevails.** The legislation is the authority; the codex is a reading of it. An ambiguity is settled by reading the text again, never by appealing to what the code already does. A codex that diverges is **wrong** — a defect to fix in the codex. Where the text admits two readings, the codex takes one and records which. *Test:* If the provision and the codex disagree, which one changes? The codex. Always.
+
+**6. Every rule cites the provision it comes from.** Every member of a chapter carries a reference to the part of the legislation it implements, through `legislation="..."`. Cite the provision, not the instrument: `Ley 39/2015 Art. 21.3`, never `Ley 39/2015`. Where a member implements no provision, say so, so that an empty citation means "nobody filled this in" and nothing else. *Test:* Can a reader open what the citation names and see this rule in it? A citation they must go searching from is not a reference.
+
+**7. GGG is common ground; the particular goes in a layer.** GGG holds what holds nearly everywhere; everything particular to a jurisdiction belongs in a codex layer. This rules out borrowing a jurisdiction's **structure** as well as its categories: German statutes run `Buch > Abschnitt > Titel > §`, Spanish ones `libro > título > capítulo > sección > artículo`, and the same word does not keep its rank — a Spanish `sección` sits below a `capítulo`, while a section of a UK Act is the provision itself. So GGG names the **subject**, which every jurisdiction has, and stays out of naming divisions, which none of them share. *Test:* Does the rule, field or vocabulary name a jurisdiction's statute, agency or legal categories — directly, or through values only that jurisdiction uses? Then it is a layer, not the model.
+
+**8. Model the fact, not the claim about the fact.** Where a rule depends on something being true of the world, hold the thing that makes it true, not a party's statement that it is. Prefer, in order: a reference to an entity the realm already holds; a recorded fact written when the thing happened, by an operation with its own permission; a claim, only where the model has decided explicitly that this is outside what it covers. *Test:* Could a rule have reached a different answer if the person had typed something else, with nothing else about the realm being different? Then it is a claim.
+
+**9. An entity earns its place by being read.** Every entity, field and status should be named by some rule, operation or invariant that reads it. A field nothing reads is a comment with a schema: it costs every implementation, every interface version and every migration, and buys what a free-text field would have held.
+
+**10. How GGG is written.** **A GGG word keeps its GGG meaning** — **Short pages:** this specification is one page of at most 500 lines. **Simple English:** short sentences, common words, one idea at a time — a rule only a fluent reader can parse will be implemented wrongly. *Test:* Read it as someone who knows governance, but not GGG, and not much English. Can they say what the realm must do?
+
 
 ## Reference countries
 
@@ -27,11 +60,68 @@ GGG draws its examples from eight countries in three groups. Each group plays a 
 
 | Group | Countries | Role |
 |---|---|---|
-| EU civil-law democracies | Spain, Germany, Estonia | **The base.** GGG must fit all three. They also share a layer above them: the EU. |
-| Common-law democracies | United States, United Kingdom, India, Kenya | **The contrast.** A concept should work here too. If it does not, it is probably a European habit, not common ground. |
+| EU civil-law democracies | Spain, Germany | **The base.** GGG must fit all three. They also share a layer above them: the EU. |
+| Common-law democracies | United States, United Kingdom, India | **The contrast.** A concept should work here too. If it does not, it is probably a European habit, not common ground. |
 | One-party state | China | **The stress test** for administrative machinery, such as scale, deep layers and digital services. Never for how decisions are made. |
 
 A rule belongs in GGG when it holds in the first group and in most of the second. A rule that holds in one country only belongs in a codex layer.
+
+
+| Country | Main divisions | Basic unit | Subdivisions | Example |
+|---|---|---|---|---|
+| US | Title > Chapter | Section | (a) > (1) > (A) | Copyright Act, 17 U.S.C. § 106(1) |
+| UK | Part > Chapter | Section | (1) > (a) > (i) | Copyright, Designs and Patents Act 1988, s. 16(1)(a) |
+| India | Part > Chapter | Section | (1) > (a) > (i) | Copyright Act 1957, s. 14(a)(i) |
+| Spain | Título > Capítulo | Artículo | 1. > a) | Ley de Propiedad Intelectual, art. 17 |
+| Germany | Buch > Abschnitt | § | Absatz > Satz > Nummer | Urheberrechtsgesetz, § 15 Abs. 1 Nr. 1 UrhG |
+| China | 章 Chapter > 节 Section | 条 Article | 款 > 项 > 目 | 著作权法 (Copyright Law), 第10条第1款第(五)项 |
+
+
+| Country | Levels | Supranational | National | First level | Second level | Third level | Local level |
+|---|---|---|---|---|---|---|---|
+| US | 4–5 | — | Federal | State | County (parish in Louisiana, borough in Alaska) | Township (some states only) | Municipality (city, town, village) |
+| UK | 3–5 | — | United Kingdom | Country (England, Scotland, Wales, Northern Ireland) | County or unitary authority (England); council area (Scotland); principal area (Wales); district (NI) | District (two-tier areas of England only) | Civil parish (England); community council (Scotland, Wales) |
+| India | 5–6 | — | Union | State / Union Territory | District (grouped into divisions in some states) | Sub-district (tehsil, taluk, mandal, etc.) | Village (gram panchayat) / municipality |
+| Spain | 5–6 | European Union | Estado | Comunidad Autónoma (plus 2 ciudades autónomas) | Provincia | Comarca (some regions only) | Municipio |
+| Germany | 5–7 | European Union | Bund | Land | Regierungsbezirk (some Länder only) | Kreis / kreisfreie Stadt | Gemeinde (grouped into Amt / Verbandsgemeinde in some Länder) |
+| China | 4–5 | — | 中央 Central | 省级 Provincial (省 province, 自治区 autonomous region, 直辖市 municipality, 特别行政区 SAR) | 地级 Prefecture (地级市 prefecture-level city, 自治州 autonomous prefecture) | 县级 County (县 county, 县级市 county-level city, 市辖区 district) | 乡级 Township (乡 township, 镇 town, 街道 subdistrict) |
+
+| Category | Forbidden term | When and Why |
+|---|---|---|
+| Structure | Title | Top level in the US Code, mid level in Spain and Germany, and also the name of a law ("short title") |
+| Structure | Part | Top level in the UK and India, mid level in Germany (Teil) |
+| Structure | Book | Top level only in some codes (BGB, Spanish codes, 编 in China) |
+| Structure | Chapter | Exists everywhere but at different depths; the UK also uses "chapter" for an Act's number ("1988 c. 48") |
+| Structure | Section | The basic unit in the US, UK and India, but a mid-level grouping in Spain (Sección) and China (节) |
+| Structure | Article | The basic unit in Spain and China and in some German laws, but a document in everyday English |
+| Structure | Paragraph | Means § in Germany and Estonia, 款 in China, (1) in the US, and (a) in the UK |
+| Structure | Subsection | Means (a) in the US and (1) in the UK and India |
+| Structure | Clause | Means (i) in the US, (a) in India, and is a generic word for any provision |
+| Structure | Item / Point / Number | Different levels in China (项), the EU (point) and Germany (Nummer) |
+| Structure | Division | A structural level in Estonia (jagu) and in Australian or Canadian statutes, and also an administrative level in India |
+| Structure | Schedule / Annex | A real structural component in the UK and India, and in EU texts |
+| Topic | Subject matter | The standard heading of Article 1 in EU acts, so it can be mistaken for a pointer to that article |
+| Topic | Subject | Also the subject of an RDF triple, and a "data subject" in data protection law |
+| Topic | Scope | The standard heading of Article 2 in EU acts, meaning who and what the law applies to |
+| Topic | Object / Objective / Purpose | "Objects clause" is a legal term; "object" is also an RDF and programming term |
+| Instrument | Statute | Means "act of parliament" in common law systems, "articles of association" in continental Europe, and is also used for treaties (the Rome Statute) |
+| Instrument | Act | Either a specific type of law or a generic "legal act" (EU usage) |
+| Instrument | Law | Means one statute, the whole legal system, or Gesetz/ley/法律 specifically |
+| Instrument | Regulation | Means a binding EU act, US agency rules, or regulation in general |
+| Instrument | Code | Means a codified law (Civil Code), a compilation (US Code), or software code |
+| Instrument | Rule | Means a court rule, a type of statutory instrument, or a generic norm |
+| Jurisdiction | State | Means a sovereign country (Spain's Estado), a US state, or a German Land (often translated "state"); also a programming term |
+| Jurisdiction | Country | A sovereign state, but also England, Scotland, Wales and Northern Ireland inside the UK |
+| Jurisdiction | Nation / National | England and Scotland are often called "nations"; "national" can mean UK-wide or Scotland-wide |
+| Jurisdiction | Federal | Applies to the US and Germany but not to Spain, the UK or China, which are not federations |
+| Jurisdiction | Region / Regional | English regions are statistical only, Comunidad Autónoma is often translated "region", China has autonomous regions, and the EU uses "region" in NUTS |
+| Jurisdiction | Province | First level in China (省), second level in Spain (Provincia) |
+| Jurisdiction | County | Second level in the US and UK, but 县 in China (translated "county") is the fourth level |
+| Jurisdiction | District | Means a UK district, an Indian district, Germany's Kreis or Regierungsbezirk, or China's 市辖区, all at different levels |
+| Jurisdiction | Municipality | Local level in the US and Spain, but 直辖市 in China (translated "municipality") is a provincial-level unit |
+| Jurisdiction | City | A US local government, a German kreisfreie Stadt, or a Chinese 地级市 or 县级市, each at a different level |
+| Jurisdiction | Township | An optional US level, but 乡 in China (translated "township") is a formal level |
+
 
 ## Architecture
 
@@ -125,6 +215,15 @@ Legislation comes in layers. A realm can follow other realms, such as its region
 
 
 splitting and merging
+
+
+
+## Codex
+
+Codex any piece of code that translates legislation into GGG-compliant logic 
+table 2 dimensions layer and subject matter
+example: Social Security legislation can use ggg domain tax, identity, etc.
+
 
 
 ## Permissioning
