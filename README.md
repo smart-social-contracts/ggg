@@ -85,7 +85,22 @@ flowchart TB
 
 ## Domains
 
-GGG groups its entities and operations into domains, one section of `ggg.did` each: identity and membership, departments and organizations, governance, finance, assets, licensing, justice, procurement, quarters and federation, codex and audit, realm setup, and private content. Apart from a few shared types, each section stands alone.
+GGG groups its entities and operations into twelve domains, one section of `ggg.did` each. Apart from a few shared types, each section stands alone.
+
+| Domain | What it covers |
+|---|---|
+| Identity and membership | Users and members, identity proofs, certified attributes, invites, profiles, permissions and delegation |
+| Departments and organizations | Departments and their voting policies, outside organizations, positions and appointments |
+| Governance | Proposals and votes, mandates, contracts and their amendments, and the realm's voting rules |
+| Finance | Treasury, tokens, funds, budgets, a double-entry ledger, invoices, transfers, payroll, loans and taxes |
+| Assets | Land parcels with their assessed value and zones, and credentials issued as tokens |
+| Licensing | Licences, the procedure for each kind (including what silence after a deadline means, as in Spanish law) and petitions |
+| Justice | Courts, judges, disputes, cases, evidence, verdicts, appeals and penalties |
+| Procurement | Tenders and their lots, sealed bids, scoring, awards and published notices |
+| Quarters and federation | The capital and its quarters, federal votes, swept funds, and links to realms whose legislation it follows |
+| Codex and audit | The codex, legislation releases, notifications, messages to outside bodies, scheduled tasks and the event log |
+| Realm setup | The realm's settings, setup and launch, upgrades and monitoring |
+| Private content | Encrypted documents, the keys to read them, and sharing or publishing them |
 
 ## Layers
 
