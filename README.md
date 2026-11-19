@@ -225,7 +225,7 @@ GGG groups its entities and operations into twelve domains, numbered as in `ggg.
 
 Legislation comes in layers. A realm can follow other realms, such as its region and its country, and add its own layer on top. A town in Catalonia, for example, follows the EU, Spain and Catalonia, and adds its own bylaws. Each source publishes releases, with the date each comes into force. A follower reports what it runs, and is non-compliant from the first release it misses. In a federation, a new codex reaches every quarter at the same moment.
 
-Layers split and merge. One source has many followers: every town in Spain follows Spain's layer. A realm can also follow a source beside it, not only those above it: a town in a metropolitan area can follow the area's water authority as well as its own region.
+**Splitting and merging** (under study). Splitting a realm: some of its quarters move to a different codex. Merging realms: their quarters follow a new capital and share its codex.
 
 ## Codex
 
