@@ -1,5 +1,5 @@
 // GGG 0.3.0: the GGG model in Candid.
-// Model: https://github.com/smart-social-contracts/ggg/blob/main/model/README.md
+// Specification: https://github.com/smart-social-contracts/ggg/blob/main/README.md
 //
 // One record per model entity, with the model's fields, and one method per model operation.
 // Every entity is here; the methods cover the operations bound so far.

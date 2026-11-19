@@ -2,7 +2,7 @@
 
 ## Definitions
 
-GGG is a standard for Governance Operating Systems (GOS) running on the [Internet Computer Protocol(ICP)](wwww.internetcomputer.org).
+GGG is a standard for Governance Operating Systems (GOS) running on the [Internet Computer Protocol (ICP)](https://internetcomputer.org).
 
 **Governance** is how a community makes and carries out its decisions: who may decide what, under which rules, and how it is recorded.
 An **operating system** is the software that manages a computer's resources and lets programs share them safely.
