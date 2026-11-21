@@ -513,8 +513,9 @@ type Budget = record {
   proposal : opt text;
   // Of an adopted expense line: money set aside for a spending not yet committed, and money committed to
   // a third party not yet charged. What is left, planned - reserved - committed - actual, is never
-  // negative. Zero on any other line.
-  reserved : Money;
+  // negative. Zero on any other line. Quoted because `reserved` is a Candid keyword; on the wire it is the
+  // same field.
+  "reserved" : Money;
   committed : Money;
 };
 
