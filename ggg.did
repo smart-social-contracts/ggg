@@ -985,7 +985,7 @@ type Realm = record {
   quarter_join_mode : opt text;
   // The realms this one syncs legislation from, each with its link status.
   sync_sources : vec SyncSource;
-  // The realms this one belongs to as a member realm, each with its link status.
+  // The realms this one is a member of, each with its link status.
   memberships : vec Membership;
   trusted_principals : vec principal;
   require_marketplace_approval : bool;
@@ -1125,13 +1125,13 @@ type Follower = record {
   reported_at : opt Timestamp;
 };
 
-// Member realms: a realm can belong to other realms, and they to it, over links both sides vote on,
-// as for legislation. Membership is a link of its own: a realm can follow a realm it does not belong
-// to, and belong to one it does not follow.
+// Member realms: a realm can be a member of other realms, and they of it, over links both sides vote
+// on, as for legislation. Membership is a link of its own: a realm can follow a realm it is not a
+// member of, and be a member of one it does not follow.
 
-// On a member realm: a realm it belongs to, by its capital.
+// On a member realm: a realm it is a member of, by its capital.
 type Membership = record { realm : principal; name : text; status : LinkStatus };
-// On a realm: a realm that belongs to it, `id` its capital as text, with its link status and the
+// On a realm: a realm that is a member of it, `id` its capital as text, with its link status and the
 // population of its last report.
 type MemberRealm = record {
   id : text;
@@ -2151,7 +2151,7 @@ type FollowerArgs = record { follower : principal };
 type FollowerReportArgs = record { layers : vec ReportedLayer; compliance : Compliance; population : nat };
 type FollowerPage = record { items : vec Follower; next : opt text };
 // What the caller is to the receiver, by the record the receiver keeps of it: its sync source or its
-// follower, over a legislation link; a realm it belongs to (Membership) or its member realm, over a
+// follower, over a legislation link; a realm it is a member of (Membership) or its member realm, over a
 // membership link.
 type LinkSide = variant { SyncSource; Follower; Membership; MemberRealm };
 // From the capital at the other side of a link: the link's new status after the caller's vote.
@@ -2160,7 +2160,7 @@ type LinkNotifyArgs = record { side : LinkSide; status : LinkStatus };
 type MembershipAddArgs = record { realm : principal; name : text };
 type MembershipRemoveArgs = record { realm : principal };
 type MemberRealmArgs = record { member : principal };
-// What a member realm's capital reports to a realm it belongs to: its population, its own count of
+// What a member realm's capital reports to a realm it is a member of: its population, its own count of
 // its members, and its leg of an open vote of member realms.
 type MemberRealmReportArgs = record { population : nat; leg : opt FederalVoteLeg };
 type MemberRealmPage = record { items : vec MemberRealm; next : opt text };

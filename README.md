@@ -154,7 +154,7 @@ The main parts of a GOS:
 
 - **Realm:** the community a GOS governs.
 - **Quarter:** part of a large realm, run as a realm of its own and coordinated by a capital.
-- **Member realm:** a realm that belongs to another realm. It votes there through its own votes, and pays there what it is billed.
+- **Member realm:** a realm that is a member of another realm. It votes there through its own votes, and pays there what it is billed.
 - **User:** a person or an agent, identified by an Internet Computer principal, who becomes a member by joining a realm.
 - **Permission:** the right to perform an operation, held directly or through a profile or department. Members can let a delegate act for them.
 - **Organizations:** bodies outside the realm's government, such as companies, parties, unions and associations.
@@ -188,14 +188,14 @@ flowchart TB
 
 ### Member realms
 
-Some realms belong to other realms. Towns form an association to run a service together (in Spain a mancomunidad, Ley 7/1985 Art. 44), each Land belongs to the Bund, and Spain and Germany belong to the EU. A realm that belongs to another is its **member realm**. It keeps its own members, codex and votes. The realm it belongs to may have few members of its own, such as its officials, and still govern a great deal.
+Some realms are members of other realms. Towns form an association to run a service together (in Spain a mancomunidad, Ley 7/1985 Art. 44), each Land is a member of the Bund, and Spain and Germany are members of the EU. A realm that is a member of another is its **member realm**. It keeps its own members, codex and votes. The realm it is a member of may have few members of its own, such as its officials, and still govern a great deal.
 
-- **A link both sides vote on.** A realm asks to belong with `ggg_membership_add`, and the other realm accepts it with `ggg_member_realm_accept`. Either side ends the link by its own vote. Leaving cannot be blocked, as with a quarter's secession: it withdraws the member realm's open legs, and invoices already billed stay as they are.
-- **Belonging is not following.** A membership link is separate from a legislation link. Norway, Iceland and Liechtenstein take the EU's single-market legislation without belonging to the EU. A realm's legislation may make one link a condition of the other.
+- **A link both sides vote on.** A realm asks to become a member with `ggg_membership_add`, and the other realm accepts it with `ggg_member_realm_accept`. Either side ends the link by its own vote. Leaving cannot be blocked, as with a quarter's secession: it withdraws the member realm's open legs, and invoices already billed stay as they are.
+- **Membership is not following.** A membership link is separate from a legislation link. Norway, Iceland and Liechtenstein take the EU's single-market legislation without being members of the EU. A realm's legislation may make one link a condition of the other.
 - **Votes of member realms.** A federal vote can be cast by member realms instead of quarters. Each member realm decides its leg by its own rules, through its members or a department such as its government, and reports the result with its counts. The vote's rule, fixed when it opens, says how the legs count: one per realm, weighted by population, or the members' votes added up, alone or together. The Bundesrat gives each Land three to six votes by population (Grundgesetz Art. 51(2)). The EU's qualified majority needs 55 % of the member realms, holding 65 % of the population (TEU Art. 16(4)).
 - **People are heard through their realm.** A leg carries counts, never names: the realm learns how many people in a member realm voted yes, not who. A person who must act in the realm itself, such as an official, joins it as a member.
 - **Money both ways.** A realm bills a member realm with an invoice whose payer is the member realm, and the member realm pays it by its own rules. The EU's budget comes from its own resources, which include contributions from its members (TFEU Art. 311). A realm pays a member realm by a transfer that names it the same way.
-- **Reports.** A member realm reports its population, its own count of its members, to each realm it belongs to. It finds their open votes with `ggg_federal_vote_list`, as a follower checks its sync sources for new releases.
+- **Reports.** A member realm reports its population, its own count of its members, to each realm it is a member of. It finds their open votes with `ggg_federal_vote_list`, as a follower checks its sync sources for new releases.
 
 ```mermaid
 flowchart TB
