@@ -92,9 +92,11 @@ type GuestUser = record {
   permissions : vec text;
 };
 
+// A person. One with no account of their own, such as a child, has no `user`: a person with a verified
+// `guardian_of` attribute naming them acts for them.
 type Human = record {
   id : text;
-  user : principal;
+  user : opt principal;
   date_of_birth : opt Date;
   h3_index : opt text;
 };
@@ -123,6 +125,8 @@ type AttributeStatus = variant { Pending; Verified; Rejected };
 // values are legislation's; GGG records the attestation. `kind` and `value` are in clear, and readable
 // only by the person, by the holders of attribute.review while it awaits review and by the codex;
 // the audit log never holds them.
+// A standard kind is `guardian_of`: its value is the id of the Human the person is the legal guardian of, a
+// parent or a tutor, and whoever keeps the civil register certifies it.
 type Attribute = record {
   id : text;
   human : text;
@@ -735,7 +739,9 @@ type Zone = record {
 
 // ---- Domain 6: Entitlements
 
-type EntitlementStatus = variant { Applied; Active; Rejected; Suspended; Revoked; Expired };
+// Offered: granted, and waiting for the holder to accept it (enrol, pay a fee) by `accept_by`; an offer not
+// accepted by then is Expired.
+type EntitlementStatus = variant { Applied; Offered; Active; Rejected; Suspended; Revoked; Expired };
 
 // A right a department grants a holder by a decision: a permit, a school place, a benefit. `kind` says
 // which, and the Procedure of that kind says how it is decided.
@@ -749,6 +755,8 @@ type Entitlement = record {
   // The day a decision is due, from the Procedure of the entitlement's kind.
   decision_due : opt Date;
   issued_at : opt Timestamp;
+  // The last day to accept an Offered entitlement, from the Procedure's `acceptance`.
+  accept_by : opt Date;
   expires_at : opt Date;
   evidence_ref : opt text;
   conditions : Value;
@@ -759,14 +767,16 @@ type Entitlement = record {
 // What the realm's silence past a deadline means: Positive grants, Negative refuses.
 type Silence = variant { Positive; Negative };
 
-// How a kind of application is decided: who starts it, the deadline for a decision, and what the realm's
-// silence means. Keyed by the entitlement kind it governs.
+// How a kind of application is decided: who starts it, the deadline for a decision, what the realm's
+// silence means, and how long the holder has to accept a grant (`acceptance`; with none, a grant is Active at
+// once). Keyed by the entitlement kind it governs.
 type Procedure = record {
   id : text;
   initiated_by : text;
   matter : opt text;
   decision_deadline : opt Period;
   silence : opt Silence;
+  acceptance : opt Period;
   legislation : opt text;
   facts : Value;
 };
@@ -1363,6 +1373,11 @@ type IdentitySubmitArgs = record {
 };
 type IdentityReviewArgs = record { identity : text; status : variant { Verified; Rejected } };
 
+// Registers a person with no account of their own, such as the caller's child: creates the Human and the
+// caller's `guardian_of` attribute naming them, pending review. `ref` points to the proof (a birth certificate,
+// a court order), stored encrypted or off-chain.
+type DependantRegisterArgs = record { date_of_birth : opt Date; ref : text };
+
 // For the caller's own person. `ref` points to the proof, stored encrypted or off-chain.
 type AttributeSubmitArgs = record {
   kind : text;
@@ -1900,6 +1915,7 @@ type ProcedureDefineArgs = record {
   matter : opt text;
   decision_deadline : opt Period;
   silence : opt Silence;
+  acceptance : opt Period;
   legislation : opt text;
   facts : opt Value;
 };
@@ -1915,7 +1931,7 @@ type RequestSetDueArgs = record { request : text; due_at : Date; extension_limit
 // `decision` is the realm's word for the outcome (`granted`, `refused`, `refused_by_silence`).
 type RequestDecideArgs = record { request : text; decision : text; reply : opt text };
 
-// For the caller, or an organization they administer.
+// For the caller, an organization they administer, or a person they are the verified guardian of.
 // `land` names the parcel the entitlement is for, which must exist (NotFound), so that legislation on the
 // parcel's zones reaches the decision.
 type EntitlementApplyArgs = record {
@@ -1927,6 +1943,8 @@ type EntitlementApplyArgs = record {
   on_behalf_of : opt principal;
   land : opt text;
 };
+// By the holder, or the holder's verified guardian.
+type EntitlementAcceptArgs = record { entitlement : text; on_behalf_of : opt principal };
 type EntitlementRenewArgs = record { entitlement : text; evidence_ref : opt text; on_behalf_of : opt principal };
 type EntitlementDecideArgs = record {
   entitlement : text;
@@ -2425,6 +2443,7 @@ service : {
   ggg_identity_submit : (IdentitySubmitArgs) -> (variant { Ok : Identity; Err : GggError });
   ggg_identity_review : (IdentityReviewArgs) -> (variant { Ok : Identity; Err : GggError });
   ggg_attribute_submit : (AttributeSubmitArgs) -> (variant { Ok : Attribute; Err : GggError });
+  ggg_dependant_register : (DependantRegisterArgs) -> (variant { Ok : Attribute; Err : GggError });
   ggg_attribute_review : (AttributeReviewArgs) -> (variant { Ok : Attribute; Err : GggError });
   ggg_invite_create : (InviteCreateArgs) -> (variant { Ok : InviteCreated; Err : GggError });
   ggg_invite_revoke : (text) -> (variant { Ok : Invite; Err : GggError });
@@ -2563,6 +2582,7 @@ service : {
   ggg_request_get : (RequestGetArgs) -> (variant { Ok : opt Request; Err : GggError }) query;
   ggg_request_list : (RequestListArgs) -> (variant { Ok : RequestPage; Err : GggError }) query;
   ggg_entitlement_apply : (EntitlementApplyArgs) -> (variant { Ok : Entitlement; Err : GggError });
+  ggg_entitlement_accept : (EntitlementAcceptArgs) -> (variant { Ok : Entitlement; Err : GggError });
   ggg_entitlement_renew : (EntitlementRenewArgs) -> (variant { Ok : Entitlement; Err : GggError });
   ggg_entitlement_decide : (EntitlementDecideArgs) -> (variant { Ok : Entitlement; Err : GggError });
   ggg_entitlement_suspend : (EntitlementSuspendArgs) -> (variant { Ok : Entitlement; Err : GggError });
