@@ -239,7 +239,7 @@ GGG groups its entities and operations into twelve domains, numbered as in `ggg.
 | 3 | Governance | Proposals and votes, mandates, contracts and their amendments, and the realm's voting rules |
 | 4 | Finance | Treasury, tokens, funds, budgets, a double-entry ledger, invoices, transfers, payroll, loans and taxes |
 | 5 | Assets | Land parcels with their assessed value and zones, and credentials issued as tokens |
-| 6 | Entitlements | Entitlements a department grants by a decision (permits, school places, benefits), the procedure for each kind (including what silence after a deadline means, as in Spanish law) and petitions |
+| 6 | Entitlements | Entitlements a department grants by a decision (permits, school places, benefits), the procedure for each kind (including what silence after a deadline means, as in Spanish law), petitions, and how a filing is routed to a department, taken by one of its members and answered |
 | 7 | Justice | Courts, judges, disputes, cases, evidence, verdicts, appeals and penalties |
 | 8 | Procurement | Tenders and their lots, sealed bids, scoring, awards and published notices |
 | 9 | Quarters and federation | The capital and its quarters, federal votes, swept funds, links to realms whose legislation it follows, and member realms |
@@ -272,6 +272,7 @@ Private content, such as personal data, is kept encrypted.
 - **Access can end.** Keys can be revoked and a document deleted with all its keys. Revoking stops future reading only.
 - **Publishing is explicit.** A document becomes public only when published, in clear, optionally in an official journal.
 - **Records hold no secrets.** A request or message that carries personal data refers to an encrypted document. The audit log leaves out secrets such as invite codes.
+- **A filing's details go to its department.** Its subject is in clear for whoever routes filings; its details and its messages are encrypted for the filer and the members of the department it is with, and who filed is private too when its procedure says so. When it moves on, someone who can read it shares it: the department it leaves or, for a filing routed after it was made, its filer.
 - **Sealed until opened.** Court evidence stays encrypted, and a sealed bid shows no price until revealed.
 
 Certified attributes are the one exception: they are stored in clear, but only the person, their reviewers and the codex can read them.

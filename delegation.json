@@ -296,6 +296,7 @@
     "procedure_list": { "tier": "direct", "group": "see" },
     "request_get": { "tier": "direct", "group": "see" },
     "request_list": { "tier": "direct", "group": "office" },
+    "filing_messages": { "tier": "direct", "group": "see" },
     "entitlement_apply": { "tier": "direct", "group": "filings" },
     "entitlement_accept": { "tier": "direct", "group": "filings" },
     "entitlement_renew": { "tier": "direct", "group": "filings" },
@@ -306,6 +307,9 @@
     "request_file": { "tier": "direct", "group": "filings" },
     "request_set_due": { "tier": "direct", "group": "office" },
     "request_decide": { "tier": "direct", "group": "office" },
+    "filing_route": { "tier": "direct", "group": "office" },
+    "filing_assign": { "tier": "direct", "group": "office" },
+    "filing_message": { "tier": "direct", "group": "filings" },
 
     "dispute_get": { "tier": "direct", "group": "see" },
     "dispute_list_all": { "tier": "direct", "group": "office" },

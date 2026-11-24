@@ -749,7 +749,14 @@ type Entitlement = record {
   id : text;
   kind : text;
   holder : Ref;
-  issued_by : text;
+  // Who applied: the holder, their guardian, or an administrator of the holding organization.
+  by : Ref;
+  // What the application is about, in clear and with no personal data: read by whoever routes filings.
+  subject : text;
+  // The department the application is with, which decides it and, once granted, issued it, and the member
+  // of it who took it; none while it waits to be routed.
+  department : opt text;
+  assignee : opt principal;
   status : EntitlementStatus;
   applied_at : Timestamp;
   // The day a decision is due, from the Procedure of the entitlement's kind.
@@ -767,13 +774,17 @@ type Entitlement = record {
 // What the realm's silence past a deadline means: Positive grants, Negative refuses.
 type Silence = variant { Positive; Negative };
 
-// How a kind of application is decided: who starts it, the deadline for a decision, what the realm's
-// silence means, and how long the holder has to accept a grant (`acceptance`; with none, a grant is Active at
-// once). Keyed by the entitlement kind it governs.
+// How a kind of filing is handled, an application for an entitlement or a request: who starts it, the
+// department it goes to (with none, someone who routes filings sends each one on), the deadline for a
+// decision, what the realm's silence means, how long the holder has to accept a grant (`acceptance`; with
+// none, a grant is Active at once), and whether who filed is private (`private_filer`: then only the filer
+// and the department read it). Keyed by the kind it governs.
 type Procedure = record {
   id : text;
   initiated_by : text;
   matter : opt text;
+  department : opt text;
+  private_filer : bool;
   decision_deadline : opt Period;
   silence : opt Silence;
   acceptance : opt Period;
@@ -790,14 +801,33 @@ type Request = record {
   id : text;
   kind : text;
   by : Ref;
+  // What the request is about, in clear and with no personal data: read by whoever routes filings.
+  subject : text;
   body : Value;
   filed_at : Timestamp;
   due_at : opt Date;
   extension_limit : opt Date;
+  // The department the request is with, and the member of it who took it; none while it waits to be routed.
+  department : opt text;
+  assignee : opt principal;
   status : RequestStatus;
   decision : opt text;
   reply : opt text;
   decided_at : opt Timestamp;
+};
+
+// A message on a filing, between its filer and the department it is with. `body` refers to an encrypted
+// document, as every message that carries personal data does. `reply_by` asks the filer for something by
+// that day, such as a missing document; legislation may stop the decision clock until then.
+type FilingMessage = record {
+  id : text;
+  filing : Ref;
+  // The filer's Ref, or the Department the filing is with; `author` is who wrote it.
+  from : Ref;
+  author : principal;
+  body : text;
+  reply_by : opt Date;
+  at : Timestamp;
 };
 
 // ---- Domain 7: Justice
@@ -1270,7 +1300,8 @@ type Published = record { ref : text; hash : text };
 
 type Document = record {
   id : text;
-  department : text;
+  // None for the private part of a filing not yet routed, whose key only its filer holds.
+  department : opt text;
   title : text;
   // What the document is (minutes, an ordinance, an award), and the BCP 47 tags of its languages.
   kind : opt text;
@@ -1895,12 +1926,16 @@ type CredentialRevokeArgs = record { schema : text; token_id : nat; organization
 
 // Domain 6: Entitlements
 
+// `routed` false lists the applications waiting to be routed.
 type EntitlementListArgs = record {
   cursor : opt text;
   limit : opt nat32;
   holder : opt Ref;
   kind : opt text;
   status : opt EntitlementStatus;
+  department : opt text;
+  assignee : opt principal;
+  routed : opt bool;
 };
 type EntitlementPage = record { items : vec Entitlement; next : opt text };
 
@@ -1913,6 +1948,8 @@ type ProcedureDefineArgs = record {
   kind : text;
   initiated_by : text;
   matter : opt text;
+  department : opt text;
+  private_filer : opt bool;
   decision_deadline : opt Period;
   silence : opt Silence;
   acceptance : opt Period;
@@ -1922,20 +1959,52 @@ type ProcedureDefineArgs = record {
 type ProcedurePage = record { items : vec Procedure; next : opt text };
 
 // For the caller, or an organization they administer.
-type RequestFileArgs = record { kind : text; body : Value; organization : opt text; on_behalf_of : opt principal };
+// `department` is the filer's choice; with none, the Procedure's for the kind, if it names one.
+type RequestFileArgs = record {
+  kind : text;
+  subject : text;
+  body : Value;
+  department : opt text;
+  organization : opt text;
+  on_behalf_of : opt principal;
+};
 type RequestGetArgs = record { id : text; on_behalf_of : opt principal };
-type RequestListArgs = record { cursor : opt text; limit : opt nat32; kind : opt text; status : opt RequestStatus };
+// `routed` false lists those waiting to be routed.
+type RequestListArgs = record {
+  cursor : opt text;
+  limit : opt nat32;
+  kind : opt text;
+  status : opt RequestStatus;
+  department : opt text;
+  assignee : opt principal;
+  routed : opt bool;
+};
 type RequestPage = record { items : vec Request; next : opt text };
 // Sets or moves the deadline, never past `extension_limit`, which is set once (Conflict after that).
 type RequestSetDueArgs = record { request : text; due_at : Date; extension_limit : opt Date };
 // `decision` is the realm's word for the outcome (`granted`, `refused`, `refused_by_silence`).
 type RequestDecideArgs = record { request : text; decision : text; reply : opt text };
 
+// A filing is a request, or an application for an entitlement: `filing` is its Ref.
+// Sends it to `department`, or with none back to whoever routes filings: by a holder of filing.route, or by a
+// member of the department it is with. The member who took it no longer has it.
+type FilingRouteArgs = record { filing : Ref; department : opt text };
+// Who handles it in its department: the caller takes it (any member), the head gives it to a member, and with
+// no `assignee` the member who has it, or the head, gives it back.
+type FilingAssignArgs = record { filing : Ref; assignee : opt principal };
+type FilingHandling = record { filing : Ref; department : opt text; assignee : opt principal };
+// By the filer (or their guardian or delegate), or by a member of the department the filing is with.
+type FilingMessageArgs = record { filing : Ref; body : text; reply_by : opt Date; on_behalf_of : opt principal };
+type FilingMessagesArgs = record { filing : Ref; cursor : opt text; limit : opt nat32; on_behalf_of : opt principal };
+type FilingMessagePage = record { items : vec FilingMessage; next : opt text };
+
 // For the caller, an organization they administer, or a person they are the verified guardian of.
+// `department` is the applicant's choice; with none, the Procedure's for the kind, if it names one.
 // `land` names the parcel the entitlement is for, which must exist (NotFound), so that legislation on the
 // parcel's zones reaches the decision.
 type EntitlementApplyArgs = record {
   kind : text;
+  subject : text;
   holder : opt Ref;
   department : opt text;
   evidence_ref : opt text;
@@ -2387,10 +2456,14 @@ type WrappedKey = record { "principal" : principal; wrapped_dek : blob };
 type KeyGrantArgs = record { scope : text; keys : vec WrappedKey };
 type KeyRevokeArgs = record { scope : text; principals : vec principal };
 
-// Stores a new document, or replaces `document`.
+// Stores a new document, or replaces `document`. With `filing`, its filer stores the private part of their filing,
+// or of a message on it, without document.manage: in the filing's department, with keys for themselves and that
+// department's members only; while the filing waits to be routed, with no department and a key for themselves
+// alone, and again in its department once it is routed.
 type DocumentStoreArgs = record {
   document : opt text;
-  department : text;
+  department : opt text;
+  filing : opt Ref;
   title : text;
   kind : opt text;
   languages : vec text;
@@ -2581,6 +2654,7 @@ service : {
   ggg_procedure_list : (ListArgs) -> (variant { Ok : ProcedurePage; Err : GggError }) query;
   ggg_request_get : (RequestGetArgs) -> (variant { Ok : opt Request; Err : GggError }) query;
   ggg_request_list : (RequestListArgs) -> (variant { Ok : RequestPage; Err : GggError }) query;
+  ggg_filing_messages : (FilingMessagesArgs) -> (variant { Ok : FilingMessagePage; Err : GggError }) query;
   ggg_entitlement_apply : (EntitlementApplyArgs) -> (variant { Ok : Entitlement; Err : GggError });
   ggg_entitlement_accept : (EntitlementAcceptArgs) -> (variant { Ok : Entitlement; Err : GggError });
   ggg_entitlement_renew : (EntitlementRenewArgs) -> (variant { Ok : Entitlement; Err : GggError });
@@ -2591,6 +2665,9 @@ service : {
   ggg_request_file : (RequestFileArgs) -> (variant { Ok : Request; Err : GggError });
   ggg_request_set_due : (RequestSetDueArgs) -> (variant { Ok : Request; Err : GggError });
   ggg_request_decide : (RequestDecideArgs) -> (variant { Ok : Request; Err : GggError });
+  ggg_filing_route : (FilingRouteArgs) -> (variant { Ok : FilingHandling; Err : GggError });
+  ggg_filing_assign : (FilingAssignArgs) -> (variant { Ok : FilingHandling; Err : GggError });
+  ggg_filing_message : (FilingMessageArgs) -> (variant { Ok : FilingMessage; Err : GggError });
 
   // Domain 7: Justice
   ggg_dispute_get : (DisputeGetArgs) -> (variant { Ok : opt Dispute; Err : GggError }) query;
