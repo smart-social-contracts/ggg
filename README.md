@@ -133,6 +133,7 @@ A rule belongs in GGG when it holds in the first group and in most of the second
 | Jurisdiction | Municipality | Local level in the US and Spain, but 直辖市 in China (translated "municipality") is a provincial-level unit |
 | Jurisdiction | City | A US local government, a German kreisfreie Stadt, or a Chinese 地级市 or 县级市, each at a different level |
 | Jurisdiction | Township | An optional US level, but 乡 in China (translated "township") is a formal level |
+| Decision | Licence / License | Permission to do what is otherwise forbidden (build, trade, drive) in every reference country, so it does not fit a school place or a benefit; also a software licence, and spelled one way in the UK and India and another in the US. GGG's word for what a department grants by a decision is **entitlement** |
 
 
 ## Architecture
@@ -238,7 +239,7 @@ GGG groups its entities and operations into twelve domains, numbered as in `ggg.
 | 3 | Governance | Proposals and votes, mandates, contracts and their amendments, and the realm's voting rules |
 | 4 | Finance | Treasury, tokens, funds, budgets, a double-entry ledger, invoices, transfers, payroll, loans and taxes |
 | 5 | Assets | Land parcels with their assessed value and zones, and credentials issued as tokens |
-| 6 | Licensing | Licences, the procedure for each kind (including what silence after a deadline means, as in Spanish law) and petitions |
+| 6 | Entitlements | Entitlements a department grants by a decision (permits, school places, benefits), the procedure for each kind (including what silence after a deadline means, as in Spanish law) and petitions |
 | 7 | Justice | Courts, judges, disputes, cases, evidence, verdicts, appeals and penalties |
 | 8 | Procurement | Tenders and their lots, sealed bids, scoring, awards and published notices |
 | 9 | Quarters and federation | The capital and its quarters, federal votes, swept funds, links to realms whose legislation it follows, and member realms |

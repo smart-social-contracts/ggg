@@ -38,7 +38,7 @@
     {
       "id": "filings",
       "label": "Applications, declarations and bids",
-      "summary": "Tax declarations, licence applications, bids, registering an organisation, requests for information.",
+      "summary": "Tax declarations, applications for an entitlement, bids, registering an organisation, requests for information.",
       "risk": "A declaration binds you to what it declares, and a bid to its price.",
       "longest": 31536000
     },
@@ -102,7 +102,7 @@
     {
       "id": "sign",
       "label": "Sign acts of my office",
-      "summary": "Verdicts, licence decisions, credentials, freezes, awards, and reading the attributes awaiting your review; every act waits for your own approval.",
+      "summary": "Verdicts, entitlement decisions, credentials, freezes, awards, and reading the attributes awaiting your review; every act waits for your own approval.",
       "risk": "You are personally accountable for every act you sign.",
       "longest": 31536000
     },
@@ -290,16 +290,16 @@
     "credential_issue": { "tier": "confirm", "group": "sign" },
     "credential_revoke": { "tier": "confirm", "group": "sign" },
 
-    "license_list": { "tier": "none" },
-    "license_verify": { "tier": "none" },
+    "entitlement_list": { "tier": "none" },
+    "entitlement_verify": { "tier": "none" },
     "procedure_list": { "tier": "direct", "group": "see" },
     "request_get": { "tier": "direct", "group": "see" },
     "request_list": { "tier": "direct", "group": "office" },
-    "license_apply": { "tier": "direct", "group": "filings" },
-    "license_renew": { "tier": "direct", "group": "filings" },
-    "license_decide": { "tier": "confirm", "group": "sign" },
-    "license_suspend": { "tier": "confirm", "group": "sign" },
-    "license_revoke": { "tier": "confirm", "group": "sign" },
+    "entitlement_apply": { "tier": "direct", "group": "filings" },
+    "entitlement_renew": { "tier": "direct", "group": "filings" },
+    "entitlement_decide": { "tier": "confirm", "group": "sign" },
+    "entitlement_suspend": { "tier": "confirm", "group": "sign" },
+    "entitlement_revoke": { "tier": "confirm", "group": "sign" },
     "procedure_define": { "tier": "direct", "group": "admin" },
     "request_file": { "tier": "direct", "group": "filings" },
     "request_set_due": { "tier": "direct", "group": "office" },
