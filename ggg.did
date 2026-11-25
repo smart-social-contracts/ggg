@@ -1,32 +1,37 @@
-// GGG 0.1.0: the GGG model in Candid.
-// Model: https://github.com/smart-social-contracts/ggg/blob/main/model/README.md
+// GGG 0.3.0: the GGG model in Candid.
+// Specification: https://github.com/smart-social-contracts/ggg/blob/main/README.md
 //
 // One record per model entity, with the model's fields, and one method per model operation.
 // Every entity is here; the methods cover the operations bound so far.
 
-// ---- Conventions (model §1)
+// ---- Conventions
 
 // Nanoseconds since 1970-01-01 UTC, as returned by ic0.time.
 type Timestamp = nat64;
 // Nanoseconds.
 type Duration = nat64;
+// A calendar day in the realm's time zone, written "YYYY-MM-DD" (ISO 8601), such as "2027-01-01". Something
+// due on a date is due until the end of that day, and a range of dates includes its first and last day. A
+// text that is not a real date is InvalidArgument. Days the law names are Dates; moments the GOS records are
+// Timestamps.
+type Date = text;
 
 // A count of calendar units: three months is three months, whatever the days. Deadlines and terms in
 // legislation are Periods, never Durations. A WorkingDay is a day that is neither a weekend day nor a
 // holiday in the realm's calendar, taken in the realm's time zone; GGG names the unit and the GOS
 // counts it, failing closed when its calendar has no entries for a year the count reaches. Periods
 // compare only within one unit: comparing two units fails closed, with no conversion through the
-// calendar (model §1).
+// calendar.
 type PeriodUnit = variant { Day; WorkingDay; Month; Year };
 type Period = record { count : nat; unit : PeriodUnit };
 
 // A ratio in hundred-millionths: 100 % is 100 000 000, 1 % is 1 000 000 and 0.123456 % is 123 456.
-// One scale for quorum, threshold, share, weight and tax rate (model §1). A Ratio is at most 100 %; a
-// Rate, for tax rates and coefficients, which legislation takes above 100 %, is at most 100 times that.
+// One scale for quorum, threshold, share, weight and tax rate. A Ratio is at most 100 %; a
+// Rate, for tax rates and coefficients, may be higher, as legislation sometimes sets them above 100 %.
 type Ratio = nat;
 type Rate = nat;
 // Money in the token's smallest unit (Token.decimals). Money computed from a Ratio is rounded to the
-// nearest cent, an exact half away from zero (model §1).
+// nearest cent, an exact half away from zero.
 type Money = nat;
 // Money that may be negative, such as a discount line of an invoice. Rounded as Money is.
 type SignedMoney = int;
@@ -56,7 +61,7 @@ type GggError = variant {
   GenericError : record { error_code : nat; message : text };
 };
 
-// ---- §2 Identity and membership
+// ---- Domain 1: Identity and membership
 
 type User = record {
   id : principal;
@@ -87,10 +92,12 @@ type GuestUser = record {
   permissions : vec text;
 };
 
+// A person. One with no account of their own, such as a child, has no `user`: a person with a verified
+// `guardian_of` attribute naming them acts for them.
 type Human = record {
   id : text;
-  user : principal;
-  date_of_birth : opt Timestamp;
+  user : opt principal;
+  date_of_birth : opt Date;
   h3_index : opt text;
 };
 
@@ -108,7 +115,7 @@ type Identity = record {
   ref : text;
   status : IdentityStatus;
   verified_at : opt Timestamp;
-  expires_at : opt Timestamp;
+  expires_at : opt Date;
 };
 
 type AttributeStatus = variant { Pending; Verified; Rejected };
@@ -116,8 +123,10 @@ type AttributeStatus = variant { Pending; Verified; Rejected };
 // A certified attribute of a person: a status another body certifies and the realm verifies, as it
 // verifies identities, such as a disability, a family status or being a student. The kinds and their
 // values are legislation's; GGG records the attestation. `kind` and `value` are in clear, and readable
-// only by the person, by the holders of attribute.review while it awaits review and by the codex
-// (I-PRV-1); the audit log never holds them.
+// only by the person, by the holders of attribute.review while it awaits review and by the codex;
+// the audit log never holds them.
+// A standard kind is `guardian_of`: its value is the id of the Human the person is the legal guardian of, a
+// parent or a tutor, and whoever keeps the civil register certifies it.
 type Attribute = record {
   id : text;
   human : text;
@@ -127,7 +136,7 @@ type Attribute = record {
   ref : text;
   status : AttributeStatus;
   verified_at : opt Timestamp;
-  expires_at : opt Timestamp;
+  expires_at : opt Date;
 };
 
 type UserProfile = record {
@@ -191,9 +200,9 @@ type DelegationRequest = record {
   request_expires_at : Timestamp;
 };
 
-// ---- §3 Departments and organizations
+// ---- Domain 2: Departments and organizations
 
-// How a department decides (I-GOV-3). `threshold_of` absent or Eligible: m of n approvals. Cast: a
+// How a department decides. `threshold_of` absent or Eligible: m of n approvals. Cast: a
 // majority of the votes cast, with `quorum` of n voting and the head's casting vote on a second tie; m
 // is not used then. Either way n is the body's size, what a vacancy never lowers.
 type Policy = record { m : nat; n : nat; quorum : Ratio; veto : vec principal; threshold_of : opt ThresholdBasis };
@@ -215,7 +224,7 @@ type Department = record {
 
 type OrganizationStatus = variant { Active; Suspended; Dissolved };
 
-// What an organization is (I-ORG-9). Other is any organization that is none of the four, and the one
+// What an organization is. Other is any organization that is none of the four, and the one
 // registered without a kind or before kinds existed.
 type OrganizationKind = variant { Company; Party; Union; Association; Other };
 
@@ -265,7 +274,7 @@ type Authority = record {
   operations : vec text;
 };
 
-// ---- §4 Governance
+// ---- Domain 3: Governance
 
 // ExecutionScheduled: accepted, and waiting for its effective_at.
 type ProposalStatus = variant { Draft; Voting; Accepted; ExecutionScheduled; Rejected; Expired; Executed; Failed; Withdrawn };
@@ -298,8 +307,8 @@ type ProposalLink = record { kind : ProposalLinkKind; proposal : text };
 type ThresholdBasis = variant { Cast; Eligible };
 
 // `eligible`: who may vote, counted when the vote opens. `seats`: a department's policy n, what its
-// threshold is measured against under Eligible, and its quorum when its policy counts the votes cast
-// (I-GOV-3); absent for a realm-wide proposal.
+// threshold is measured against under Eligible, and its quorum when its policy counts the votes cast;
+// absent for a realm-wide proposal.
 type Tally = record { yes : nat; no : nat; abstain : nat; eligible : opt nat; seats : opt nat };
 
 type Proposal = record {
@@ -308,7 +317,7 @@ type Proposal = record {
   description : text;
   proposer : principal;
   on_behalf_of : opt principal;
-  // The delegate that prepared the call, when the proposer approved it from a pending action (§2).
+  // The delegate that prepared the call, when the proposer approved it from a pending action (domain 1).
   prepared_by : opt principal;
   department : opt text;
   // What the proposal is (a change of legislation, a budget, a motion) and the matter it decides, in the
@@ -321,7 +330,7 @@ type Proposal = record {
   deadline : opt Timestamp;
   // When the action takes effect; absent means on acceptance. Fixed at creation, it never moves.
   effective_at : opt Timestamp;
-  // The rule that decides it (I-GOV-3), fixed when the vote opens: the yes votes exceed the threshold
+  // The rule that decides it, fixed when the vote opens: the yes votes exceed the threshold
   // of the votes cast or of a realm's eligible voters, or reach it of a department's n (`tally.seats`),
   // with the quorum met.
   threshold : Ratio;
@@ -335,11 +344,11 @@ type Proposal = record {
   links : vec ProposalLink;
   // The realm's own words for grouping proposals (an area, a district, a kind of act), at most 16,
   // each 1 to 64 code points, not padded with whitespace, without control characters, named once and
-  // compared exactly, never normalised (I-GOV-15).
+  // compared exactly, never normalised.
   tags : vec text;
-  // True when the department's policy counted the votes cast as the vote opened (I-GOV-3): the quorum
+  // True when the department's policy counted the votes cast as the vote opened: the quorum
   // counts over `tally.seats`, a tie over the votes cast gets a second vote, where the casting vote
-  // decides a tie (I-GOV-14), and under Eligible the yes votes must also be a majority of the votes
+  // decides a tie, and under Eligible the yes votes must also be a majority of the votes
   // cast. Absent means false.
   majority_of_cast : opt bool;
   // The count of a first vote that tied under majority_of_cast; `tally` is then the second vote's.
@@ -388,22 +397,22 @@ type Contract = record {
   terms_ref : text;
   terms_hash : text;
   status : ContractStatus;
-  starts_at : opt Timestamp;
-  ends_at : opt Timestamp;
+  starts_at : opt Date;
+  ends_at : opt Date;
   // How `value` is spread over fiscal periods, each named once, adding up to it; empty when it is not
-  // spread (I-GOV-16).
+  // spread.
   split : vec PeriodAmount;
-  // The lot of the tender it was awarded under, when the tender has lots (I-PRC-5).
+  // The lot of the tender it was awarded under, when the tender has lots.
   lot : opt text;
-  // The framework agreement it is a call-off under, held by another body (I-PRC-6).
+  // The framework agreement it is a call-off under, held by another body.
   framework : opt Framework;
 };
 
 // Where a framework agreement is held: an External of this realm (a province, a ministry), or another
-// realm, by its capital (I-PRC-6).
+// realm, by its capital.
 type FrameworkHolder = variant { External : text; Realm : principal };
 
-// A framework agreement a contract is a call-off under (I-PRC-6). `reference` is the agreement's number or
+// A framework agreement a contract is a call-off under. `reference` is the agreement's number or
 // title where the holder keeps it, or the tender's id when the holder is a realm; 1 to 128 code points.
 // `winners` are the ids of this realm's organizations the agreement was awarded to, at most 32, empty when the
 // realm does not know them.
@@ -413,9 +422,9 @@ type Framework = record { holder : FrameworkHolder; reference : text; winners : 
 type PeriodAmount = record { period : text; amount : Money };
 
 // The terms of a contract that an amendment may change.
-type ContractTerms = record { value : Money; split : vec PeriodAmount; starts_at : opt Timestamp; ends_at : opt Timestamp };
+type ContractTerms = record { value : Money; split : vec PeriodAmount; starts_at : opt Date; ends_at : opt Date };
 
-// One amendment of a contract (I-GOV-16): its terms before and after, the proposal that carried it,
+// One amendment of a contract: its terms before and after, the proposal that carried it,
 // absent when its governing department decided directly, and when it applied.
 type ContractAmendment = record {
   id : text;
@@ -429,14 +438,14 @@ type ContractAmendment = record {
 // A contract and its amendments a page at a time, oldest first.
 type ContractDetail = record { contract : Contract; amendments : vec ContractAmendment; next : opt text };
 
-// ---- §5 Finance
+// ---- Domain 4: Finance
 
 type TreasuryConfig = record {
   epoch : Duration;
   anchor_month : nat8;
   source_fund : text;
   auto_allocate : bool;
-  // On a capital, what its quarters sweep into its funds (I-FED-5); empty elsewhere.
+  // On a capital, what its quarters sweep into its funds; empty elsewhere.
   sweep : vec SweepRule;
 };
 
@@ -461,7 +470,7 @@ type NFTToken = record {
   name : text;
   description : text;
   transferable : bool;
-  required_license : opt text;
+  required_entitlement : opt text;
   supply_cap : opt nat;
   total_supply : nat;
 };
@@ -482,8 +491,8 @@ type FiscalPeriodStatus = variant { Open; Closed; Archived };
 type FiscalPeriod = record {
   id : text;
   name : text;
-  starts_at : Timestamp;
-  ends_at : Timestamp;
+  starts_at : Date;
+  ends_at : Date;
   status : FiscalPeriodStatus;
   statements : Value;
   source_hash : text;
@@ -508,8 +517,9 @@ type Budget = record {
   proposal : opt text;
   // Of an adopted expense line: money set aside for a spending not yet committed, and money committed to
   // a third party not yet charged. What is left, planned - reserved - committed - actual, is never
-  // negative (I-FIN-9). Zero on any other line.
-  reserved : Money;
+  // negative. Zero on any other line. Quoted because `reserved` is a Candid keyword; on the wire it is the
+  // same field.
+  "reserved" : Money;
   committed : Money;
 };
 
@@ -547,7 +557,7 @@ type LedgerEntry = record {
   case : opt text;
   penalty : opt text;
   appeal : opt text;
-  // The sweep it books (I-FED-7): its id on a quarter, `<quarter>/<id>` on the capital.
+  // The sweep it books: its id on a quarter, `<quarter>/<id>` on the capital.
   sweep : opt text;
   at : Timestamp;
   description : text;
@@ -573,14 +583,14 @@ type Invoice = record {
   items : vec InvoiceItem;
   facts : Value;
   symbol : text;
-  due_at : opt Timestamp;
+  due_at : opt Date;
   status : InvoiceStatus;
   reason : opt Ref;
   paid_at : opt Timestamp;
   payment : opt Value;
 };
 
-// Scheduled: owed, to be paid by its due date; Cancelled: a scheduled transfer revoked unpaid (I-FIN-10).
+// Scheduled: owed, to be paid by its due date; Cancelled: a scheduled transfer revoked unpaid.
 type TransferStatus = variant { Scheduled; Sending; Pending; Completed; Failed; Cancelled };
 
 type Transfer = record {
@@ -594,12 +604,12 @@ type Transfer = record {
   status : TransferStatus;
   at : Timestamp;
   payroll : opt text;
-  // When a scheduled transfer is due.
-  due_at : opt Timestamp;
-  // The budget line it is charged to, and whether it drew on that line's committed money (I-FIN-9).
+  // The day a scheduled transfer is due.
+  due_at : opt Date;
+  // The budget line it is charged to, and whether it drew on that line's committed money.
   budget : opt text;
   committed : bool;
-  // The contract it pays: the payments on a contract never exceed its value (I-FIN-11).
+  // The contract it pays: the payments on a contract never exceed its value.
   contract : opt text;
 };
 
@@ -638,7 +648,7 @@ type FinancialReport = record {
 // `subject` names the entity each assessment walks (e.g. `Land`, `User`, `Organization`); `rate` or
 // `amount` is what the entry charges when no codex computes it; `facts` is what legislation reads about
 // the entry beyond these. A rule on tax_policy_propose or tax_policy_draft ranges over the policy's
-// entries, one request per entry (layered-codex §3.2).
+// entries, one request per entry.
 type TaxEntry = record {
   code : text;
   kind : text;
@@ -688,7 +698,7 @@ type TaxDeclaration = record {
   invoice : opt text;
 };
 
-// ---- §6 Assets
+// ---- Domain 5: Assets
 
 type LandStatus = variant { Active; Disputed; Revoked };
 
@@ -703,14 +713,14 @@ type Land = record {
   // in square metres, when, and under which reference in the assessor's register.
   assessed_value : opt Money;
   area : opt Area;
-  assessed_at : opt Timestamp;
+  assessed_at : opt Date;
   assessment_ref : opt text;
   owner : Ref;
   status : LandStatus;
   token_id : opt nat;
   registered_by : principal;
   metadata : Value;
-  // The zones the parcel lies in, such as a planning area, at most 8, each a zone the realm defines (I-AST-6).
+  // The zones the parcel lies in, such as a planning area, at most 8, each a zone the realm defines.
   zones : vec text;
 };
 
@@ -727,38 +737,57 @@ type Zone = record {
   population : nat;
 };
 
-// ---- §7 Licensing
+// ---- Domain 6: Entitlements
 
-type LicenseStatus = variant { Applied; Active; Rejected; Suspended; Revoked; Expired };
+// Offered: granted, and waiting for the holder to accept it (enrol, pay a fee) by `accept_by`; an offer not
+// accepted by then is Expired.
+type EntitlementStatus = variant { Applied; Offered; Active; Rejected; Suspended; Revoked; Expired };
 
-type License = record {
+// A right a department grants a holder by a decision: a permit, a school place, a benefit. `kind` says
+// which, and the Procedure of that kind says how it is decided.
+type Entitlement = record {
   id : text;
   kind : text;
   holder : Ref;
-  issued_by : text;
-  status : LicenseStatus;
+  // Who applied: the holder, their guardian, or an administrator of the holding organization.
+  by : Ref;
+  // What the application is about, in clear and with no personal data: read by whoever routes filings.
+  subject : text;
+  // The department the application is with, which decides it and, once granted, issued it, and the member
+  // of it who took it; none while it waits to be routed.
+  department : opt text;
+  assignee : opt principal;
+  status : EntitlementStatus;
   applied_at : Timestamp;
-  // When a decision is due, from the Procedure of the licence's kind.
-  decision_due : opt Timestamp;
+  // The day a decision is due, from the Procedure of the entitlement's kind.
+  decision_due : opt Date;
   issued_at : opt Timestamp;
-  expires_at : opt Timestamp;
+  // The last day to accept an Offered entitlement, from the Procedure's `acceptance`.
+  accept_by : opt Date;
+  expires_at : opt Date;
   evidence_ref : opt text;
   conditions : Value;
-  // The parcel the licence is for, when it is for one (I-LIC-4).
+  // The parcel the entitlement is for, when it is for one.
   land : opt text;
 };
 
 // What the realm's silence past a deadline means: Positive grants, Negative refuses.
 type Silence = variant { Positive; Negative };
 
-// How a kind of application is decided: who starts it, the deadline for a decision, and what the realm's
-// silence means. Keyed by the licence kind it governs.
+// How a kind of filing is handled, an application for an entitlement or a request: who starts it, the
+// department it goes to (with none, someone who routes filings sends each one on), the deadline for a
+// decision, what the realm's silence means, how long the holder has to accept a grant (`acceptance`; with
+// none, a grant is Active at once), and whether who filed is private (`private_filer`: then only the filer
+// and the department read it). Keyed by the kind it governs.
 type Procedure = record {
   id : text;
   initiated_by : text;
   matter : opt text;
+  department : opt text;
+  private_filer : bool;
   decision_deadline : opt Period;
   silence : opt Silence;
+  acceptance : opt Period;
   legislation : opt text;
   facts : Value;
 };
@@ -772,17 +801,36 @@ type Request = record {
   id : text;
   kind : text;
   by : Ref;
+  // What the request is about, in clear and with no personal data: read by whoever routes filings.
+  subject : text;
   body : Value;
   filed_at : Timestamp;
-  due_at : opt Timestamp;
-  extension_limit : opt Timestamp;
+  due_at : opt Date;
+  extension_limit : opt Date;
+  // The department the request is with, and the member of it who took it; none while it waits to be routed.
+  department : opt text;
+  assignee : opt principal;
   status : RequestStatus;
   decision : opt text;
   reply : opt text;
   decided_at : opt Timestamp;
 };
 
-// ---- §8 Justice
+// A message on a filing, between its filer and the department it is with. `body` refers to an encrypted
+// document, as every message that carries personal data does. `reply_by` asks the filer for something by
+// that day, such as a missing document; legislation may stop the decision clock until then.
+type FilingMessage = record {
+  id : text;
+  filing : Ref;
+  // The filer's Ref, or the Department the filing is with; `author` is who wrote it.
+  from : Ref;
+  author : principal;
+  body : text;
+  reply_by : opt Date;
+  at : Timestamp;
+};
+
+// ---- Domain 7: Justice
 
 type CourtLevel = variant { FirstInstance; Appellate; Supreme; Specialized };
 type CourtStatus = variant { Active; Closed };
@@ -795,7 +843,7 @@ type Court = record {
   jurisdiction : text;
   parent : opt text;
   status : CourtStatus;
-  license : opt text;
+  entitlement : opt text;
 };
 
 type JudgeStatus = variant { Active; Revoked };
@@ -889,23 +937,23 @@ type Penalty = record {
   amount : opt Money;
   symbol : opt text;
   status : PenaltyStatus;
-  due_at : opt Timestamp;
+  due_at : opt Date;
   executed_at : opt Timestamp;
   invoice : opt text;
 };
 
-// ---- §9 Procurement
+// ---- Domain 8: Procurement
 
 type TenderStatus = variant { Draft; Open; Closed; Evaluation; Awarded; Contracted; Cancelled };
 
 type Criterion = record { criterion : text; weight : Ratio };
 
 // A notice of the tender published in a journal, recorded with tender_notice.
-type Notice = record { journal : text; published_at : Timestamp; ref : opt text };
+type Notice = record { journal : text; published_at : Date; ref : opt text };
 
 type LotStatus = variant { Open; Awarded; Void };
 
-// One part of a tender, awarded on its own (I-PRC-5). `id` is the realm's own word for it, named once in the
+// One part of a tender, awarded on its own. `id` is the realm's own word for it, named once in the
 // tender. `winner` is the awarded bid and `contract` the contract made from it.
 type Lot = record {
   id : text;
@@ -929,7 +977,7 @@ type Tender = record {
   opens_at : opt Timestamp;
   closes_at : opt Timestamp;
   rubric : vec Criterion;
-  // The award and its contract when the tender has no lots; with lots, each lot has its own (I-PRC-5).
+  // The award and its contract when the tender has no lots; with lots, each lot has its own.
   winner : opt text;
   contract : opt text;
   notices : vec Notice;
@@ -946,7 +994,7 @@ type Bid = record {
   payload_hash : text;
   price : opt Money;
   score : opt nat;
-  // The lot it prices, when the tender has lots (I-PRC-5).
+  // The lot it prices, when the tender has lots.
   lot : opt text;
 };
 
@@ -959,7 +1007,7 @@ type BidScore = record {
   scored_at : Timestamp;
 };
 
-// ---- §10 Quarters and federation
+// ---- Domain 9: Quarters and federation
 
 type RealmStatus = variant { Setup; Alpha; Beta; Production; Deprecation; Terminated };
 
@@ -978,13 +1026,15 @@ type Realm = record {
   federation_realm_id : opt text;
   federation_codex : opt text;
   quarter_join_mode : opt text;
-  // The realms this one syncs legislation from, each with its link status (I-NEST-1).
+  // The realms this one syncs legislation from, each with its link status.
   sync_sources : vec SyncSource;
+  // The realms this one is a member of, each with its link status.
+  memberships : vec Membership;
   trusted_principals : vec principal;
   require_marketplace_approval : bool;
   trusted_approvers : vec text;
   // For realm-wide proposals. `casting_vote` is an active member whose yes decides a tie over the votes
-  // cast (I-GOV-3); set with governance_update.
+  // cast; set with governance_update.
   voting_threshold : Ratio;
   voting_quorum : Ratio;
   casting_vote : opt principal;
@@ -1012,13 +1062,13 @@ type Calendar = record {
   codex_release_cycle : opt Duration;
   benefit_cycle : opt Duration;
   service_payment_cycle : opt Duration;
-  license_review_cycle : opt Duration;
+  entitlement_review_cycle : opt Duration;
   custom_cycles : vec Cycle;
 };
 
 type Registry = record { id : text; description : text; principal_id : principal };
 
-type QuarterStatus = variant { Setup; Active; Suspended; Splitting; Merging };
+type QuarterStatus = variant { Setup; Active; Suspended };
 
 type Quarter = record {
   id : text;
@@ -1045,11 +1095,16 @@ type Forward = record {
 };
 
 type FederalVoteStatus = variant { Open; Passed; Failed; Cancelled };
+// Who casts the legs: the realm's quarters, or its member realms.
+type FederalVoters = variant { Quarters; MemberRealms };
 
+// `rule` is fixed when the vote opens. It says how the legs count: the legs that passed, the
+// population they stand for, or their yes and no votes added up, alone or together.
 type FederalVote = record {
   id : text;
   title : text;
   origin_quarter : text;
+  voters : FederalVoters;
   action : ProposalAction;
   rule : Value;
   hash : text;
@@ -1061,10 +1116,12 @@ type FederalVote = record {
 type FederalVoteLegStatus = variant { Open; Reported };
 type Outcome = variant { Passed; Failed };
 
+// One quarter's or member realm's result, decided by its own vote. It carries counts, never names.
 type FederalVoteLeg = record {
   id : text;
   vote : text;
-  quarter : text;
+  // The quarter, or the member realm by its id, that cast it.
+  voter : text;
   proposal_id : opt text;
   outcome : opt Outcome;
   yes : nat;
@@ -1084,7 +1141,7 @@ type FederationMessage = record {
 };
 
 // Links between realms: a realm takes legislation from the sync sources it chose by vote, each of
-// which accepted it by vote (I-NEST-1).
+// which accepted it by vote.
 
 // Requested: one side has voted. Active: both have. Ended: a side ended the link, `by` its capital.
 type LinkStatus = variant { Requested; Active; Ended : record { by : principal; at : Timestamp } };
@@ -1111,7 +1168,24 @@ type Follower = record {
   reported_at : opt Timestamp;
 };
 
-// ---- §11 Codex, notifications and audit
+// Member realms: a realm can be a member of other realms, and they of it, over links both sides vote
+// on, as for legislation. Membership is a link of its own: a realm can follow a realm it is not a
+// member of, and be a member of one it does not follow.
+
+// On a member realm: a realm it is a member of, by its capital.
+type Membership = record { realm : principal; name : text; status : LinkStatus };
+// On a realm: a realm that is a member of it, `id` its capital as text, with its link status and the
+// population of its last report.
+type MemberRealm = record {
+  id : text;
+  capital : principal;
+  name : text;
+  status : LinkStatus;
+  population : nat;
+  reported_at : opt Timestamp;
+};
+
+// ---- Domain 10: Codex, notifications and audit
 
 // Pending: installed and checked, waiting for codex_activate or its proposal's effective_at.
 type CodexStatus = variant { Pending; Active; Inactive; Reverted };
@@ -1207,7 +1281,7 @@ type Event = record {
   at : Timestamp;
 };
 
-// ---- §13 Private content
+// ---- Domain 12: Private content
 
 type KeyEnvelope = record {
   id : text;
@@ -1218,15 +1292,16 @@ type KeyEnvelope = record {
   at : Timestamp;
 };
 
-// A publication of the document in a journal: the dispatch that carried it, and when and under which
-// reference the journal published it, from the dispatch's confirmation.
-type Publication = record { journal : text; dispatch : text; published_at : opt Timestamp; ref : opt text };
+// A publication of the document in a journal: the dispatch that carried it, and the day and the reference
+// under which the journal published it, from the dispatch's confirmation.
+type Publication = record { journal : text; dispatch : text; published_at : opt Date; ref : opt text };
 // Content in clear: where it lives and its hash. It holds no personal data.
 type Published = record { ref : text; hash : text };
 
 type Document = record {
   id : text;
-  department : text;
+  // None for the private part of a filing not yet routed, whose key only its filer holds.
+  department : opt text;
   title : text;
   // What the document is (minutes, an ordinance, an award), and the BCP 47 tags of its languages.
   kind : opt text;
@@ -1252,7 +1327,7 @@ type GetArgs = record { id : text; cursor : opt text; limit : opt nat32 };
 // The change was applied, with the id of any record it created, or a proposal was filed to make it.
 type Governed = variant { Done : opt text; Proposed : text };
 
-// §2
+// Domain 1: Identity and membership
 
 type UserEntry = record { user : User; member : opt Member };
 type UserPage = record { items : vec UserEntry; next : opt text };
@@ -1325,9 +1400,14 @@ type IdentitySubmitArgs = record {
   category : opt text;
   issuer : opt text;
   ref : text;
-  expires_at : opt Timestamp;
+  expires_at : opt Date;
 };
 type IdentityReviewArgs = record { identity : text; status : variant { Verified; Rejected } };
+
+// Registers a person with no account of their own, such as the caller's child: creates the Human and the
+// caller's `guardian_of` attribute naming them, pending review. `ref` points to the proof (a birth certificate,
+// a court order), stored encrypted or off-chain.
+type DependantRegisterArgs = record { date_of_birth : opt Date; ref : text };
 
 // For the caller's own person. `ref` points to the proof, stored encrypted or off-chain.
 type AttributeSubmitArgs = record {
@@ -1335,7 +1415,7 @@ type AttributeSubmitArgs = record {
   value : text;
   issuer : opt text;
   ref : text;
-  expires_at : opt Timestamp;
+  expires_at : opt Date;
 };
 type AttributeReviewArgs = record { attribute : text; status : variant { Verified; Rejected } };
 // The caller's own attributes, of one kind or all.
@@ -1390,7 +1470,7 @@ type DelegationDecideArgs = record {
 type DelegationRevokeAllArgs = record { cursor : opt text; limit : opt nat32; on_behalf_of : opt principal };
 type DelegationsRevoked = record { revoked : nat; next : opt text };
 
-// Pending actions (model §2): a call in its confirm form, prepared by a delegate under a grant and waiting
+// Pending actions (domain 1): a call in its confirm form, prepared by a delegate under a grant and waiting
 // for the grantor's own approval.
 type Call = record { method : text; arg : blob };
 // Approved: a read the grantor approved, waiting for the delegate to collect it (ggg_action_collect).
@@ -1435,7 +1515,7 @@ type CallForArgs = record { method : text; arg : blob; on_behalf_of : principal;
 type CallForReply = variant { Done : blob; Proposed : text; Pending : PendingAction };
 type ReadForArgs = record { method : text; arg : blob; on_behalf_of : principal };
 
-// §3
+// Domain 2: Departments and organizations
 
 // A position and the appointments that hold it.
 type Seat = record { position : Position; holders : vec Appointment };
@@ -1494,7 +1574,7 @@ type AppointArgs = record { position : text; user : principal; agent : bool; sup
 type ExpelArgs = record { department : text; user : principal };
 type AuthorityGrantArgs = record { department : text; target : Ref; operations : vec text };
 
-// `kind` absent means Other (I-ORG-9).
+// `kind` absent means Other.
 type OrganizationRegisterArgs = record { organization : text; description : text; kind : opt OrganizationKind };
 type OrganizationEditArgs = record { organization : text; description : opt text; admins : opt vec principal; kind : opt OrganizationKind };
 // Seats the user in the organization's position, creating the position if it is new.
@@ -1510,7 +1590,7 @@ type RepresentativeAddArgs = record {
 };
 type OrganizationStatusArgs = record { organization : text; status : OrganizationStatus };
 
-// §4
+// Domain 3: Governance
 
 // The proposal, its votes a page at a time, and the one proposal that replaces it, if any. The other
 // links to it are in ggg_proposal_linked_from.
@@ -1520,7 +1600,7 @@ type ProposalDetail = record { proposal : Proposal; votes : vec Vote; next : opt
 type ProposalLinkPage = record { items : vec ProposalLink; next : opt text };
 
 // `tags`: only the proposals that carry at least one of them, compared exactly; absent or empty
-// means any (I-GOV-15).
+// means any.
 type ProposalListArgs = record { cursor : opt text; limit : opt nat32; status : opt ProposalStatus; tags : opt vec text };
 type ProposalPage = record { items : vec Proposal; next : opt text };
 
@@ -1545,7 +1625,7 @@ type ProposalCreateArgs = record {
   // Must lie after the time of the call, else InvalidArgument. Absent means the action executes on acceptance.
   effective_at : opt Timestamp;
   links : opt vec ProposalLink;
-  // Absent means none (I-GOV-15).
+  // Absent means none.
   tags : opt vec text;
   on_behalf_of : opt principal;
 };
@@ -1558,7 +1638,7 @@ type ProposalVoteArgs = record {
 
 type ProposalWithdrawArgs = record { proposal : text; on_behalf_of : opt principal };
 
-// Replaces a draft's tags (I-GOV-15).
+// Replaces a draft's tags.
 type ProposalSetTagsArgs = record { proposal : text; tags : vec text; on_behalf_of : opt principal };
 
 // A replayed proposal records itself as the mandate's proposal.
@@ -1584,24 +1664,24 @@ type ContractCreateArgs = record {
   symbol : text;
   terms_ref : text;
   terms_hash : text;
-  starts_at : opt Timestamp;
-  ends_at : opt Timestamp;
-  // Absent means not spread over periods (I-GOV-16).
+  starts_at : opt Date;
+  ends_at : opt Date;
+  // Absent means not spread over periods.
   split : opt vec PeriodAmount;
-  // The awarded lot of `tender` it is made from, named when the tender has lots (I-PRC-5).
+  // The awarded lot of `tender` it is made from, named when the tender has lots.
   lot : opt text;
   // The framework agreement it is a call-off under: an External that is not known is NotFound, a realm that
-  // is this one InvalidArgument, and so are winners none of the parties is among (I-PRC-6).
+  // is this one InvalidArgument, and so are winners none of the parties is among.
   framework : opt Framework;
 };
 
-// Each term given replaces the contract's; absent keeps it. At least one is given (I-GOV-16).
+// Each term given replaces the contract's; absent keeps it. At least one is given.
 type ContractAmendArgs = record {
   contract : text;
   value : opt Money;
   split : opt vec PeriodAmount;
-  starts_at : opt Timestamp;
-  ends_at : opt Timestamp;
+  starts_at : opt Date;
+  ends_at : opt Date;
 };
 
 // `casting_vote` names an active member, else InvalidArgument.
@@ -1612,7 +1692,7 @@ type GovernanceUpdateArgs = record {
   casting_vote : opt variant { Set : principal; Clear };
 };
 
-// §5
+// Domain 4: Finance
 
 // The treasury and its registered tokens, and its funds a page at a time.
 type TreasuryView = record {
@@ -1647,7 +1727,7 @@ type TreasuryConfigureArgs = record {
   source_fund : opt text;
   auto_allocate : opt bool;
   // Replaces the capital's sweep rules: InvalidArgument on a realm that is not a capital or for two rules on
-  // one fund and symbol, NotFound for an `into` that is not a fund or a symbol that is not a token (I-FED-5).
+  // one fund and symbol, NotFound for an `into` that is not a fund or a symbol that is not a token.
   sweep : opt vec SweepRule;
 };
 type TokenRegisterArgs = record {
@@ -1663,7 +1743,7 @@ type NFTTokenRegisterArgs = record {
   name : opt text;
   description : opt text;
   transferable : opt bool;
-  required_license : opt text;
+  required_entitlement : opt text;
   supply_cap : opt nat;
 };
 
@@ -1677,12 +1757,12 @@ type TransferCreateArgs = record {
   category : opt text;
   description : opt text;
   // The contract it pays: NotFound if there is none, InvalidArgument in another symbol than the
-  // contract's, Conflict past the contract's value (I-FIN-11).
+  // contract's, Conflict past the contract's value.
   contract : opt text;
   on_behalf_of : opt principal;
-  // A time after the call: the transfer is Scheduled, owed until transfer_pay pays it (I-FIN-10).
-  due_at : opt Timestamp;
-  // True: it pays money its budget line has committed, not the line's available credit (I-FIN-9).
+  // A date after today: the transfer is Scheduled, owed until transfer_pay pays it.
+  due_at : opt Date;
+  // True: it pays money its budget line has committed, not the line's available credit.
   committed : opt bool;
 };
 // A Scheduled transfer is Cancelled; one that is Pending fails, reverted.
@@ -1693,7 +1773,7 @@ type InvoiceCreateArgs = record {
   payer : Ref;
   amount : Money;
   symbol : opt text;
-  due_at : opt Timestamp;
+  due_at : opt Date;
   reason : opt Ref;
   items : vec InvoiceItem;
   facts : opt Value;
@@ -1704,7 +1784,8 @@ type InvoiceItemAddArgs = record { invoice : text; item : InvoiceItem };
 // The invoice, and the account to pay it into.
 type InvoiceCreated = record { invoice : Invoice; pay_to : Account };
 type InvoiceCheckArgs = record { invoice : text; on_behalf_of : opt principal };
-// One page of the caller's invoices, each with the account to pay it into.
+// One page of the caller's invoices, each with the account to pay it into. When the caller is the
+// capital of a member realm, the invoices whose payer is that member realm (`{kind: "MemberRealm"}`).
 type MyInvoicesArgs = record { cursor : opt text; limit : opt nat32; on_behalf_of : opt principal };
 type MyInvoice = record { invoice : Invoice; pay_to : Account };
 type MyInvoicePage = record { items : vec MyInvoice; next : opt text };
@@ -1714,12 +1795,12 @@ type InvoicePage = record { items : vec Invoice; next : opt text };
 
 // `department` is the fund's owner; a department owns at most one fund.
 type FundCreateArgs = record { fund : text; name : opt text; kind : opt text; department : opt text };
-// Periods open in order: one starts no earlier than the latest ends.
-type PeriodOpenArgs = record { period : text; name : opt text; starts_at : Timestamp; ends_at : Timestamp };
+// Periods open in order: one starts after the latest one ends.
+type PeriodOpenArgs = record { period : text; name : opt text; starts_at : Date; ends_at : Date };
 // `category` never names `ledger_fee` or `sweep`, entries the GOS books itself (InvalidArgument).
 type BudgetDraftArgs = record { fund : text; period : text; category : text; kind : BudgetKind; planned : Money };
 type BudgetAmendArgs = record { budget : text; planned : Money };
-// Moves an adopted expense line's money between its stages (I-FIN-9): `reserve` and `commit` are added
+// Moves an adopted expense line's money between its stages: `reserve` and `commit` are added
 // to its reserved and committed amounts; a negative one releases. Committing what was reserved is
 // reserve -x, commit +x. At least one is not zero.
 type BudgetStageArgs = record { budget : text; reserve : SignedMoney; commit : SignedMoney };
@@ -1742,7 +1823,7 @@ type PayrollRunArgs = record { department : text; period : text; symbol : opt te
 // `adjustments` are figures the issuer adds to the ledger's, for a report in terms the ledger doesn't keep.
 type ReportIssueArgs = record { period : text; kind : opt text; adjustments : opt Value };
 
-// The entries are checked as they are when the policy is proposed (layered-codex §3.2).
+// The entries are checked as they are when the policy is proposed.
 type TaxPolicyDraftArgs = record { document : Value; description : opt text; taxes : vec TaxEntry };
 // Bills one batch of taxpayers for the period; those already billed are skipped.
 type TaxAssessArgs = record { period : text; tax : opt text; cursor : opt text; limit : opt nat32 };
@@ -1783,7 +1864,7 @@ type PaymentAccountRemoveArgs = record { account : text; organization : opt text
 type ForceTransferArgs = record { symbol : text; from : principal; to : principal; amount : Money; reason : opt text };
 type FreezeArgs = record { symbol : text; account : principal; frozen : bool; reason : opt text };
 
-// §6
+// Domain 5: Assets
 
 type LandListArgs = record { cursor : opt text; limit : opt nat32; owner : opt Ref };
 type LandPage = record { items : vec Land; next : opt text };
@@ -1794,7 +1875,7 @@ type LandMap = record { parcels : vec Land; zones : vec Zone; next : opt text };
 
 // The token's ggg: header as read from the ledger, and its frozen flag.
 type CredentialVerifyArgs = record { header : vec record { text; text }; frozen : bool };
-type CredentialCheck = record { valid : bool; ours : bool; licensed : bool; expired : bool; revoked : bool };
+type CredentialCheck = record { valid : bool; ours : bool; entitled : bool; expired : bool; revoked : bool };
 
 // At most 16 × 16 cells, overlapping no other parcel.
 type LandRegisterArgs = record {
@@ -1819,7 +1900,7 @@ type LandAssessArgs = record {
   legislation : opt text;
 };
 type LandFreezeArgs = record { land : text; reason : opt text };
-// Replaces the zones a parcel lies in: at most 8, each defined with zone_define and named once (I-AST-6).
+// Replaces the zones a parcel lies in: at most 8, each defined with zone_define and named once.
 type LandZoneSetArgs = record { land : text; zones : vec text };
 
 // Defines a zone of the realm, such as a district, which members name as their home_zone; the same id
@@ -1843,48 +1924,87 @@ type CredentialIssueArgs = record {
 type CredentialIssued = record { token_id : nat; header : vec record { text; text } };
 type CredentialRevokeArgs = record { schema : text; token_id : nat; organization : text; reason : text };
 
-// §7
+// Domain 6: Entitlements
 
-type LicenseListArgs = record {
+// `routed` false lists the applications waiting to be routed.
+type EntitlementListArgs = record {
   cursor : opt text;
   limit : opt nat32;
   holder : opt Ref;
   kind : opt text;
-  status : opt LicenseStatus;
+  status : opt EntitlementStatus;
+  department : opt text;
+  assignee : opt principal;
+  routed : opt bool;
 };
-type LicensePage = record { items : vec License; next : opt text };
+type EntitlementPage = record { items : vec Entitlement; next : opt text };
 
-// A licence by id, or the one of `kind` that `holder` holds.
-type LicenseVerifyArgs = record { id : opt text; holder : opt Ref; kind : opt text };
-type LicenseCheck = record { valid : bool; license : opt License };
+// An entitlement by id, or the one of `kind` that `holder` holds.
+type EntitlementVerifyArgs = record { id : opt text; holder : opt Ref; kind : opt text };
+type EntitlementCheck = record { valid : bool; entitlement : opt Entitlement };
 
-// Defines, or redefines, the procedure of licences of `kind`.
+// Defines, or redefines, the procedure of entitlements of `kind`.
 type ProcedureDefineArgs = record {
   kind : text;
   initiated_by : text;
   matter : opt text;
+  department : opt text;
+  private_filer : opt bool;
   decision_deadline : opt Period;
   silence : opt Silence;
+  acceptance : opt Period;
   legislation : opt text;
   facts : opt Value;
 };
 type ProcedurePage = record { items : vec Procedure; next : opt text };
 
 // For the caller, or an organization they administer.
-type RequestFileArgs = record { kind : text; body : Value; organization : opt text; on_behalf_of : opt principal };
+// `department` is the filer's choice; with none, the Procedure's for the kind, if it names one.
+type RequestFileArgs = record {
+  kind : text;
+  subject : text;
+  body : Value;
+  department : opt text;
+  organization : opt text;
+  on_behalf_of : opt principal;
+};
 type RequestGetArgs = record { id : text; on_behalf_of : opt principal };
-type RequestListArgs = record { cursor : opt text; limit : opt nat32; kind : opt text; status : opt RequestStatus };
+// `routed` false lists those waiting to be routed.
+type RequestListArgs = record {
+  cursor : opt text;
+  limit : opt nat32;
+  kind : opt text;
+  status : opt RequestStatus;
+  department : opt text;
+  assignee : opt principal;
+  routed : opt bool;
+};
 type RequestPage = record { items : vec Request; next : opt text };
 // Sets or moves the deadline, never past `extension_limit`, which is set once (Conflict after that).
-type RequestSetDueArgs = record { request : text; due_at : Timestamp; extension_limit : opt Timestamp };
+type RequestSetDueArgs = record { request : text; due_at : Date; extension_limit : opt Date };
 // `decision` is the realm's word for the outcome (`granted`, `refused`, `refused_by_silence`).
 type RequestDecideArgs = record { request : text; decision : text; reply : opt text };
 
-// For the caller, or an organization they administer.
-// `land` names the parcel the licence is for, which must exist (NotFound), so that legislation on the
-// parcel's zones reaches the decision (I-LIC-4).
-type LicenseApplyArgs = record {
+// A filing is a request, or an application for an entitlement: `filing` is its Ref.
+// Sends it to `department`, or with none back to whoever routes filings: by a holder of filing.route, or by a
+// member of the department it is with. The member who took it no longer has it.
+type FilingRouteArgs = record { filing : Ref; department : opt text };
+// Who handles it in its department: the caller takes it (any member), the head gives it to a member, and with
+// no `assignee` the member who has it, or the head, gives it back.
+type FilingAssignArgs = record { filing : Ref; assignee : opt principal };
+type FilingHandling = record { filing : Ref; department : opt text; assignee : opt principal };
+// By the filer (or their guardian or delegate), or by a member of the department the filing is with.
+type FilingMessageArgs = record { filing : Ref; body : text; reply_by : opt Date; on_behalf_of : opt principal };
+type FilingMessagesArgs = record { filing : Ref; cursor : opt text; limit : opt nat32; on_behalf_of : opt principal };
+type FilingMessagePage = record { items : vec FilingMessage; next : opt text };
+
+// For the caller, an organization they administer, or a person they are the verified guardian of.
+// `department` is the applicant's choice; with none, the Procedure's for the kind, if it names one.
+// `land` names the parcel the entitlement is for, which must exist (NotFound), so that legislation on the
+// parcel's zones reaches the decision.
+type EntitlementApplyArgs = record {
   kind : text;
+  subject : text;
   holder : opt Ref;
   department : opt text;
   evidence_ref : opt text;
@@ -1892,18 +2012,20 @@ type LicenseApplyArgs = record {
   on_behalf_of : opt principal;
   land : opt text;
 };
-type LicenseRenewArgs = record { license : text; evidence_ref : opt text; on_behalf_of : opt principal };
-type LicenseDecideArgs = record {
-  license : text;
+// By the holder, or the holder's verified guardian.
+type EntitlementAcceptArgs = record { entitlement : text; on_behalf_of : opt principal };
+type EntitlementRenewArgs = record { entitlement : text; evidence_ref : opt text; on_behalf_of : opt principal };
+type EntitlementDecideArgs = record {
+  entitlement : text;
   approve : bool;
   department : opt text;
-  expires_at : opt Timestamp;
+  expires_at : opt Date;
   conditions : opt Value;
 };
-// With `resume`, reinstates a suspended licence.
-type LicenseSuspendArgs = record { license : text; resume : bool };
+// With `resume`, reinstates a suspended entitlement.
+type EntitlementSuspendArgs = record { entitlement : text; resume : bool };
 
-// §8
+// Domain 7: Justice
 
 type DisputeGetArgs = record { id : text; on_behalf_of : opt principal };
 type DisputeListArgs = record { cursor : opt text; limit : opt nat32; status : opt DisputeStatus };
@@ -1938,7 +2060,7 @@ type PenaltyTerms = record {
   target : Ref;
   amount : opt Money;
   symbol : opt text;
-  due_at : opt Timestamp;
+  due_at : opt Date;
 };
 type VerdictDraftArgs = record { case : text; decision : text; reasoning_ref : opt text; penalties : vec PenaltyTerms };
 type VerdictContractArgs = record { verdict : text; contract : text };
@@ -1959,11 +2081,11 @@ type AppealDecideArgs = record {
   reasoning_ref : opt text;
   penalties : vec PenaltyTerms;
 };
-type PenaltyExecuteArgs = record { penalty : text; due_at : opt Timestamp };
+type PenaltyExecuteArgs = record { penalty : text; due_at : opt Date };
 type EnforcementArgs = record { verdict : text; note : text };
 type EnforcementNotifyArgs = record { verdict : text; to : Ref; title : opt text; body : opt text };
 
-// `operator` is a department, or an organization holding an active court licence.
+// `operator` is a department, or an organization holding an active entitlement to operate a court.
 type CourtCreateArgs = record {
   name : text;
   operator : Ref;
@@ -1973,14 +2095,14 @@ type CourtCreateArgs = record {
 };
 type JudgeAppointArgs = record { court : text; user : principal; specialization : opt text };
 
-// §9
+// Domain 8: Procurement
 
 type TenderListArgs = record { cursor : opt text; limit : opt nat32; status : opt TenderStatus };
 type TenderPage = record { items : vec Tender; next : opt text };
 // A sealed bid shows no price or score.
 type TenderDetail = record { tender : Tender; bids : vec Bid; next : opt text };
 
-// A lot of a tender being created (I-PRC-5).
+// A lot of a tender being created.
 type LotArgs = record { id : text; title : text; estimated_value : opt Money };
 
 // Weights add up to 100 000 000 (100 %). `lots` is absent or empty for a tender that is not divided.
@@ -1997,7 +2119,7 @@ type TenderCreateArgs = record {
   lots : opt vec LotArgs;
 };
 // For a vendor the caller represents. `payload_hash` is the sha256 of `price:nonce`. `lot` names the one lot
-// the bid prices: required when the tender has lots, refused when it has none (I-PRC-5).
+// the bid prices: required when the tender has lots, refused when it has none.
 type BidSubmitArgs = record {
   tender : text;
   vendor : text;
@@ -2013,19 +2135,19 @@ type BidsRevealArgs = record { tender : text; openings : vec BidOpening };
 type BidScoreArgs = record { bid : text; scores : vec record { criterion : text; score : nat } };
 // `bid` defaults to the best-scored revealed bid, of the lot when there are lots; a lower-scored one needs a
 // justification, and a named one must be a bid of the lot (InvalidArgument). `lot` is required when the
-// tender has lots and refused when it has none (I-PRC-5).
+// tender has lots and refused when it has none.
 type TenderAwardArgs = record { tender : text; bid : opt text; justification : opt text; lot : opt text };
-// Leaves a lot with no award, for lack of a bid or of an acceptable one (I-PRC-5).
+// Leaves a lot with no award, for lack of a bid or of an acceptable one.
 type TenderLotVoidArgs = record { tender : text; lot : text; reason : opt text };
 // Records that a notice of the tender appeared in `journal`: an External of kind `journal`, or `realm` for
-// the realm's own journal. `at` defaults to now and is never in the future.
-type TenderNoticeArgs = record { tender : text; journal : text; ref : opt text; at : opt Timestamp };
+// the realm's own journal. `at` defaults to today and is never in the future.
+type TenderNoticeArgs = record { tender : text; journal : text; ref : opt text; at : opt Date };
 
-// §10
+// Domain 9: Quarters and federation
 
 // `zones` is filled by quarter_sync alone: the zones the realm defines, as zone_define takes them, for the quarter to
 // define the same (the capital is where the realm's codex defines its districts). Null in quarter_directory.
-// `sweep` too is filled by quarter_sync alone: the capital's sweep rules, which the quarter keeps (I-FED-5).
+// `sweep` too is filled by quarter_sync alone: the capital's sweep rules, which the quarter keeps.
 type QuarterDirectory = record {
   capital : opt text;
   items : vec Quarter;
@@ -2035,17 +2157,17 @@ type QuarterDirectory = record {
 };
 
 // A quarter moves its `fund`'s money in `symbol`, all but `keep`, into the capital's fund `into`. A rule is
-// known by its `fund` and `symbol`, which a capital names once (I-FED-5).
+// known by its `fund` and `symbol`, which a capital names once.
 type SweepRule = record { fund : text; symbol : text; into : text; keep : Money };
 // The rules, and the capital's account that receives every sweep.
 type SweepConfig = record { to : Account; rules : vec SweepRule };
 // Sending: in flight, or its outcome unknown; Sent: the ledger gave its block; Booked: the capital booked it;
 // Failed: the ledger refused it, nothing moved; NeedsCheck: no answer within the ledger's deduplication window,
-// never sent again (I-FED-6). On the capital a sweep is Booked.
+// never sent again. On the capital a sweep is Booked.
 type SweepStatus = variant { Sending; Sent; Booked; Failed; NeedsCheck };
 // One move of one fund's money from a quarter to the capital. The ledger transfer's memo is `id` (UTF-8) and
-// its created_at_time is `created_at`, both fixed when the sweep is recorded, like `to`, `amount` and `fee`
-// (I-FED-5). On the capital `id` is `<quarter>/<id>`. `epoch` is the start of the quarter's treasury epoch
+// its created_at_time is `created_at`, both fixed when the sweep is recorded, like `to`, `amount` and `fee`.
+// On the capital `id` is `<quarter>/<id>`. `epoch` is the start of the quarter's treasury epoch
 // that contains `created_at`; `block` the ledger's block index; `amount` reaches the capital and `fee`, the
 // ledger's, is paid by the quarter; `reason` is the ledger's error when it failed.
 type Sweep = record {
@@ -2067,7 +2189,7 @@ type Sweep = record {
 type SweepPage = record { items : vec Sweep; next : opt text };
 // Sweeps now, by the rules `quarter_sync` last returned: the rule of `fund`, or every rule.
 type QuarterSweepArgs = record { fund : opt text };
-// Settles a NeedsCheck sweep: the block found on the ledger makes it Sent, none makes it Failed (I-FED-6).
+// Settles a NeedsCheck sweep: the block found on the ledger makes it Sent, none makes it Failed.
 type SweepResolveArgs = record { sweep : text; block : opt nat };
 type SweepListArgs = record { cursor : opt text; limit : opt nat32; quarter : opt text; status : opt SweepStatus };
 // The zone a joiner states as their home, which a codex may use to keep neighbours together; it places them and
@@ -2103,7 +2225,10 @@ type QuarterConfigureArgs = record {
 };
 type JoinFederationArgs = record { capital : principal; name : opt text };
 type ChangeQuarterArgs = record { quarter : text };
-type FederalVoteProposeArgs = record { title : text; action : ProposalAction };
+// `voters` is Quarters by default; MemberRealms needs at least one active member realm.
+type FederalVoteProposeArgs = record { title : text; action : ProposalAction; voters : opt FederalVoters };
+type FederalVoteListArgs = record { cursor : opt text; limit : opt nat32; status : opt FederalVoteStatus };
+type FederalVotePage = record { items : vec FederalVote; next : opt text };
 // To quarter `to`, or by default every active quarter.
 type FederationMessageArgs = record { topic : text; body : Value; to : opt text };
 
@@ -2115,12 +2240,22 @@ type FollowerArgs = record { follower : principal };
 // compliance against that source and its population. The source matches a layer by its checksum.
 type FollowerReportArgs = record { layers : vec ReportedLayer; compliance : Compliance; population : nat };
 type FollowerPage = record { items : vec Follower; next : opt text };
-// What the caller is to the receiver: its sync source, or its follower.
-type LinkSide = variant { SyncSource; Follower };
+// What the caller is to the receiver, by the record the receiver keeps of it: its sync source or its
+// follower, over a legislation link; a realm it is a member of (Membership) or its member realm, over a
+// membership link.
+type LinkSide = variant { SyncSource; Follower; Membership; MemberRealm };
 // From the capital at the other side of a link: the link's new status after the caller's vote.
 type LinkNotifyArgs = record { side : LinkSide; status : LinkStatus };
 
-// §11
+type MembershipAddArgs = record { realm : principal; name : text };
+type MembershipRemoveArgs = record { realm : principal };
+type MemberRealmArgs = record { member : principal };
+// What a member realm's capital reports to a realm it is a member of: its population, its own count of
+// its members, and its leg of an open vote of member realms.
+type MemberRealmReportArgs = record { population : nat; leg : opt FederalVoteLeg };
+type MemberRealmPage = record { items : vec MemberRealm; next : opt text };
+
+// Domain 10: Codex, notifications and audit
 
 type SigningPolicy = record {
   agents : vec text;
@@ -2160,9 +2295,10 @@ type CodexSource = variant {
   Release : record { source : text; version : text };
 };
 
-// A chapter of a release: the domain it writes and the checksum of its bytes. `domain` is the
+// A chapter of a release: the subject matter it writes and the checksum of its bytes. `subject_matter` is the
 // codex's own id for the subject, opaque text to GGG, like a release's `source`.
-type ChapterRef = record { domain : text; checksum : text };
+type ChapterRef = record { subject_matter : text; checksum : text };
+
 // One release of one layer, as a published record lists it: every chapter of the source, changed or
 // not, its calendar's checksum, the commit it was built from, when it was published and from when it
 // is in force. `source` is the layer's source id, opaque text to GGG; `notes` are the publisher's, by
@@ -2238,7 +2374,7 @@ type TaskRescheduleArgs = record { task : text; at : Timestamp };
 type TaskListArgs = record { cursor : opt text; limit : opt nat32; op : opt text; status : opt TaskStatus };
 type TaskPage = record { items : vec Task; next : opt text };
 
-// §12
+// Domain 11: Realm setup
 
 type RealmConfigureArgs = record {
   name : opt text;
@@ -2296,7 +2432,7 @@ type Monitor = record {
   events : nat;
 };
 
-// §13
+// Domain 12: Private content
 
 type ScopePage = record { items : vec text; next : opt text };
 
@@ -2320,10 +2456,14 @@ type WrappedKey = record { "principal" : principal; wrapped_dek : blob };
 type KeyGrantArgs = record { scope : text; keys : vec WrappedKey };
 type KeyRevokeArgs = record { scope : text; principals : vec principal };
 
-// Stores a new document, or replaces `document`.
+// Stores a new document, or replaces `document`. With `filing`, its filer stores the private part of their filing,
+// or of a message on it, without document.manage: in the filing's department, with keys for themselves and that
+// department's members only; while the filing waits to be routed, with no department and a key for themselves
+// alone, and again in its department once it is routed.
 type DocumentStoreArgs = record {
   document : opt text;
-  department : text;
+  department : opt text;
+  filing : opt Ref;
   title : text;
   kind : opt text;
   languages : vec text;
@@ -2349,13 +2489,13 @@ type DocumentDeleted = record { revoked : nat; deleted : bool };
 service : {
   icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
 
-  // §2
+  // Domain 1: Identity and membership
   ggg_user_get : (principal) -> (variant { Ok : opt UserEntry; Err : GggError }) query;
   ggg_user_list : (ListArgs) -> (variant { Ok : UserPage; Err : GggError }) query;
   ggg_invite_list : (ListArgs) -> (variant { Ok : InvitePage; Err : GggError }) query;
   ggg_delegation_list : (DelegationListArgs) -> (variant { Ok : DelegationPage; Err : GggError }) query;
   ggg_attribute_list : (AttributeListArgs) -> (variant { Ok : AttributePage; Err : GggError }) query;
-  // The attributes awaiting review, for the holders of attribute.review (I-PRV-1); the cursor continues
+  // The attributes awaiting review, for the holders of attribute.review; the cursor continues
   // after the last attribute returned, so deciding a page skips none.
   ggg_attribute_pending_list : (ListArgs) -> (variant { Ok : AttributePage; Err : GggError }) query;
   ggg_delegable_operations : () -> (variant { Ok : vec DelegableOperation; Err : GggError }) query;
@@ -2376,6 +2516,7 @@ service : {
   ggg_identity_submit : (IdentitySubmitArgs) -> (variant { Ok : Identity; Err : GggError });
   ggg_identity_review : (IdentityReviewArgs) -> (variant { Ok : Identity; Err : GggError });
   ggg_attribute_submit : (AttributeSubmitArgs) -> (variant { Ok : Attribute; Err : GggError });
+  ggg_dependant_register : (DependantRegisterArgs) -> (variant { Ok : Attribute; Err : GggError });
   ggg_attribute_review : (AttributeReviewArgs) -> (variant { Ok : Attribute; Err : GggError });
   ggg_invite_create : (InviteCreateArgs) -> (variant { Ok : InviteCreated; Err : GggError });
   ggg_invite_revoke : (text) -> (variant { Ok : Invite; Err : GggError });
@@ -2398,7 +2539,7 @@ service : {
   ggg_action_collect : (text) -> (variant { Ok : blob; Err : GggError });
   ggg_call_for : (CallForArgs) -> (variant { Ok : CallForReply; Err : GggError });
 
-  // §3
+  // Domain 2: Departments and organizations
   ggg_department_get : (GetArgs) -> (variant { Ok : opt DepartmentDetail; Err : GggError }) query;
   ggg_department_list : (ListArgs) -> (variant { Ok : DepartmentPage; Err : GggError }) query;
   ggg_department_chart : (ChartArgs) -> (variant { Ok : Chart; Err : GggError }) query;
@@ -2423,7 +2564,7 @@ service : {
   ggg_representative_remove : (text) -> (variant { Ok : Appointment; Err : GggError });
   ggg_organization_set_status : (OrganizationStatusArgs) -> (variant { Ok : Governed; Err : GggError });
 
-  // §4
+  // Domain 3: Governance
   ggg_proposal_get : (GetArgs) -> (variant { Ok : opt ProposalDetail; Err : GggError }) query;
   ggg_proposal_linked_from : (GetArgs) -> (variant { Ok : opt ProposalLinkPage; Err : GggError }) query;
   ggg_proposal_list : (ProposalListArgs) -> (variant { Ok : ProposalPage; Err : GggError }) query;
@@ -2446,7 +2587,7 @@ service : {
   ggg_contract_get : (GetArgs) -> (variant { Ok : opt ContractDetail; Err : GggError }) query;
   ggg_governance_update : (GovernanceUpdateArgs) -> (variant { Ok : Governed; Err : GggError });
 
-  // §5
+  // Domain 4: Finance
   ggg_treasury_view : (ListArgs) -> (variant { Ok : TreasuryView; Err : GggError }) query;
   ggg_ledger_view : (LedgerArgs) -> (variant { Ok : LedgerPage; Err : GggError }) query;
   ggg_report_view : (ReportArgs) -> (variant { Ok : ReportPage; Err : GggError }) query;
@@ -2490,7 +2631,7 @@ service : {
   ggg_token_force_transfer : (ForceTransferArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_token_freeze : (FreezeArgs) -> (variant { Ok : Governed; Err : GggError });
 
-  // §6
+  // Domain 5: Assets
   ggg_land_list : (LandListArgs) -> (variant { Ok : LandPage; Err : GggError }) query;
   ggg_land_map : (LandMapArgs) -> (variant { Ok : LandMap; Err : GggError }) query;
   ggg_credential_verify : (CredentialVerifyArgs) -> (variant { Ok : CredentialCheck; Err : GggError }) query;
@@ -2507,23 +2648,28 @@ service : {
   ggg_credential_issue : (CredentialIssueArgs) -> (variant { Ok : CredentialIssued; Err : GggError });
   ggg_credential_revoke : (CredentialRevokeArgs) -> (variant { Ok : nat; Err : GggError });
 
-  // §7
-  ggg_license_list : (LicenseListArgs) -> (variant { Ok : LicensePage; Err : GggError }) query;
-  ggg_license_verify : (LicenseVerifyArgs) -> (variant { Ok : LicenseCheck; Err : GggError }) query;
+  // Domain 6: Entitlements
+  ggg_entitlement_list : (EntitlementListArgs) -> (variant { Ok : EntitlementPage; Err : GggError }) query;
+  ggg_entitlement_verify : (EntitlementVerifyArgs) -> (variant { Ok : EntitlementCheck; Err : GggError }) query;
   ggg_procedure_list : (ListArgs) -> (variant { Ok : ProcedurePage; Err : GggError }) query;
   ggg_request_get : (RequestGetArgs) -> (variant { Ok : opt Request; Err : GggError }) query;
   ggg_request_list : (RequestListArgs) -> (variant { Ok : RequestPage; Err : GggError }) query;
-  ggg_license_apply : (LicenseApplyArgs) -> (variant { Ok : License; Err : GggError });
-  ggg_license_renew : (LicenseRenewArgs) -> (variant { Ok : License; Err : GggError });
-  ggg_license_decide : (LicenseDecideArgs) -> (variant { Ok : License; Err : GggError });
-  ggg_license_suspend : (LicenseSuspendArgs) -> (variant { Ok : License; Err : GggError });
-  ggg_license_revoke : (text) -> (variant { Ok : License; Err : GggError });
+  ggg_filing_messages : (FilingMessagesArgs) -> (variant { Ok : FilingMessagePage; Err : GggError }) query;
+  ggg_entitlement_apply : (EntitlementApplyArgs) -> (variant { Ok : Entitlement; Err : GggError });
+  ggg_entitlement_accept : (EntitlementAcceptArgs) -> (variant { Ok : Entitlement; Err : GggError });
+  ggg_entitlement_renew : (EntitlementRenewArgs) -> (variant { Ok : Entitlement; Err : GggError });
+  ggg_entitlement_decide : (EntitlementDecideArgs) -> (variant { Ok : Entitlement; Err : GggError });
+  ggg_entitlement_suspend : (EntitlementSuspendArgs) -> (variant { Ok : Entitlement; Err : GggError });
+  ggg_entitlement_revoke : (text) -> (variant { Ok : Entitlement; Err : GggError });
   ggg_procedure_define : (ProcedureDefineArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_request_file : (RequestFileArgs) -> (variant { Ok : Request; Err : GggError });
   ggg_request_set_due : (RequestSetDueArgs) -> (variant { Ok : Request; Err : GggError });
   ggg_request_decide : (RequestDecideArgs) -> (variant { Ok : Request; Err : GggError });
+  ggg_filing_route : (FilingRouteArgs) -> (variant { Ok : FilingHandling; Err : GggError });
+  ggg_filing_assign : (FilingAssignArgs) -> (variant { Ok : FilingHandling; Err : GggError });
+  ggg_filing_message : (FilingMessageArgs) -> (variant { Ok : FilingMessage; Err : GggError });
 
-  // §8
+  // Domain 7: Justice
   ggg_dispute_get : (DisputeGetArgs) -> (variant { Ok : opt Dispute; Err : GggError }) query;
   ggg_dispute_list_all : (DisputeListArgs) -> (variant { Ok : DisputePage; Err : GggError }) query;
   ggg_resolution_query : (ResolutionQueryArgs) -> (variant { Ok : ResolutionPage; Err : GggError }) query;
@@ -2549,7 +2695,7 @@ service : {
   ggg_judge_appoint : (JudgeAppointArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_judge_revoke : (text) -> (variant { Ok : Governed; Err : GggError });
 
-  // §9
+  // Domain 8: Procurement
   ggg_tender_list : (TenderListArgs) -> (variant { Ok : TenderPage; Err : GggError }) query;
   ggg_tender_get : (GetArgs) -> (variant { Ok : opt TenderDetail; Err : GggError }) query;
   ggg_tender_create : (TenderCreateArgs) -> (variant { Ok : Governed; Err : GggError });
@@ -2564,14 +2710,14 @@ service : {
   ggg_tender_lot_void : (TenderLotVoidArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_tender_notice : (TenderNoticeArgs) -> (variant { Ok : Tender; Err : GggError });
 
-  // §10
+  // Domain 9: Quarters and federation
   ggg_quarter_directory : (ListArgs) -> (variant { Ok : QuarterDirectory; Err : GggError }) query;
   ggg_join_targets : (opt JoinTargetsArgs) -> (variant { Ok : JoinTargets; Err : GggError }) query;
   ggg_quarter_sync : () -> (variant { Ok : QuarterDirectory; Err : GggError });
   ggg_quarter_report : (QuarterReportArgs) -> (variant { Ok : QuarterReport; Err : GggError });
   // The sweeps this call recorded, sent or reported.
   ggg_quarter_sweep : (QuarterSweepArgs) -> (variant { Ok : vec Sweep; Err : GggError });
-  // From a registered quarter: books a Sent sweep once and returns the capital's record (I-FED-7).
+  // From a registered quarter: books a Sent sweep once and returns the capital's record.
   ggg_quarter_sweep_report : (Sweep) -> (variant { Ok : Sweep; Err : GggError });
   ggg_sweep_resolve : (SweepResolveArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_sweep_list : (SweepListArgs) -> (variant { Ok : SweepPage; Err : GggError }) query;
@@ -2584,6 +2730,7 @@ service : {
   ggg_federal_vote_propose : (FederalVoteProposeArgs) -> (variant { Ok : FederalVote; Err : GggError });
   ggg_federal_vote_cancel : (text) -> (variant { Ok : Governed; Err : GggError });
   ggg_federal_vote_finalize : (text) -> (variant { Ok : FederalVote; Err : GggError });
+  ggg_federal_vote_list : (FederalVoteListArgs) -> (variant { Ok : FederalVotePage; Err : GggError }) query;
   ggg_federation_message : (FederationMessageArgs) -> (variant { Ok : opt Value; Err : GggError });
   ggg_follower_list : (ListArgs) -> (variant { Ok : FollowerPage; Err : GggError }) query;
   ggg_sync_source_add : (SyncSourceAddArgs) -> (variant { Ok : Governed; Err : GggError });
@@ -2592,8 +2739,14 @@ service : {
   ggg_follower_remove : (FollowerArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_follower_report : (FollowerReportArgs) -> (variant { Ok : Follower; Err : GggError });
   ggg_link_notify : (LinkNotifyArgs) -> (variant { Ok : LinkStatus; Err : GggError });
+  ggg_membership_add : (MembershipAddArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_membership_remove : (MembershipRemoveArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_member_realm_accept : (MemberRealmArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_member_realm_remove : (MemberRealmArgs) -> (variant { Ok : Governed; Err : GggError });
+  ggg_member_realm_report : (MemberRealmReportArgs) -> (variant { Ok : MemberRealm; Err : GggError });
+  ggg_member_realm_list : (ListArgs) -> (variant { Ok : MemberRealmPage; Err : GggError }) query;
 
-  // §11
+  // Domain 10: Codex, notifications and audit
   ggg_codex_status : (ListArgs) -> (variant { Ok : CodexView; Err : GggError }) query;
   ggg_legislation_releases : (ListArgs) -> (variant { Ok : ReleasePage; Err : GggError }) query;
   ggg_legislation_chapter : (text) -> (variant { Ok : opt blob; Err : GggError }) query;
@@ -2616,7 +2769,7 @@ service : {
   ggg_task_reschedule : (TaskRescheduleArgs) -> (variant { Ok : Task; Err : GggError });
   ggg_task_cancel : (text) -> (variant { Ok : Task; Err : GggError });
 
-  // §12
+  // Domain 11: Realm setup
   ggg_realm_info : () -> (Realm) query;
   ggg_realm_monitor : () -> (variant { Ok : Monitor; Err : GggError }) query;
   ggg_setup_state : () -> (variant { Ok : SetupState; Err : GggError });
@@ -2631,7 +2784,7 @@ service : {
   ggg_realm_register : (RealmRegisterArgs) -> (variant { Ok : Governed; Err : GggError });
   ggg_realm_upgrade : (RealmUpgradeArgs) -> (variant { Ok : Governed; Err : GggError });
 
-  // §13
+  // Domain 12: Private content
   ggg_crypto_envelope : (text) -> (variant { Ok : opt KeyEnvelope; Err : GggError }) query;
   ggg_crypto_scopes : (ListArgs) -> (variant { Ok : ScopePage; Err : GggError }) query;
   ggg_crypto_access : (AccessArgs) -> (variant { Ok : PrincipalPage; Err : GggError }) query;
