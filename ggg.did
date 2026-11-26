@@ -1569,7 +1569,9 @@ type PositionEditArgs = record {
   profile : opt text;
 };
 
-// An agent needs a supervisor holding a non-agent seat in the same department or organization.
+// An agent needs a supervisor holding a non-agent seat in the same department or organization. The
+// department holding the seat decides the appointment; where its own policy needs a vote it has too few
+// seat holders to pass, the nearest department above it that can decides instead.
 type AppointArgs = record { position : text; user : principal; agent : bool; supervisor : opt principal };
 type ExpelArgs = record { department : text; user : principal };
 type AuthorityGrantArgs = record { department : text; target : Ref; operations : vec text };
